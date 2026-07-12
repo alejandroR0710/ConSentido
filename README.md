@@ -42,4 +42,4 @@ Credenciales de prueba (ver tabla completa en `FASE5_DESARROLLO.md`): `admin@sis
 
 ## Despliegue
 
-Backend en Render, frontend en Vercel — ver `render.yaml` / `frontend/vercel.json` y la sección de despliegue en `FASE5_DESARROLLO.md`.
+Backend en Render, frontend en Vercel — ver [`DEPLOY.md`](DEPLOY.md) para la guía paso a paso.

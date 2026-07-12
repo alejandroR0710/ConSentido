@@ -1,0 +1,31 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (secretos) — cada entorno usa su propio .env,
+# nunca se comparte por git. Ver .env.example en backend/ y frontend/.
+.env
+.env.local
+.env.*.local
+
+# Builds
+backend/dist/
+frontend/dist/
+
+# Archivos subidos por los usuarios (fotos de productos/insumos) — no se
+# versionan, son datos, no código.
+backend/uploads/
+
+# Exportes de datos reales (usuarios con sus hashes de contraseña, menú) — se
+# aplican directo a la base de producción, nunca se suben al repo.
+database/produccion-*.sql
+
+# Editor / SO / herramientas locales
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.claude/
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/*
+ * Paleta de marca: verde oscuro + blanco vainilla (ambientación de naturaleza).
+ * Se definen como tokens de Tailwind v4 (@theme) para usarse como bg-brand-*, text-brand-*, etc.
+ */
+@theme {
+  --color-brand-green-900: #14291f;
+  --color-brand-green-700: #1f4a34;
+  --color-brand-green-600: #2b5f45;
+  --color-brand-green-500: #3a7057;
+  --color-brand-green-100: #dceae0;
+  --color-brand-green-50: #eef5f0;
+
+  --color-brand-vanilla: #fbf3e1;
+  --color-brand-vanilla-dark: #f0e4c8;
+  --color-brand-ink: #17231c;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--color-brand-vanilla);
+  color: var(--color-brand-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: var(--color-brand-green-900);
+    color: var(--color-brand-vanilla);
+  }
+}

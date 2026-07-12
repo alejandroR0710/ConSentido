@@ -1,0 +1,256 @@
+import { useEffect, useMemo, useState } from "react";
+import { ApiError } from "../../../shared/api/client";
+import { formatMoney } from "../../../shared/format/money";
+import { Modal } from "../../../shared/components/Modal";
+import { cajaApi, type DiaHistorialCaja } from "../api";
+
+const MESES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
+
+function fechaISO(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Lunes como inicio de semana. */
+function inicioDeSemana(fecha: Date) {
+  const d = new Date(fecha);
+  const offset = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - offset);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+interface Totales {
+  ingresos: number;
+  egresos: number;
+  neto: number;
+}
+
+function sumar(dias: DiaHistorialCaja[]): Totales {
+  return dias.reduce(
+    (acc, d) => ({ ingresos: acc.ingresos + d.ingresos, egresos: acc.egresos + d.egresos, neto: acc.neto + d.neto }),
+    { ingresos: 0, egresos: 0, neto: 0 },
+  );
+}
+
+function ResumenCard({ titulo, totales }: { titulo: string; totales: Totales }) {
+  return (
+    <div className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
+      <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">{titulo}</div>
+      <div
+        className={`text-2xl font-bold ${
+          totales.neto >= 0 ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+        }`}
+      >
+        {formatMoney(totales.neto)}
+      </div>
+      <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+        + {formatMoney(totales.ingresos)} · − {formatMoney(totales.egresos)}
+      </div>
+    </div>
+  );
+}
+
+function colorCelda(dia: DiaHistorialCaja | undefined, maxAbs: number) {
+  if (!dia || dia.movimientos === 0) {
+    return "bg-brand-vanilla-dark/30 text-brand-ink/40 dark:bg-brand-green-900/40 dark:text-brand-vanilla/40";
+  }
+  const intensidad = maxAbs === 0 ? 0 : Math.min(1, Math.abs(dia.neto) / maxAbs);
+  if (dia.neto >= 0) {
+    if (intensidad > 0.66) return "bg-brand-green-700 text-brand-vanilla";
+    if (intensidad > 0.33) return "bg-brand-green-500 text-brand-vanilla";
+    return "bg-brand-green-200 text-brand-ink dark:text-brand-ink";
+  }
+  if (intensidad > 0.66) return "bg-red-700 text-white";
+  if (intensidad > 0.33) return "bg-red-500 text-white";
+  return "bg-red-200 text-brand-ink";
+}
+
+interface MesGridProps {
+  anio: number;
+  mesIdx: number;
+  porFecha: Map<string, DiaHistorialCaja>;
+  maxAbs: number;
+  hoyISO: string;
+  onSeleccionar: (dia: DiaHistorialCaja) => void;
+}
+
+function MesGrid({ anio, mesIdx, porFecha, maxAbs, hoyISO, onSeleccionar }: MesGridProps) {
+  const primerDia = new Date(anio, mesIdx, 1);
+  const diasEnMes = new Date(anio, mesIdx + 1, 0).getDate();
+  const offsetInicial = (primerDia.getDay() + 6) % 7; // 0 = lunes
+
+  const celdas: (number | null)[] = [
+    ...Array.from({ length: offsetInicial }, () => null),
+    ...Array.from({ length: diasEnMes }, (_, i) => i + 1),
+  ];
+
+  return (
+    <div className="rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
+      <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">{MESES[mesIdx]}</h3>
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] text-brand-ink/50 dark:text-brand-vanilla/50">
+        {DIAS_SEMANA.map((d) => (
+          <span key={d}>{d}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {celdas.map((dia, idx) => {
+          if (dia === null) return <div key={`vacio-${idx}`} />;
+          const iso = fechaISO(new Date(anio, mesIdx, dia));
+          const info = porFecha.get(iso);
+          return (
+            <button
+              key={iso}
+              onClick={() => info && onSeleccionar(info)}
+              disabled={!info}
+              className={`aspect-square rounded text-[10px] font-medium ${colorCelda(info, maxAbs)} ${
+                iso === hoyISO ? "ring-2 ring-brand-green-600 dark:ring-brand-vanilla" : ""
+              } ${info ? "cursor-pointer" : "cursor-default"}`}
+              title={info ? `${iso}: ${formatMoney(info.neto)}` : iso}
+            >
+              {dia}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CajaHistorialPage() {
+  const anioActual = new Date().getFullYear();
+  const [anio, setAnio] = useState(anioActual);
+  const [dias, setDias] = useState<DiaHistorialCaja[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [diaSeleccionado, setDiaSeleccionado] = useState<DiaHistorialCaja | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    setLoading(true);
+    setError(null);
+    cajaApi
+      .obtenerHistorialAnual(anio)
+      .then((data) => {
+        if (!cancelado) setDias(data);
+      })
+      .catch((err) => {
+        if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial");
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [anio]);
+
+  const porFecha = useMemo(() => {
+    const map = new Map<string, DiaHistorialCaja>();
+    for (const d of dias) map.set(d.fecha, d);
+    return map;
+  }, [dias]);
+
+  const maxAbs = useMemo(() => Math.max(0, ...dias.map((d) => Math.abs(d.neto))), [dias]);
+
+  const hoy = new Date();
+  const hoyISO = fechaISO(hoy);
+  const inicioSemana = inicioDeSemana(hoy);
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+  const totalHoy = porFecha.get(hoyISO) ?? { fecha: hoyISO, ingresos: 0, egresos: 0, neto: 0, movimientos: 0 };
+  const totalSemana = sumar(dias.filter((d) => d.fecha >= fechaISO(inicioSemana) && d.fecha <= hoyISO));
+  const totalMes = sumar(dias.filter((d) => d.fecha >= fechaISO(inicioMes) && d.fecha <= hoyISO));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial de Caja</h1>
+          <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+            Resumen de ingresos y egresos por día, semana y mes.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAnio((a) => a - 1)}
+            className="rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm dark:border-brand-green-700"
+          >
+            ←
+          </button>
+          <span className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">{anio}</span>
+          <button
+            onClick={() => setAnio((a) => a + 1)}
+            disabled={anio >= anioActual}
+            className="rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm disabled:opacity-40 dark:border-brand-green-700"
+          >
+            →
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <ResumenCard titulo="Hoy" totales={totalHoy} />
+        <ResumenCard titulo="Esta semana" totales={totalSemana} />
+        <ResumenCard titulo="Este mes" totales={totalMes} />
+      </div>
+
+      {loading ? (
+        <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {MESES.map((_, mesIdx) => (
+            <MesGrid
+              key={mesIdx}
+              anio={anio}
+              mesIdx={mesIdx}
+              porFecha={porFecha}
+              maxAbs={maxAbs}
+              hoyISO={hoyISO}
+              onSeleccionar={setDiaSeleccionado}
+            />
+          ))}
+        </div>
+      )}
+
+      {diaSeleccionado && (
+        <Modal titulo={diaSeleccionado.fecha} onCerrar={() => setDiaSeleccionado(null)}>
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</span>
+              <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                {formatMoney(diaSeleccionado.ingresos)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-brand-ink/60 dark:text-brand-vanilla/60">Egresos</span>
+              <span className="font-semibold text-red-600">{formatMoney(diaSeleccionado.egresos)}</span>
+            </div>
+            <div className="flex justify-between border-t border-brand-vanilla-dark pt-2 dark:border-brand-green-700">
+              <span className="font-medium">Neto</span>
+              <span className="font-bold">{formatMoney(diaSeleccionado.neto)}</span>
+            </div>
+            <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              {diaSeleccionado.movimientos} movimiento{diaSeleccionado.movimientos === 1 ? "" : "s"} ese día.
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

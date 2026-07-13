@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
@@ -49,6 +49,13 @@ export function MigaoPage() {
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "reset" | null>(null);
 
+  // Ref (no state) para que el intervalo de polling, creado una sola vez al montar,
+  // siempre lea cuál es la orden seleccionada actual sin necesidad de recrearse.
+  const ordenSeleccionadaIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    ordenSeleccionadaIdRef.current = ordenSeleccionadaId;
+  }, [ordenSeleccionadaId]);
+
   async function cargarOrdenes() {
     try {
       setOrdenes(await migaoApi.listarOrdenesAbiertas());
@@ -57,6 +64,16 @@ export function MigaoPage() {
       setError(err instanceof ApiError ? err.message : "No se pudieron cargar las órdenes");
     } finally {
       setLoading(false);
+    }
+
+    const ordenSeleccionadaActual = ordenSeleccionadaIdRef.current;
+    if (ordenSeleccionadaActual) {
+      try {
+        setDetalle(await migaoApi.obtenerDetalle(ordenSeleccionadaActual));
+      } catch {
+        // Si la orden ya no existe (se cerró/canceló desde otro dispositivo), el
+        // detalle se deja como estaba; cerrarYCobrar/seleccionarOrden lo limpian.
+      }
     }
   }
 

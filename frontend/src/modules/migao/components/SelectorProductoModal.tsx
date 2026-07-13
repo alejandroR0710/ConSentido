@@ -6,30 +6,38 @@ import type { Producto } from "../api";
 interface SelectorProductoModalProps {
   productos: Producto[];
   onCerrar: () => void;
-  onSeleccionar: (producto: Producto) => void;
+  onSeleccionar: (producto: Producto, cantidad: number) => void;
   agregandoId: string | null;
 }
 
 const DURACION_CONFIRMACION_MS = 900;
 
 /**
- * Buscador de menú: tocar un producto lo agrega de una vez (cantidad 1) y deja
- * el modal abierto para seguir agregando rápido. Pensado como flujo principal
- * en mobile, donde un <select> largo es incómodo.
+ * Buscador de menú: tocar un producto abre un selector de cantidad en línea
+ * (-/+  y "Agregar") en esa misma fila, para no tener que tocar N veces el
+ * mismo producto cuando el mesero necesita más de 1 unidad.
  */
 export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agregandoId }: SelectorProductoModalProps) {
   const [busqueda, setBusqueda] = useState("");
   const [agregadoId, setAgregadoId] = useState<string | null>(null);
+  const [eligiendo, setEligiendo] = useState<{ producto: Producto; cantidad: number } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filtrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
-  function seleccionar(p: Producto) {
-    onSeleccionar(p);
+  function abrirCantidad(p: Producto) {
+    setEligiendo((actual) => (actual?.producto.id === p.id ? null : { producto: p, cantidad: 1 }));
+  }
+
+  function confirmar() {
+    if (!eligiendo) return;
+    const { producto, cantidad } = eligiendo;
+    onSeleccionar(producto, cantidad);
+    setEligiendo(null);
     // Confirmación visual inmediata ("✓ Agregado") aunque el guardado real (API
     // o borrador local) siga su curso aparte — el mesero necesita saber YA que
     // el toque registró, sin esperar la respuesta del servidor.
-    setAgregadoId(p.id);
+    setAgregadoId(producto.id);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => setAgregadoId(null), DURACION_CONFIRMACION_MS);
   }
@@ -58,6 +66,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
               const cambioDeCategoria =
                 idx === 0 || (filtrados[idx - 1].categoria_nombre ?? "Sin categoría") !== categoria;
               const recienAgregado = agregadoId === p.id;
+              const eligiendoEste = eligiendo?.producto.id === p.id;
               return (
                 <li key={p.id}>
                   {cambioDeCategoria && (
@@ -65,26 +74,64 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                       {categoria}
                     </div>
                   )}
-                  <button
-                    onClick={() => seleccionar(p)}
-                    disabled={agregandoId === p.id}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors disabled:opacity-60 ${
-                      recienAgregado
-                        ? "bg-brand-green-100 dark:bg-brand-green-700/50"
-                        : "hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30"
-                    }`}
-                  >
-                    <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">{p.nombre}</span>
-                    <span
-                      className={`text-sm ${
+                  {eligiendoEste ? (
+                    <div className="flex flex-col gap-2 rounded-lg bg-brand-green-100 px-3 py-3 dark:bg-brand-green-700/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">{p.nombre}</span>
+                        <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">{formatMoney(p.precio)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEligiendo({ producto: p, cantidad: Math.max(1, eligiendo.cantidad - 1) })}
+                          className="flex h-11 w-11 items-center justify-center rounded-md border border-brand-green-700 text-xl font-bold text-brand-green-700 dark:border-brand-vanilla dark:text-brand-vanilla"
+                        >
+                          −
+                        </button>
+                        <span className="w-10 text-center text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
+                          {eligiendo.cantidad}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEligiendo({ producto: p, cantidad: eligiendo.cantidad + 1 })}
+                          className="flex h-11 w-11 items-center justify-center rounded-md border border-brand-green-700 text-xl font-bold text-brand-green-700 dark:border-brand-vanilla dark:text-brand-vanilla"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={confirmar}
+                          disabled={agregandoId === p.id}
+                          className="ml-auto flex-1 rounded-md bg-brand-green-700 px-3 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                        >
+                          {agregandoId === p.id
+                            ? "Agregando..."
+                            : `Agregar · ${formatMoney(Number(p.precio) * eligiendo.cantidad)}`}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => abrirCantidad(p)}
+                      disabled={agregandoId === p.id}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors disabled:opacity-60 ${
                         recienAgregado
-                          ? "font-semibold text-brand-green-700 dark:text-brand-vanilla"
-                          : "text-brand-ink/60 dark:text-brand-vanilla/60"
+                          ? "bg-brand-green-100 dark:bg-brand-green-700/50"
+                          : "hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30"
                       }`}
                     >
-                      {agregandoId === p.id ? "Agregando..." : recienAgregado ? "✓ Agregado" : formatMoney(p.precio)}
-                    </span>
-                  </button>
+                      <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">{p.nombre}</span>
+                      <span
+                        className={`text-sm ${
+                          recienAgregado
+                            ? "font-semibold text-brand-green-700 dark:text-brand-vanilla"
+                            : "text-brand-ink/60 dark:text-brand-vanilla/60"
+                        }`}
+                      >
+                        {recienAgregado ? "✓ Agregado" : formatMoney(p.precio)}
+                      </span>
+                    </button>
+                  )}
                 </li>
               );
             })}

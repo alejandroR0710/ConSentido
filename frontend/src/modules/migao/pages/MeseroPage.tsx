@@ -193,28 +193,28 @@ export function MeseroPage() {
     await cargarDetalle(ordenId);
   }
 
-  function manejarSeleccionProducto(producto: Producto) {
+  function manejarSeleccionProducto(producto: Producto, cantidad: number) {
     if (vista === "nueva") {
       setBorradorItems((actual) => {
         const idx = actual.findIndex((i) => i.producto.id === producto.id);
         if (idx >= 0) {
           const copia = [...actual];
-          copia[idx] = { ...copia[idx], cantidad: copia[idx].cantidad + 1 };
+          copia[idx] = { ...copia[idx], cantidad: copia[idx].cantidad + cantidad };
           return copia;
         }
-        return [...actual, { producto, cantidad: 1 }];
+        return [...actual, { producto, cantidad }];
       });
       return;
     }
-    agregarProducto(producto);
+    agregarProducto(producto, cantidad);
   }
 
-  async function agregarProducto(producto: Producto) {
+  async function agregarProducto(producto: Producto, cantidad: number) {
     if (!ordenSeleccionadaId) return;
     setAgregandoId(producto.id);
     setError(null);
     try {
-      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, 1, Number(producto.precio));
+      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio));
       await cargarDetalle(ordenSeleccionadaId);
       await cargarOrdenes();
     } catch (err) {

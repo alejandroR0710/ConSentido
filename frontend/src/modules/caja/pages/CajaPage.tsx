@@ -3,8 +3,9 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
-import { cajaApi, type CategoriaGasto, type ProyeccionApertura, type ResumenTurno } from "../api";
+import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ProyeccionApertura, type ResumenTurno } from "../api";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
+import { EditarMetodoPagoModal } from "../components/EditarMetodoPagoModal";
 import { EgresoModal } from "../components/EgresoModal";
 import { IngresoModal } from "../components/IngresoModal";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
@@ -37,6 +38,7 @@ export function CajaPage() {
   const [abriendo, setAbriendo] = useState(false);
 
   const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | null>(null);
+  const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
 
   const turnoIdRef = useRef<string | null>(null);
   turnoIdRef.current = resumen?.turno.id ?? null;
@@ -257,13 +259,23 @@ export function CajaPage() {
                         {formatearHora(m.created_at)}
                       </div>
                     </div>
-                    <div
-                      className={`text-base font-semibold ${
-                        m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
-                      }`}
-                    >
-                      {m.tipo === "egreso" ? "-" : "+"}
-                      {formatearMoneda(Number(m.monto))}
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`text-base font-semibold ${
+                          m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                        }`}
+                      >
+                        {m.tipo === "egreso" ? "-" : "+"}
+                        {formatearMoneda(Number(m.monto))}
+                      </div>
+                      {esSuperRoot && (
+                        <button
+                          onClick={() => setMovimientoEditando(m)}
+                          className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                        >
+                          Editar
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -326,6 +338,14 @@ export function CajaPage() {
             setMensaje(mensajeReset);
             await cargarResumenDeTurnoActual();
           }}
+        />
+      )}
+
+      {movimientoEditando && (
+        <EditarMetodoPagoModal
+          movimiento={movimientoEditando}
+          onCerrar={() => setMovimientoEditando(null)}
+          onGuardado={cargarResumenDeTurnoActual}
         />
       )}
     </div>

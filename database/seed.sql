@@ -16,6 +16,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'general'), 'registrar_egreso',     'general.caja.registrar_egreso'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'administrar_categorias','general.caja.administrar_categorias'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'resetear',             'general.caja.resetear'),
+  ((SELECT id FROM modulos WHERE slug = 'general'), 'editar_movimiento',    'general.caja.editar_movimiento'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver',          'migao.ordenes.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear',        'migao.ordenes.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),

@@ -6,6 +6,7 @@ import {
   abrirTurnoController,
   cerrarTurnoController,
   crearCategoriaGastoController,
+  editarMetodoPagoMovimientoController,
   listarCategoriasGastoController,
   obtenerHistorialCajaController,
   obtenerProyeccionAperturaController,
@@ -59,6 +60,13 @@ cajaRouter.post(
 );
 
 cajaRouter.get("/historial", requirePermission("general.caja.ver"), asyncHandler(obtenerHistorialCajaController));
+
+// Corrección de método de pago exclusiva de Super Root (ver caja.service.ts).
+cajaRouter.patch(
+  "/movimientos/:id/metodo-pago",
+  requirePermission("general.caja.editar_movimiento"),
+  asyncHandler(editarMetodoPagoMovimientoController),
+);
 
 // Reset exclusivo de Super Root: no borra historial, solo hace que el próximo
 // turno arranque en 0/0 en vez de heredar el saldo anterior (ver caja.service.ts).

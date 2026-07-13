@@ -12,6 +12,11 @@ import { Modal } from "../../../shared/components/Modal";
 import { formatMoney } from "../../../shared/format/money";
 
 const POLL_MS = 5000;
+// El menú cambia poco (un producto nuevo cada tanto) comparado con el estado de
+// las órdenes: refrescarlo cada POLL_MS sería desperdiciar peticiones, pero sin
+// ningún refresco periódico un mesero con la app abierta desde antes nunca ve
+// productos agregados después de que cargó la página.
+const POLL_PRODUCTOS_MS = 60000;
 
 interface ItemBorrador {
   producto: Producto;
@@ -129,7 +134,11 @@ export function MeseroPage() {
       revisarNotificaciones();
       if (ordenSeleccionadaRef.current) cargarDetalle(ordenSeleccionadaRef.current);
     }, POLL_MS);
-    return () => clearInterval(intervalo);
+    const intervaloProductos = setInterval(cargarProductos, POLL_PRODUCTOS_MS);
+    return () => {
+      clearInterval(intervalo);
+      clearInterval(intervaloProductos);
+    };
   }, []);
 
   function irALista() {

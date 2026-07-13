@@ -131,6 +131,40 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
   });
 }
 
+/**
+ * Corrección exclusiva de Super Root: cambia el método de pago de un movimiento
+ * (ej. una venta de Migao que el cajero cerró marcando "efectivo" cuando en
+ * realidad fue "banco"). Solo se permite mientras el turno sigue abierto —
+ * un turno cerrado ya tiene su conteo físico de efectivo hecho, y cambiar el
+ * método de pago después desajustaría el `monto_final_calculado_efectivo` sin
+ * que nadie vuelva a contar la caja.
+ */
+export async function editarMetodoPagoMovimiento(movimientoId: number, metodoPago: "efectivo" | "banco") {
+  const movimiento = await repo.getMovimientoById(movimientoId);
+  if (!movimiento) throw Errors.notFound("Movimiento no encontrado");
+
+  const turno = await repo.getTurnoById(movimiento.turnoId);
+  if (!turno || turno.estado !== "abierto") {
+    throw Errors.conflict("Solo se puede corregir el método de pago de movimientos del turno abierto");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const actualizado = await repo.actualizarMetodoPagoMovimiento(client, movimientoId, metodoPago);
+    if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
+      await repo.actualizarMetodoPagoPagoPorVenta(client, movimiento.referenciaId, metodoPago);
+    }
+    await client.query("COMMIT");
+    return actualizado;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listarCategoriasGasto() {
   return repo.listCategoriasGasto();
 }

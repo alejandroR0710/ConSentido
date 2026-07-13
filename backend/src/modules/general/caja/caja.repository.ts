@@ -135,6 +135,50 @@ export async function sumMovimientosPorTurno(turnoId: string): Promise<SumaPorMe
   };
 }
 
+export interface MovimientoCaja {
+  id: number;
+  turnoId: string;
+  tipo: "ingreso" | "egreso";
+  referenciaEntidad: string | null;
+  referenciaId: string | null;
+  metodoPago: string;
+}
+
+export async function getMovimientoById(movimientoId: number): Promise<MovimientoCaja | null> {
+  const result = await pool.query(
+    `SELECT id, turno_id, tipo, referencia_entidad, referencia_id, metodo_pago
+       FROM movimientos_caja
+      WHERE id = $1`,
+    [movimientoId],
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    turnoId: row.turno_id,
+    tipo: row.tipo,
+    referenciaEntidad: row.referencia_entidad,
+    referenciaId: row.referencia_id,
+    metodoPago: row.metodo_pago,
+  };
+}
+
+/** Corrige el método de pago de un movimiento ya registrado (ej. el cajero marcó
+ *  "efectivo" en vez de "banco" al cobrar). Si el movimiento viene de una venta
+ *  (orden de Migao cerrada), también corrige el `pagos.metodo_pago` asociado
+ *  para que ambos registros sigan contando la misma historia. */
+export async function actualizarMetodoPagoMovimiento(client: PoolClient, movimientoId: number, metodoPago: string) {
+  const result = await client.query(
+    `UPDATE movimientos_caja SET metodo_pago = $2 WHERE id = $1 RETURNING *`,
+    [movimientoId, metodoPago],
+  );
+  return result.rows[0];
+}
+
+export async function actualizarMetodoPagoPagoPorVenta(client: PoolClient, ventaId: string, metodoPago: string) {
+  await client.query(`UPDATE pagos SET metodo_pago = $2 WHERE venta_id = $1`, [ventaId, metodoPago]);
+}
+
 export async function listMovimientosPorTurno(turnoId: string) {
   const result = await pool.query(
     `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre

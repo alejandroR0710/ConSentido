@@ -46,6 +46,11 @@ export const resetearCajaSchema = z.object({
 });
 export type ResetearCajaInput = z.infer<typeof resetearCajaSchema>;
 
+export const editarMetodoPagoMovimientoSchema = z.object({
+  metodoPago: z.enum(METODOS_PAGO),
+});
+export type EditarMetodoPagoMovimientoInput = z.infer<typeof editarMetodoPagoMovimientoSchema>;
+
 export const historialCajaSchema = z.object({
   anio: z.coerce.number().int().min(2000).max(2100),
 });

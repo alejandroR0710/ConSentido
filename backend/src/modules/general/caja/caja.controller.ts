@@ -4,6 +4,7 @@ import {
   abrirTurnoSchema,
   cerrarTurnoSchema,
   crearCategoriaGastoSchema,
+  editarMetodoPagoMovimientoSchema,
   historialCajaSchema,
   registrarEgresoSchema,
   registrarIngresoSchema,
@@ -59,6 +60,12 @@ export async function crearCategoriaGastoController(req: Request, res: Response)
   const { nombre } = crearCategoriaGastoSchema.parse(req.body);
   const categoria = await service.crearCategoriaGasto(nombre);
   return created(res, categoria);
+}
+
+export async function editarMetodoPagoMovimientoController(req: Request, res: Response) {
+  const { metodoPago } = editarMetodoPagoMovimientoSchema.parse(req.body);
+  const movimiento = await service.editarMetodoPagoMovimiento(Number(req.params.id), metodoPago);
+  return ok(res, movimiento);
 }
 
 export async function resetearCajaController(req: Request, res: Response) {

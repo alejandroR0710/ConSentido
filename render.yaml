@@ -3,7 +3,10 @@ services:
     name: consentido-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install && npm run build
+    # --include=dev es necesario: con NODE_ENV=production puesto, "npm install"
+    # se salta devDependencies por defecto — pero typescript y los @types/* (que
+    # hacen falta para compilar) viven ahí, no en dependencies.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV

@@ -1,12 +1,12 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
-import path from "path";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
 import { errorHandler, notFoundHandler } from "./shared/middlewares/error-handler";
+import { obtenerCarpetaUploads } from "./shared/middlewares/upload.middleware";
 
 // Rangos de IP privada (RFC 1918) + loopback: cualquier red Wi-Fi local (casa,
 // oficina, la del cliente) usa una IP en alguno de estos rangos. Aceptar el
@@ -54,10 +54,9 @@ export function createApp() {
   app.use(express.json());
   app.use(cookieParser());
 
-  // Fotos de productos/insumos servidas como archivos estáticos (ver upload.middleware.ts).
-  // Ancla en process.cwd(), no __dirname: debe resolver a la misma carpeta "uploads"
-  // que usa el uploader, sin importar si el proceso corre desde src/ (tsx) o dist/ (build).
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  // Fotos de productos/insumos servidas como archivos estáticos (ver upload.middleware.ts
+  // para de dónde sale esta ruta — cambia entre local/serverless).
+  app.use("/uploads", express.static(obtenerCarpetaUploads()));
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
 

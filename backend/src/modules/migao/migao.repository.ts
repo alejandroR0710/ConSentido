@@ -277,8 +277,8 @@ export async function listItemsDespachados() {
 }
 
 /** Cocina empieza a preparar TODA la orden de una vez: todo lo pendiente pasa a preparando. */
-export async function empezarPreparar(ordenId: string) {
-  const result = await pool.query(
+export async function empezarPreparar(ordenId: string, executor: Executor = pool) {
+  const result = await executor.query(
     `UPDATE orden_items SET estado = 'preparando' WHERE orden_id = $1 AND estado = 'pendiente' RETURNING *`,
     [ordenId],
   );
@@ -295,8 +295,8 @@ export async function setCheckItem(itemId: string, listoCocina: boolean) {
 }
 
 /** Marca TODA la orden como lista: solo debe llamarse cuando ya se validó que todo está checkeado. */
-export async function marcarItemsListos(ordenId: string) {
-  const result = await pool.query(
+export async function marcarItemsListos(ordenId: string, executor: Executor = pool) {
+  const result = await executor.query(
     `UPDATE orden_items SET estado = 'listo' WHERE orden_id = $1 AND estado = 'preparando' RETURNING *`,
     [ordenId],
   );
@@ -373,7 +373,13 @@ export async function insertHistorial(
   params: {
     ordenId: string;
     ordenItemId?: number;
-    accion: "item_agregado" | "item_editado" | "item_cancelado" | "item_entregado";
+    accion:
+      | "item_agregado"
+      | "item_editado"
+      | "item_cancelado"
+      | "item_entregado"
+      | "item_preparando"
+      | "item_listo";
     detalle?: Record<string, unknown>;
     usuarioId: string;
   },

@@ -454,7 +454,12 @@ CREATE TABLE orden_historial (
   orden_id      UUID NOT NULL REFERENCES ordenes(id) ON DELETE CASCADE,
   orden_item_id BIGINT REFERENCES orden_items(id),
   accion        VARCHAR(40) NOT NULL
-                CHECK (accion IN ('item_agregado', 'item_editado', 'item_cancelado', 'item_entregado')),
+                CHECK (accion IN (
+                  'item_agregado', 'item_editado', 'item_cancelado', 'item_entregado',
+                  -- item_preparando/item_listo: transiciones de Cocina, para poder calcular
+                  -- tiempos de preparación/entrega en las analíticas del Dashboard.
+                  'item_preparando', 'item_listo'
+                )),
   detalle       JSONB,
   usuario_id    UUID REFERENCES usuarios(id),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()

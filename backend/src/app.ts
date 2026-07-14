@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import { analyticsRouter } from "./modules/general/analytics/analytics.routes";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
@@ -64,6 +65,7 @@ export function createApp() {
   app.use("/api/v1/insumos", insumosRouter);
   app.use("/api/v1/caja", cajaRouter);
   app.use("/api/v1/migao", migaoRouter);
+  app.use("/api/v1/analytics", analyticsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

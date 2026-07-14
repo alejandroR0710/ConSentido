@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
+import { MigaoAnalyticsSection } from "../components/MigaoAnalyticsSection";
 import { ReiniciarTodoModal } from "../components/ReiniciarTodoModal";
+
+const MODULOS_SIN_ANALYTICS = [
+  { nombre: "Insumos", nota: "Analíticas de inventario/consumo — próximamente." },
+  { nombre: "Talleres", nota: "Analíticas de talleres — próximamente." },
+  { nombre: "Con Sentido", nota: "Analíticas de ventas — próximamente." },
+  { nombre: "Pedidos", nota: "Analíticas de pedidos a domicilio — próximamente." },
+];
 
 export function DashboardPage() {
   const { usuario } = useAuth();
@@ -20,6 +28,19 @@ export function DashboardPage() {
       </div>
 
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
+
+      <MigaoAnalyticsSection />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {MODULOS_SIN_ANALYTICS.map((m) => (
+          <div
+            key={m.nombre}
+            className="rounded-lg border border-dashed border-brand-vanilla-dark p-4 text-sm text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
+          >
+            <span className="font-medium text-brand-ink dark:text-brand-vanilla">{m.nombre}</span> — {m.nota}
+          </div>
+        ))}
+      </div>
 
       {esSuperRoot && (
         <div className="max-w-lg rounded-lg border-2 border-dashed border-red-300 p-4 dark:border-red-800">

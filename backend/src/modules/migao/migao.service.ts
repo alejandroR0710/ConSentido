@@ -220,14 +220,29 @@ export async function listarHistorialDespachados() {
  * Si el mesero agrega un producto nuevo después, vuelve a quedar "pendiente" y
  * este mismo botón lo suma al lote sin afectar lo que ya se estaba preparando.
  */
-export async function empezarPreparar(ordenId: string) {
+export async function empezarPreparar(ordenId: string, usuarioId: string) {
   const orden = await repo.getOrdenById(ordenId);
   if (!orden) throw Errors.notFound("Orden no encontrada");
-  const actualizados = await repo.empezarPreparar(ordenId);
-  if (actualizados.length === 0) {
-    throw Errors.conflict("No hay productos pendientes por empezar a preparar en esta orden");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const actualizados = await repo.empezarPreparar(ordenId, client);
+    if (actualizados.length === 0) {
+      throw Errors.conflict("No hay productos pendientes por empezar a preparar en esta orden");
+    }
+    // Marca de tiempo para poder calcular después cuánto tarda Cocina en
+    // preparar cada producto (ver analytics del Dashboard).
+    for (const item of actualizados) {
+      await repo.insertHistorial(client, { ordenId, ordenItemId: item.id, accion: "item_preparando", usuarioId });
+    }
+    await client.query("COMMIT");
+    return actualizados;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  return actualizados;
 }
 
 /** Cocina marca/desmarca el check de un producto individual mientras se prepara la orden. */
@@ -244,7 +259,7 @@ export async function marcarCheckItem(itemId: string, input: CheckItemInput) {
  * Marca TODA la orden como lista. Bloqueado hasta que no queden productos
  * pendientes por empezar ni productos en preparación sin su check marcado.
  */
-export async function marcarOrdenLista(ordenId: string) {
+export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
   const orden = await repo.getOrdenById(ordenId);
   if (!orden) throw Errors.notFound("Orden no encontrada");
 
@@ -264,7 +279,22 @@ export async function marcarOrdenLista(ordenId: string) {
     );
   }
 
-  return repo.marcarItemsListos(ordenId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const actualizados = await repo.marcarItemsListos(ordenId, client);
+    // Marca de tiempo de cierre para el tiempo de preparación (ver item_preparando arriba).
+    for (const item of actualizados) {
+      await repo.insertHistorial(client, { ordenId, ordenItemId: item.id, accion: "item_listo", usuarioId });
+    }
+    await client.query("COMMIT");
+    return actualizados;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

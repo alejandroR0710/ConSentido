@@ -135,7 +135,7 @@ export async function listarHistorialDespachadosController(_req: Request, res: R
 }
 
 export async function empezarPrepararController(req: Request, res: Response) {
-  const items = await service.empezarPreparar(req.params.id);
+  const items = await service.empezarPreparar(req.params.id, req.auth!.usuarioId);
   return ok(res, items);
 }
 
@@ -146,7 +146,7 @@ export async function marcarCheckItemController(req: Request, res: Response) {
 }
 
 export async function marcarOrdenListaController(req: Request, res: Response) {
-  const items = await service.marcarOrdenLista(req.params.id);
+  const items = await service.marcarOrdenLista(req.params.id, req.auth!.usuarioId);
   return ok(res, items);
 }
 

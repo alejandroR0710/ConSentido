@@ -19,6 +19,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'general'), 'editar_movimiento',    'general.caja.editar_movimiento'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'borrar_historial',     'general.caja.borrar_historial'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'reiniciar_todo',       'general.sistema.reiniciar_todo'),
+  ((SELECT id FROM modulos WHERE slug = 'general'), 'ver_analytics',        'general.dashboard.analytics.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver',          'migao.ordenes.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear',        'migao.ordenes.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),

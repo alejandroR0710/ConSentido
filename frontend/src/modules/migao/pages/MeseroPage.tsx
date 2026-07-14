@@ -77,6 +77,14 @@ export function MeseroPage() {
     try {
       setDetalle(await migaoApi.obtenerDetalle(ordenId));
     } catch (err) {
+      if (err instanceof ApiError && err.code === "NOT_FOUND") {
+        // La orden ya no existe (ej. Super Root reinició el historial de órdenes
+        // mientras el mesero la tenía abierta) — quedarse mostrando el detalle
+        // viejo con un error encima solo confunde, mejor volver a la lista sola.
+        irALista();
+        setError("Esta orden ya no existe (puede que se haya reiniciado el historial).");
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la orden");
     }
   }

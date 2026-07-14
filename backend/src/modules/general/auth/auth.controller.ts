@@ -39,7 +39,11 @@ export async function refreshController(req: Request, res: Response) {
 }
 
 export async function logoutController(_req: Request, res: Response) {
-  res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth" });
+  // clearCookie debe repetir sameSite/secure exactos de cuando se creó: un
+  // navegador no deja que un Set-Cookie sin Secure sobreescriba una cookie que
+  // ya tenía Secure, así que sin esto el "borrado" no hacía nada en producción
+  // y la sesión volvía sola al recargar la página después de "Salir".
+  res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth", secure: isProd, sameSite: isProd ? "none" : "strict" });
   return ok(res, { success: true });
 }
 

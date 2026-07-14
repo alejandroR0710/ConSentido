@@ -59,11 +59,22 @@ export function CocinaPage() {
 
   const tickets = useMemo(() => agruparPorOrden(items), [items]);
 
+  /** Aplica al estado local los ítems que el backend acaba de devolver ya
+   *  actualizados, en vez de esperar el próximo poll o pedir de nuevo la cola
+   *  completa — evita un viaje de red extra por acción, que es justo lo que se
+   *  siente como demora en un plan gratuito de Render/Supabase. */
+  function aplicarActualizacion(actualizados: ItemCocina[]) {
+    setItems((actual) => {
+      const porId = new Map(actualizados.map((i) => [i.id, i]));
+      return actual.map((i) => porId.get(i.id) ?? i);
+    });
+  }
+
   async function empezarPreparar(ordenId: string) {
     setProcesandoId(ordenId);
     try {
-      await migaoApi.empezarPreparar(ordenId);
-      await cargar();
+      const actualizados = await migaoApi.empezarPreparar(ordenId);
+      aplicarActualizacion(actualizados);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo empezar a preparar la orden");
     } finally {
@@ -73,8 +84,8 @@ export function CocinaPage() {
 
   async function toggleCheck(item: ItemCocina) {
     try {
-      await migaoApi.marcarCheckItem(item.id, !item.listo_cocina);
-      await cargar();
+      const actualizado = await migaoApi.marcarCheckItem(item.id, !item.listo_cocina);
+      aplicarActualizacion([actualizado]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo marcar el producto");
     }
@@ -84,7 +95,9 @@ export function CocinaPage() {
     setProcesandoId(ordenId);
     try {
       await migaoApi.marcarOrdenLista(ordenId);
-      await cargar();
+      // Una orden lista sale de la cola de Cocina (el backend ya no la incluye en
+      // listarColaCocina) — se quita local de una vez, sin esperar el próximo poll.
+      setItems((actual) => actual.filter((i) => i.orden_id !== ordenId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo marcar la orden como lista");
     } finally {

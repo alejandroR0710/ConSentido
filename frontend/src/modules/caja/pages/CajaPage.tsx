@@ -296,7 +296,8 @@ export function CajaPage() {
         <div className="rounded-lg border-2 border-dashed border-red-300 p-4 dark:border-red-800">
           <h2 className="mb-1 font-medium text-red-600">Zona de Super Root</h2>
           <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-            Reinicia el saldo de Caja a $0 sin borrar el historial de turnos y movimientos anteriores.
+            Reinicia el saldo de Caja a $0. Los ingresos y turnos anteriores no se borran, pero los egresos del turno
+            abierto sí se borran por completo.
           </p>
           <button
             onClick={() => setModalAbierto("reset")}

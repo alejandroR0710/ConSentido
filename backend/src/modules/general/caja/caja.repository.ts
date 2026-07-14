@@ -139,14 +139,20 @@ export interface MovimientoCaja {
   id: number;
   turnoId: string;
   tipo: "ingreso" | "egreso";
+  moduloOrigenId: number | null;
+  categoriaGastoId: number | null;
   referenciaEntidad: string | null;
   referenciaId: string | null;
+  monto: string;
   metodoPago: string;
+  motivo: string | null;
+  usuarioId: string;
 }
 
 export async function getMovimientoById(movimientoId: number): Promise<MovimientoCaja | null> {
   const result = await pool.query(
-    `SELECT id, turno_id, tipo, referencia_entidad, referencia_id, metodo_pago
+    `SELECT id, turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id,
+            monto, metodo_pago, motivo, usuario_id
        FROM movimientos_caja
       WHERE id = $1`,
     [movimientoId],
@@ -157,9 +163,14 @@ export async function getMovimientoById(movimientoId: number): Promise<Movimient
     id: row.id,
     turnoId: row.turno_id,
     tipo: row.tipo,
+    moduloOrigenId: row.modulo_origen_id,
+    categoriaGastoId: row.categoria_gasto_id,
     referenciaEntidad: row.referencia_entidad,
     referenciaId: row.referencia_id,
+    monto: row.monto,
     metodoPago: row.metodo_pago,
+    motivo: row.motivo,
+    usuarioId: row.usuario_id,
   };
 }
 
@@ -177,6 +188,96 @@ export async function actualizarMetodoPagoMovimiento(client: PoolClient, movimie
 
 export async function actualizarMetodoPagoPagoPorVenta(client: PoolClient, ventaId: string, metodoPago: string) {
   await client.query(`UPDATE pagos SET metodo_pago = $2 WHERE venta_id = $1`, [ventaId, metodoPago]);
+}
+
+export async function borrarMovimiento(client: PoolClient, movimientoId: number) {
+  await client.query(`DELETE FROM movimientos_caja WHERE id = $1`, [movimientoId]);
+}
+
+/** Recrea un movimiento con los mismos datos del original pero método/monto
+ *  distintos — usado al convertir un pago simple en "mixto" (una línea se
+ *  actualiza in-place, la otra se inserta con esta función). */
+export async function duplicarMovimientoConOtroMetodo(
+  client: PoolClient,
+  original: MovimientoCaja,
+  metodoPago: string,
+  monto: number,
+) {
+  const result = await client.query(
+    `INSERT INTO movimientos_caja
+       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING *`,
+    [
+      original.turnoId,
+      original.tipo,
+      original.moduloOrigenId,
+      original.categoriaGastoId,
+      original.referenciaEntidad,
+      original.referenciaId,
+      monto,
+      metodoPago,
+      original.motivo,
+      original.usuarioId,
+    ],
+  );
+  return result.rows[0];
+}
+
+export interface PagoVenta {
+  id: string;
+  ordenId: string | null;
+  ventaId: string;
+  metodoPago: string;
+  monto: string;
+  referencia: string | null;
+  usuarioId: string;
+}
+
+export async function listPagosPorVenta(client: PoolClient, ventaId: string): Promise<PagoVenta[]> {
+  const result = await client.query(
+    `SELECT id, orden_id, venta_id, metodo_pago, monto, referencia, usuario_id FROM pagos WHERE venta_id = $1`,
+    [ventaId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    ordenId: row.orden_id,
+    ventaId: row.venta_id,
+    metodoPago: row.metodo_pago,
+    monto: row.monto,
+    referencia: row.referencia,
+    usuarioId: row.usuario_id,
+  }));
+}
+
+export async function borrarPago(client: PoolClient, pagoId: string) {
+  await client.query(`DELETE FROM pagos WHERE id = $1`, [pagoId]);
+}
+
+export async function crearPagoParaVenta(
+  client: PoolClient,
+  params: {
+    ordenId: string | null;
+    ventaId: string;
+    metodoPago: string;
+    monto: number;
+    referencia: string | null;
+    usuarioId: string;
+  },
+) {
+  await client.query(
+    `INSERT INTO pagos (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+    [params.ordenId, params.ventaId, params.metodoPago, params.monto, params.referencia, params.usuarioId],
+  );
+}
+
+/** Borra permanentemente los egresos del turno indicado (solo ese turno, no
+ *  todo el historial). Se usa al reiniciar Caja: a diferencia del resto del
+ *  reset (que nunca borra nada), Super Root pidió explícitamente que los
+ *  egresos sí desaparezcan del todo, no solo que dejen de contar para el saldo. */
+export async function borrarEgresosDelTurno(turnoId: string) {
+  const result = await pool.query(`DELETE FROM movimientos_caja WHERE turno_id = $1 AND tipo = 'egreso'`, [turnoId]);
+  return result.rowCount ?? 0;
 }
 
 export async function listMovimientosPorTurno(turnoId: string) {

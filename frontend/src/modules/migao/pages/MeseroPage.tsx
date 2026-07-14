@@ -21,6 +21,7 @@ const POLL_PRODUCTOS_MS = 60000;
 interface ItemBorrador {
   producto: Producto;
   cantidad: number;
+  observaciones?: string;
 }
 
 type Vista = "lista" | "detalle" | "nueva";
@@ -165,8 +166,8 @@ export function MeseroPage() {
     setMensaje(null);
   }
 
-  function quitarDelBorrador(productoId: string) {
-    setBorradorItems((actual) => actual.filter((i) => i.producto.id !== productoId));
+  function quitarDelBorrador(index: number) {
+    setBorradorItems((actual) => actual.filter((_, i) => i !== index));
   }
 
   async function confirmarCrearOrden() {
@@ -182,6 +183,7 @@ export function MeseroPage() {
           productoId: i.producto.id,
           cantidad: i.cantidad,
           precioUnitario: Number(i.producto.precio),
+          observaciones: i.observaciones,
         })),
         personas,
         borradorPiso,
@@ -210,28 +212,33 @@ export function MeseroPage() {
     await cargarDetalle(ordenId);
   }
 
-  function manejarSeleccionProducto(producto: Producto, cantidad: number) {
+  function manejarSeleccionProducto(producto: Producto, cantidad: number, observaciones?: string) {
     if (vista === "nueva") {
       setBorradorItems((actual) => {
-        const idx = actual.findIndex((i) => i.producto.id === producto.id);
+        // Solo se suma a una línea existente si ninguna de las dos tiene
+        // observación: "limonada" y "limonada sin azúcar" son pedidos distintos,
+        // no se pueden fusionar en una sola cantidad sin perder la nota.
+        const idx = !observaciones
+          ? actual.findIndex((i) => i.producto.id === producto.id && !i.observaciones)
+          : -1;
         if (idx >= 0) {
           const copia = [...actual];
           copia[idx] = { ...copia[idx], cantidad: copia[idx].cantidad + cantidad };
           return copia;
         }
-        return [...actual, { producto, cantidad }];
+        return [...actual, { producto, cantidad, observaciones }];
       });
       return;
     }
-    agregarProducto(producto, cantidad);
+    agregarProducto(producto, cantidad, observaciones);
   }
 
-  async function agregarProducto(producto: Producto, cantidad: number) {
+  async function agregarProducto(producto: Producto, cantidad: number, observaciones?: string) {
     if (!ordenSeleccionadaId) return;
     setAgregandoId(producto.id);
     setError(null);
     try {
-      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio));
+      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio), observaciones);
       await cargarDetalle(ordenSeleccionadaId);
       await cargarOrdenes();
     } catch (err) {
@@ -434,22 +441,26 @@ export function MeseroPage() {
             <p className="text-sm text-brand-ink/60">Aún no has agregado productos.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {borradorItems.map((i) => (
+              {borradorItems.map((i, idx) => (
                 <li
-                  key={i.producto.id}
+                  key={`${i.producto.id}-${idx}`}
                   className="flex items-center justify-between rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
                 >
-                  <span className="font-medium text-brand-ink dark:text-brand-vanilla">
-                    {i.cantidad}× {i.producto.nombre}
-                  </span>
+                  <div>
+                    <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                      {i.cantidad}× {i.producto.nombre}
+                    </span>
+                    {i.observaciones && (
+                      <div className="text-xs italic text-brand-ink/60 dark:text-brand-vanilla/60">
+                        {i.observaciones}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
                       {formatMoney(i.cantidad * Number(i.producto.precio))}
                     </span>
-                    <button
-                      onClick={() => quitarDelBorrador(i.producto.id)}
-                      className="text-xs text-red-600 hover:underline"
-                    >
+                    <button onClick={() => quitarDelBorrador(idx)} className="text-xs text-red-600 hover:underline">
                       Quitar
                     </button>
                   </div>
@@ -513,6 +524,11 @@ export function MeseroPage() {
                   <div className="text-base font-semibold text-brand-ink dark:text-brand-vanilla">
                     {formatCantidad(item.cantidad)}× {item.producto_nombre}
                   </div>
+                  {item.observaciones && (
+                    <div className="mb-1 text-xs italic text-brand-ink/60 dark:text-brand-vanilla/60">
+                      {item.observaciones}
+                    </div>
+                  )}
                   <EstadoBadge estado={item.estado} />
                 </div>
                 <div className="flex shrink-0 gap-2">

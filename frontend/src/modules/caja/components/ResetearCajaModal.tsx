@@ -10,10 +10,11 @@ interface ResetearCajaModalProps {
   onReseteado: (mensaje: string) => Promise<void>;
 }
 
-/** Reset exclusivo de Super Root: NO borra historial (turnos/movimientos pasados
- *  siguen intactos para los reportes de Caja), solo hace que el próximo turno
- *  arranque en $0/$0 en vez de heredar el saldo anterior. Exige escribir la frase
- *  de confirmación para evitar un clic accidental en una acción tan sensible. */
+/** Reset exclusivo de Super Root: NO borra el historial de ingresos (turnos y
+ *  movimientos pasados siguen intactos para los reportes de Caja), pero SÍ
+ *  borra por completo los egresos del turno abierto — a diferencia del resto
+ *  del reset, esto no se puede deshacer. Exige escribir la frase de
+ *  confirmación para evitar un clic accidental en una acción tan sensible. */
 export function ResetearCajaModal({ onCerrar, onReseteado }: ResetearCajaModalProps) {
   const [frase, setFrase] = useState("");
   const [reseteando, setReseteando] = useState(false);
@@ -24,8 +25,10 @@ export function ResetearCajaModal({ onCerrar, onReseteado }: ResetearCajaModalPr
     setReseteando(true);
     setError(null);
     try {
-      await cajaApi.resetear();
-      await onReseteado("Caja reiniciada: el saldo vuelve a $0. El historial de turnos anteriores sigue disponible.");
+      const resultado = await cajaApi.resetear();
+      await onReseteado(
+        `Caja reiniciada: el saldo vuelve a $0 y se borraron ${resultado.egresosBorrados} egreso(s) del turno. El historial de ingresos anteriores sigue disponible.`,
+      );
       onCerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo reiniciar la caja");
@@ -40,9 +43,12 @@ export function ResetearCajaModal({ onCerrar, onReseteado }: ResetearCajaModalPr
         Esto cierra el turno actual (si hay uno abierto) y hace que el próximo turno arranque en{" "}
         <strong>$0 efectivo y $0 banco</strong>, en vez de heredar el saldo del cierre anterior.
       </p>
+      <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
+        Los <strong>egresos del turno abierto se borran por completo</strong> (esto no se puede deshacer). Los
+        ingresos y los turnos anteriores no se tocan.
+      </p>
       <p className="mb-4 rounded-md bg-brand-green-50 px-3 py-2 text-xs text-brand-green-700 dark:bg-brand-green-700/20 dark:text-brand-vanilla">
-        Ningún turno ni movimiento anterior se borra: siguen disponibles en el historial de Caja para consultar
-        después.
+        Ningún turno ni ingreso anterior se borra: siguen disponibles en el historial de Caja para consultar después.
       </p>
 
       <label className="mb-1 block text-xs font-medium">

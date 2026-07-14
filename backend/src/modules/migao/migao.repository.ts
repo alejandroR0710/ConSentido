@@ -36,7 +36,7 @@ export async function listOrdenesAbiertas() {
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
-       LEFT JOIN orden_items oi ON oi.orden_id = o.id
+       LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
       WHERE o.estado NOT IN ('cerrada', 'cancelada')
       GROUP BY o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, m.numero, m.piso, c.nombre, u.nombre
       ORDER BY o.created_at ASC`,
@@ -53,19 +53,34 @@ export async function listOrdenesHistorial(meseroId?: string) {
   const result = await pool.query(
     `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
-            u.nombre AS mesero_nombre, mc.id AS movimiento_id, mc.metodo_pago,
+            u.nombre AS mesero_nombre, MAX(mc.movimiento_id) AS movimiento_id, MAX(mc.metodo_pago) AS metodo_pago,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
-       LEFT JOIN orden_items oi ON oi.orden_id = o.id
+       LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
        LEFT JOIN ventas v ON v.orden_id = o.id
-       LEFT JOIN movimientos_caja mc ON mc.referencia_entidad = 'ventas' AND mc.referencia_id = v.id::text
+       -- Subconsulta lateral (siempre da 0 o 1 fila por venta) en vez de un JOIN
+       -- directo a movimientos_caja: una cuenta dividida genera varios pagos
+       -- para la misma venta, y un JOIN directo multiplicaría las filas de
+       -- orden_items en el SUM de arriba, inflando el total. Con 1 solo pago
+       -- se puede editar el método (por eso movimiento_id); con más de uno se
+       -- muestran combinados (ej. "efectivo+banco") pero no son editables ahí.
+       LEFT JOIN LATERAL (
+         SELECT
+           CASE WHEN COUNT(*) = 1 THEN MAX(inner_mc.id) END AS movimiento_id,
+           CASE
+             WHEN COUNT(*) = 1 THEN MAX(inner_mc.metodo_pago)
+             WHEN COUNT(*) > 1 THEN string_agg(DISTINCT inner_mc.metodo_pago, '+' ORDER BY inner_mc.metodo_pago)
+           END AS metodo_pago
+         FROM movimientos_caja inner_mc
+         WHERE inner_mc.referencia_entidad = 'ventas' AND inner_mc.referencia_id = v.id::text
+       ) mc ON true
       WHERE o.estado IN ('cerrada', 'cancelada')
         AND ($1::uuid IS NULL OR o.mesero_id = $1)
       GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
-               c.nombre, u.nombre, mc.id, mc.metodo_pago
+               c.nombre, u.nombre
       ORDER BY o.closed_at DESC
       LIMIT 200`,
     [meseroId ?? null],
@@ -221,8 +236,9 @@ export async function actualizarProductoMigao(
 /** Cola de cocina: ítems de órdenes activas que aún no han sido servidos. */
 export async function listItemsCocina() {
   const result = await pool.query(
-    `SELECT oi.id, oi.orden_id, oi.cantidad, oi.estado, oi.listo_cocina, oi.created_at,
-            p.nombre AS producto_nombre, m.numero AS mesa_numero, m.piso AS mesa_piso,
+    `SELECT oi.id, oi.orden_id, oi.cantidad, oi.estado, oi.listo_cocina, oi.created_at, oi.observaciones,
+            p.nombre AS producto_nombre, p.descripcion AS producto_descripcion,
+            m.numero AS mesa_numero, m.piso AS mesa_piso,
             u.nombre AS mesero_nombre
        FROM orden_items oi
        JOIN productos p ON p.id = oi.producto_id
@@ -341,12 +357,13 @@ export async function agregarItem(
   productoId: string,
   cantidad: number,
   precioUnitario: number,
+  observaciones?: string,
   executor: Executor = pool,
 ) {
   const result = await executor.query(
-    `INSERT INTO orden_items (orden_id, producto_id, cantidad, precio_unitario)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [ordenId, productoId, cantidad, precioUnitario],
+    `INSERT INTO orden_items (orden_id, producto_id, cantidad, precio_unitario, observaciones)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [ordenId, productoId, cantidad, precioUnitario, observaciones ?? null],
   );
   return result.rows[0];
 }

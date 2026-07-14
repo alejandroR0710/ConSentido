@@ -34,6 +34,8 @@ export const agregarItemSchema = z.object({
   productoId: z.string().uuid(),
   cantidad: z.number().positive(),
   precioUnitario: z.number().nonnegative(),
+  // Nota del mesero (ej. "sin azúcar"): solo visible para Cocina al empezar a preparar.
+  observaciones: z.string().trim().max(300).optional(),
 });
 export type AgregarItemInput = z.infer<typeof agregarItemSchema>;
 
@@ -50,10 +52,54 @@ export const crearOrdenSchema = z.object({
 });
 export type CrearOrdenInput = z.infer<typeof crearOrdenSchema>;
 
-export const cerrarOrdenSchema = z.object({
-  metodoPago: z.enum(["efectivo", "banco"]),
-  referencia: z.string().max(100).optional(),
-});
+// "mixto" no es un método real en la base: es una comodidad de UI que se
+// descompone en 1-2 líneas ya puras al cobrar (ver shared/utils/pago-mixto.ts).
+const MENSAJE_MIXTO_VACIO = "El total del pago mixto debe ser mayor a 0";
+// z.coerce: orden_items.id es BIGSERIAL, que node-postgres devuelve como
+// string — el frontend lo reenvía tal cual lo recibió, número o string.
+const itemIdsSchema = z.array(z.coerce.number().int().positive()).min(1, "Cada parte necesita al menos un producto");
+
+// Cobro normal (un solo método, o mixto efectivo+banco) o dividido (varias
+// partes, cada una con sus propios productos y su propio método de pago,
+// también simple o mixto) — ej. dos comensales que pidieron junto en una sola
+// orden pero quieren pagar cada uno lo suyo.
+export const cerrarOrdenSchema = z.union([
+  z.object({
+    dividir: z.literal(false),
+    metodoPago: z.enum(["efectivo", "banco"]),
+    referencia: z.string().max(100).optional(),
+  }),
+  z
+    .object({
+      dividir: z.literal(false),
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+      referencia: z.string().max(100).optional(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+  z.object({
+    dividir: z.literal(true),
+    partes: z
+      .array(
+        z.union([
+          z.object({ metodoPago: z.enum(["efectivo", "banco"]), itemIds: itemIdsSchema }),
+          z
+            .object({
+              metodoPago: z.literal("mixto"),
+              montoEfectivo: z.number().nonnegative(),
+              montoBanco: z.number().nonnegative(),
+              itemIds: itemIdsSchema,
+            })
+            .refine((d) => d.montoEfectivo + d.montoBanco > 0, {
+              message: MENSAJE_MIXTO_VACIO,
+              path: ["montoEfectivo"],
+            }),
+        ]),
+      )
+      .min(2, "Divide la cuenta entre al menos 2 partes"),
+  }),
+]);
 export type CerrarOrdenInput = z.infer<typeof cerrarOrdenSchema>;
 
 // Reset exclusivo de Super Root: exige escribir la frase exacta como segunda

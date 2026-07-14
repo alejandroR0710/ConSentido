@@ -3,6 +3,18 @@ import { apiFetch } from "../../shared/api/client";
 export type MetodoPago = "efectivo" | "banco";
 export type ModuloOrigenSlug = "insumos" | "talleres" | "con_sentido" | "migao" | "pedidos" | "general";
 
+// "mixto" no es un método real (ver backend shared/utils/pago-mixto.ts): el
+// backend lo descompone en 1-2 movimientos ya con método puro.
+export type PagoInput =
+  | { metodoPago: "efectivo" | "banco"; monto: number }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+
+// Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente
+// el total no cambia, solo cómo se reparte entre los dos métodos.
+export type EditarPagoInput =
+  | { metodoPago: "efectivo" | "banco" }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+
 export interface TurnoCaja {
   id: string;
   cajeroId: string;
@@ -61,6 +73,7 @@ export interface DiaHistorialCaja {
 export interface ResetearCajaResultado {
   turnoCerrado: TurnoCaja | null;
   marcador: TurnoCaja;
+  egresosBorrados: number;
 }
 
 export interface ProyeccionApertura {
@@ -83,18 +96,14 @@ export const cajaApi = {
       body: { montoFinalDeclaradoEfectivo },
     }),
   obtenerResumenTurno: (turnoId: string) => apiFetch<ResumenTurno>(`/caja/turnos/${turnoId}/resumen`),
-  registrarIngreso: (input: {
-    moduloOrigenSlug: ModuloOrigenSlug;
-    monto: number;
-    metodoPago: MetodoPago;
-    motivo?: string;
-  }) => apiFetch<MovimientoCaja>("/caja/ingresos", { method: "POST", body: input }),
-  registrarEgreso: (input: { categoriaGastoId: number; monto: number; metodoPago: MetodoPago; motivo: string }) =>
-    apiFetch<MovimientoCaja>("/caja/egresos", { method: "POST", body: input }),
-  editarMetodoPagoMovimiento: (movimientoId: number | string, metodoPago: MetodoPago) =>
-    apiFetch<MovimientoCaja>(`/caja/movimientos/${movimientoId}/metodo-pago`, {
+  registrarIngreso: (input: { moduloOrigenSlug: ModuloOrigenSlug; motivo?: string } & PagoInput) =>
+    apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
+  registrarEgreso: (input: { categoriaGastoId: number; motivo: string } & PagoInput) =>
+    apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
+  editarMetodoPagoMovimiento: (movimientoId: number | string, input: EditarPagoInput) =>
+    apiFetch<MovimientoCaja[]>(`/caja/movimientos/${movimientoId}/metodo-pago`, {
       method: "PATCH",
-      body: { metodoPago },
+      body: input,
     }),
   listarCategoriasGasto: () => apiFetch<CategoriaGasto[]>("/caja/categorias-gasto"),
   crearCategoriaGasto: (nombre: string) =>

@@ -16,22 +16,44 @@ export const cerrarTurnoSchema = z.object({
 });
 export type CerrarTurnoInput = z.infer<typeof cerrarTurnoSchema>;
 
-export const registrarIngresoSchema = z.object({
+// "mixto" no es un método real en la base (ver shared/utils/pago-mixto.ts): es
+// una comodidad de UI que se descompone en 1-2 movimientos ya puros al guardar.
+const MENSAJE_MIXTO_VACIO = "El total del pago mixto debe ser mayor a 0";
+
+const camposIngreso = {
   moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]),
-  monto: z.number().positive(),
-  metodoPago: z.enum(METODOS_PAGO),
   motivo: z.string().max(200).optional(),
   referenciaEntidad: z.string().max(80).optional(),
   referenciaId: z.string().max(64).optional(),
-});
+};
+export const registrarIngresoSchema = z.union([
+  z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z
+    .object({
+      ...camposIngreso,
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
 export type RegistrarIngresoInput = z.infer<typeof registrarIngresoSchema>;
 
-export const registrarEgresoSchema = z.object({
+const camposEgreso = {
   categoriaGastoId: z.number().int().positive(),
-  monto: z.number().positive(),
-  metodoPago: z.enum(METODOS_PAGO),
   motivo: z.string().max(200),
-});
+};
+export const registrarEgresoSchema = z.union([
+  z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z
+    .object({
+      ...camposEgreso,
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
 export type RegistrarEgresoInput = z.infer<typeof registrarEgresoSchema>;
 
 export const crearCategoriaGastoSchema = z.object({
@@ -46,9 +68,19 @@ export const resetearCajaSchema = z.object({
 });
 export type ResetearCajaInput = z.infer<typeof resetearCajaSchema>;
 
-export const editarMetodoPagoMovimientoSchema = z.object({
-  metodoPago: z.enum(METODOS_PAGO),
-});
+// Corrección de método: simple (efectivo<->banco) o a mixto, repartiendo el
+// mismo monto original del movimiento entre los dos métodos (eso lo valida
+// el service contra el monto ya existente, no aquí).
+export const editarMetodoPagoMovimientoSchema = z.union([
+  z.object({ metodoPago: z.enum(METODOS_PAGO) }),
+  z
+    .object({
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
 export type EditarMetodoPagoMovimientoInput = z.infer<typeof editarMetodoPagoMovimientoSchema>;
 
 export const historialCajaSchema = z.object({

@@ -41,14 +41,14 @@ export async function obtenerResumenTurnoController(req: Request, res: Response)
 
 export async function registrarIngresoController(req: Request, res: Response) {
   const data = registrarIngresoSchema.parse(req.body);
-  const movimiento = await service.registrarIngreso(data, req.auth!.usuarioId);
-  return created(res, movimiento);
+  const movimientos = await service.registrarIngreso(data, req.auth!.usuarioId);
+  return created(res, movimientos);
 }
 
 export async function registrarEgresoController(req: Request, res: Response) {
   const data = registrarEgresoSchema.parse(req.body);
-  const movimiento = await service.registrarEgreso(data, req.auth!.usuarioId);
-  return created(res, movimiento);
+  const movimientos = await service.registrarEgreso(data, req.auth!.usuarioId);
+  return created(res, movimientos);
 }
 
 export async function listarCategoriasGastoController(_req: Request, res: Response) {
@@ -63,9 +63,9 @@ export async function crearCategoriaGastoController(req: Request, res: Response)
 }
 
 export async function editarMetodoPagoMovimientoController(req: Request, res: Response) {
-  const { metodoPago } = editarMetodoPagoMovimientoSchema.parse(req.body);
-  const movimiento = await service.editarMetodoPagoMovimiento(Number(req.params.id), metodoPago);
-  return ok(res, movimiento);
+  const data = editarMetodoPagoMovimientoSchema.parse(req.body);
+  const movimientos = await service.editarMetodoPagoMovimiento(Number(req.params.id), data);
+  return ok(res, movimientos);
 }
 
 export async function resetearCajaController(req: Request, res: Response) {

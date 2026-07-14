@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { cajaApi, type CategoriaGasto, type MetodoPago } from "../api";
+import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
+import { cajaApi, type CategoriaGasto } from "../api";
 
 interface EgresoModalProps {
   categorias: CategoriaGasto[];
@@ -14,7 +15,7 @@ interface EgresoModalProps {
 export function EgresoModal({ categorias, onCerrar, onRegistrado, onCategoriaCreada }: EgresoModalProps) {
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [monto, setMonto] = useState(0);
-  const [metodo, setMetodo] = useState<MetodoPago>("efectivo");
+  const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [motivo, setMotivo] = useState("");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,16 +39,18 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado, onCategoriaCre
     }
   }
 
+  const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
+  const puedeRegistrar = Boolean(categoriaId) && motivo.trim().length > 0 && (pago.metodoPago === "mixto" ? !mixtoInvalido : monto > 0);
+
   async function registrar() {
-    if (!categoriaId || monto <= 0 || !motivo.trim()) return;
+    if (!categoriaId || !puedeRegistrar) return;
     setRegistrando(true);
     setError(null);
     try {
       await cajaApi.registrarEgreso({
         categoriaGastoId: Number(categoriaId),
-        monto,
-        metodoPago: metodo,
         motivo: motivo.trim(),
+        ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto }),
       });
       await onRegistrado();
       onCerrar();
@@ -94,8 +97,8 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado, onCategoriaCre
         </button>
       </div>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <div>
+      {pago.metodoPago !== "mixto" && (
+        <div className="mb-1">
           <label className="mb-1 block text-xs font-medium">Monto</label>
           <MoneyInput
             value={monto}
@@ -103,17 +106,10 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado, onCategoriaCre
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Método</label>
-          <select
-            value={metodo}
-            onChange={(e) => setMetodo(e.target.value as MetodoPago)}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="banco">Banco</option>
-          </select>
-        </div>
+      )}
+      <label className="mb-1 block text-xs font-medium">Método</label>
+      <div className="mb-3">
+        <SelectorMetodoPago value={pago} onChange={setPago} />
       </div>
 
       <label className="mb-1 block text-xs font-medium">Motivo</label>
@@ -128,7 +124,7 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado, onCategoriaCre
 
       <button
         onClick={registrar}
-        disabled={registrando || !categoriaId || monto <= 0 || !motivo.trim()}
+        disabled={registrando || !puedeRegistrar}
         className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
       >
         {registrando ? "Registrando..." : "Registrar egreso"}

@@ -6,7 +6,7 @@ import type { Producto } from "../api";
 interface SelectorProductoModalProps {
   productos: Producto[];
   onCerrar: () => void;
-  onSeleccionar: (producto: Producto, cantidad: number) => void;
+  onSeleccionar: (producto: Producto, cantidad: number, observaciones?: string) => void;
   agregandoId: string | null;
 }
 
@@ -15,24 +15,34 @@ const DURACION_CONFIRMACION_MS = 900;
 /**
  * Buscador de menú: tocar un producto abre un selector de cantidad en línea
  * (-/+  y "Agregar") en esa misma fila, para no tener que tocar N veces el
- * mismo producto cuando el mesero necesita más de 1 unidad.
+ * mismo producto cuando el mesero necesita más de 1 unidad. El checkbox de
+ * observaciones es opcional y arranca destildado para no frenar el flujo
+ * rápido cuando el pedido no necesita ninguna nota.
  */
 export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agregandoId }: SelectorProductoModalProps) {
   const [busqueda, setBusqueda] = useState("");
   const [agregadoId, setAgregadoId] = useState<string | null>(null);
-  const [eligiendo, setEligiendo] = useState<{ producto: Producto; cantidad: number } | null>(null);
+  const [eligiendo, setEligiendo] = useState<{
+    producto: Producto;
+    cantidad: number;
+    conObservacion: boolean;
+    observacion: string;
+  } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filtrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
   function abrirCantidad(p: Producto) {
-    setEligiendo((actual) => (actual?.producto.id === p.id ? null : { producto: p, cantidad: 1 }));
+    setEligiendo((actual) =>
+      actual?.producto.id === p.id ? null : { producto: p, cantidad: 1, conObservacion: false, observacion: "" },
+    );
   }
 
   function confirmar() {
     if (!eligiendo) return;
-    const { producto, cantidad } = eligiendo;
-    onSeleccionar(producto, cantidad);
+    const { producto, cantidad, conObservacion, observacion } = eligiendo;
+    const observacionFinal = conObservacion ? observacion.trim() : "";
+    onSeleccionar(producto, cantidad, observacionFinal || undefined);
     setEligiendo(null);
     // Confirmación visual inmediata ("✓ Agregado") aunque el guardado real (API
     // o borrador local) siga su curso aparte — el mesero necesita saber YA que
@@ -83,7 +93,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setEligiendo({ producto: p, cantidad: Math.max(1, eligiendo.cantidad - 1) })}
+                          onClick={() => setEligiendo({ ...eligiendo, cantidad: Math.max(1, eligiendo.cantidad - 1) })}
                           className="flex h-11 w-11 items-center justify-center rounded-md border border-brand-green-700 text-xl font-bold text-brand-green-700 dark:border-brand-vanilla dark:text-brand-vanilla"
                         >
                           −
@@ -93,7 +103,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                         </span>
                         <button
                           type="button"
-                          onClick={() => setEligiendo({ producto: p, cantidad: eligiendo.cantidad + 1 })}
+                          onClick={() => setEligiendo({ ...eligiendo, cantidad: eligiendo.cantidad + 1 })}
                           className="flex h-11 w-11 items-center justify-center rounded-md border border-brand-green-700 text-xl font-bold text-brand-green-700 dark:border-brand-vanilla dark:text-brand-vanilla"
                         >
                           +
@@ -109,6 +119,26 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                             : `Agregar · ${formatMoney(Number(p.precio) * eligiendo.cantidad)}`}
                         </button>
                       </div>
+
+                      <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+                        <input
+                          type="checkbox"
+                          checked={eligiendo.conObservacion}
+                          onChange={(e) => setEligiendo({ ...eligiendo, conObservacion: e.target.checked })}
+                          className="h-4 w-4"
+                        />
+                        Observaciones
+                      </label>
+                      {eligiendo.conObservacion && (
+                        <textarea
+                          autoFocus
+                          value={eligiendo.observacion}
+                          onChange={(e) => setEligiendo({ ...eligiendo, observacion: e.target.value })}
+                          placeholder='Ej. "sin azúcar"'
+                          rows={2}
+                          className="w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                        />
+                      )}
                     </div>
                   ) : (
                     <button

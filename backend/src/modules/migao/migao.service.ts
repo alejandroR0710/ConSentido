@@ -1,5 +1,6 @@
 import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
+import { descomponerPago } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import * as repo from "./migao.repository";
 import {
@@ -96,7 +97,14 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
     const orden = await repo.crearOrden(meseroId, mesa.id, input.clienteId, input.numeroPersonas, client);
 
     for (const item of input.items) {
-      const nuevoItem = await repo.agregarItem(orden.id, item.productoId, item.cantidad, item.precioUnitario, client);
+      const nuevoItem = await repo.agregarItem(
+        orden.id,
+        item.productoId,
+        item.cantidad,
+        item.precioUnitario,
+        item.observaciones,
+        client,
+      );
       await repo.insertHistorial(client, {
         ordenId: orden.id,
         ordenItemId: nuevoItem.id,
@@ -122,7 +130,7 @@ export async function agregarItem(ordenId: string, input: AgregarItemInput, usua
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se pueden agregar productos a una orden cerrada o cancelada");
   }
-  const item = await repo.agregarItem(ordenId, input.productoId, input.cantidad, input.precioUnitario);
+  const item = await repo.agregarItem(ordenId, input.productoId, input.cantidad, input.precioUnitario, input.observaciones);
   await repo.insertHistorial(pool, {
     ordenId,
     ordenItemId: item.id,
@@ -270,7 +278,11 @@ export async function obtenerDetalleOrden(ordenId: string) {
 
   const items = await repo.getItemsPorOrden(ordenId);
   const itemsConSubtotal = calcularItemsConSubtotal(items);
-  const total = itemsConSubtotal.reduce((acc, i) => acc + i.subtotal, 0);
+  // Los ítems cancelados se siguen mostrando (para que quede el registro de qué
+  // se canceló), pero no deben sumar al total a cobrar.
+  const total = itemsConSubtotal
+    .filter((i) => i.estado !== "cancelado")
+    .reduce((acc, i) => acc + i.subtotal, 0);
   const historial = await repo.getHistorialPorOrden(ordenId);
 
   return { orden, items: itemsConSubtotal, total, historial };
@@ -295,8 +307,50 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
     if (itemsRaw.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
 
-    const items = calcularItemsConSubtotal(itemsRaw);
+    // Los ítems cancelados no se cobran ni quedan registrados como vendidos.
+    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado");
+    if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
     const total = items.reduce((acc, i) => acc + i.subtotal, 0);
+
+    if (input.dividir) {
+      // Cada producto debe quedar asignado a exactamente una parte: ni repetido
+      // ni faltante. El monto de cada parte se calcula de sus propios productos,
+      // así que la suma de las partes siempre cuadra con el total sin redondeos.
+      // Se valida ANTES de escribir nada, para no crear una venta a medias.
+      const idsValidos = new Set(items.map((i) => Number(i.id)));
+      const idsAsignados = new Set<number>();
+      for (const parte of input.partes) {
+        for (const itemId of parte.itemIds) {
+          if (!idsValidos.has(itemId)) {
+            throw Errors.badRequest(`El producto ${itemId} no pertenece a esta orden o está cancelado`);
+          }
+          if (idsAsignados.has(itemId)) {
+            throw Errors.badRequest(`El producto ${itemId} quedó asignado a más de una parte`);
+          }
+          idsAsignados.add(itemId);
+        }
+      }
+      if (idsAsignados.size !== items.length) {
+        throw Errors.badRequest("Todos los productos deben quedar asignados a alguna parte antes de cobrar");
+      }
+      // Si una parte es mixta, sus dos montos deben sumar justo el subtotal de
+      // SUS productos (calculado del lado del servidor, no lo que mande el cliente).
+      for (const [idx, parte] of input.partes.entries()) {
+        if (parte.metodoPago !== "mixto") continue;
+        const montoParte = items
+          .filter((i) => parte.itemIds.includes(Number(i.id)))
+          .reduce((acc, i) => acc + i.subtotal, 0);
+        if (Math.abs(parte.montoEfectivo + parte.montoBanco - montoParte) > 0.01) {
+          throw Errors.badRequest(
+            `La parte ${idx + 1}: efectivo + banco debe sumar el subtotal de sus productos (${montoParte})`,
+          );
+        }
+      }
+    } else if (input.metodoPago === "mixto") {
+      if (Math.abs(input.montoEfectivo + input.montoBanco - total) > 0.01) {
+        throw Errors.badRequest(`La suma de efectivo + banco debe ser igual al total (${total})`);
+      }
+    }
 
     const venta = await repo.crearVenta(client, {
       clienteId: orden.cliente_id,
@@ -316,26 +370,66 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
       })),
     );
 
-    await repo.crearPago(client, {
-      ordenId,
-      ventaId: venta.id,
-      metodoPago: input.metodoPago,
-      monto: total,
-      referencia: input.referencia,
-      usuarioId,
-    });
+    if (input.dividir) {
+      for (const [idx, parte] of input.partes.entries()) {
+        const itemsParte = items.filter((i) => parte.itemIds.includes(Number(i.id)));
+        const montoParte = itemsParte.reduce((acc, i) => acc + i.subtotal, 0);
+        const lineas =
+          parte.metodoPago === "mixto"
+            ? descomponerPago({ metodoPago: "mixto", montoEfectivo: parte.montoEfectivo, montoBanco: parte.montoBanco })
+            : descomponerPago({ metodoPago: parte.metodoPago, monto: montoParte });
 
-    await cajaService.registrarIngreso(
-      {
-        moduloOrigenSlug: "migao",
-        monto: total,
-        metodoPago: input.metodoPago,
-        referenciaEntidad: "ventas",
-        referenciaId: venta.id,
-      },
-      usuarioId,
-      client,
-    );
+        for (const linea of lineas) {
+          await repo.crearPago(client, {
+            ordenId,
+            ventaId: venta.id,
+            metodoPago: linea.metodoPago,
+            monto: linea.monto,
+            referencia: `Cuenta dividida ${idx + 1}/${input.partes.length}`,
+            usuarioId,
+          });
+          await cajaService.registrarIngreso(
+            {
+              moduloOrigenSlug: "migao",
+              monto: linea.monto,
+              metodoPago: linea.metodoPago,
+              referenciaEntidad: "ventas",
+              referenciaId: venta.id,
+            },
+            usuarioId,
+            client,
+          );
+        }
+      }
+    } else {
+      const lineas =
+        input.metodoPago === "mixto"
+          ? descomponerPago({ metodoPago: "mixto", montoEfectivo: input.montoEfectivo, montoBanco: input.montoBanco })
+          : descomponerPago({ metodoPago: input.metodoPago, monto: total });
+
+      for (const linea of lineas) {
+        await repo.crearPago(client, {
+          ordenId,
+          ventaId: venta.id,
+          metodoPago: linea.metodoPago,
+          monto: linea.monto,
+          referencia: input.referencia,
+          usuarioId,
+        });
+
+        await cajaService.registrarIngreso(
+          {
+            moduloOrigenSlug: "migao",
+            monto: linea.monto,
+            metodoPago: linea.metodoPago,
+            referenciaEntidad: "ventas",
+            referenciaId: venta.id,
+          },
+          usuarioId,
+          client,
+        );
+      }
+    }
 
     await repo.cerrarOrdenEstado(client, ordenId);
 

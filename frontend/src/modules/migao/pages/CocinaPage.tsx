@@ -6,7 +6,10 @@ import { reproducirAlerta, reproducirNotificacionSuave } from "../beep";
 import { formatCantidad } from "../format";
 
 const REFRESCO_MS = 8000;
-const MINUTOS_ALERTA = 20;
+const MINUTOS_ALERTA = 12;
+// Mientras una orden siga en espera (sin que Cocina la empiece a preparar), la
+// alerta se repite cada este número de minutos en vez de sonar una sola vez.
+const MINUTOS_REPETICION_ALERTA = 2;
 
 function formatearHora(fechaIso: string) {
   return new Date(fechaIso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
@@ -20,8 +23,10 @@ export function CocinaPage() {
 
   // null = todavía no hubo ninguna carga; evita el falso "pedido nuevo" del primer render.
   const idsConocidosRef = useRef<Set<number> | null>(null);
-  // Recuerda a qué órdenes ya se les sonó la alerta de 20 min, para no repetirla en cada poll.
-  const ordenesAlertadasRef = useRef<Set<string>>(new Set());
+  // Última vez (epoch ms) que sonó la alerta de cada orden todavía en espera;
+  // permite repetirla cada MINUTOS_REPETICION_ALERTA en vez de solo una vez, y
+  // se olvida en cuanto la orden se empieza a preparar (deja de estar "en espera").
+  const ultimaAlertaRef = useRef<Map<string, number>>(new Map());
 
   async function cargar() {
     try {
@@ -35,9 +40,20 @@ export function CocinaPage() {
 
       const ahora = Date.now();
       for (const ticket of agruparPorOrden(cola)) {
-        const minutosEsperando = (ahora - new Date(ticket.items[0].created_at).getTime()) / 60000;
-        if (minutosEsperando >= MINUTOS_ALERTA && !ordenesAlertadasRef.current.has(ticket.ordenId)) {
-          ordenesAlertadasRef.current.add(ticket.ordenId);
+        const pendientes = ticket.items.filter((i) => i.estado === "pendiente");
+        if (pendientes.length === 0) {
+          // Ya se empezó a preparar (o no tiene nada pendiente): deja de estar
+          // "en espera", se olvida para que si vuelve a esperar algún día empiece de cero.
+          ultimaAlertaRef.current.delete(ticket.ordenId);
+          continue;
+        }
+        const inicioEspera = Math.min(...pendientes.map((i) => new Date(i.created_at).getTime()));
+        const minutosEsperando = (ahora - inicioEspera) / 60000;
+        if (minutosEsperando < MINUTOS_ALERTA) continue;
+
+        const ultimaAlerta = ultimaAlertaRef.current.get(ticket.ordenId);
+        if (ultimaAlerta === undefined || ahora - ultimaAlerta >= MINUTOS_REPETICION_ALERTA * 60000) {
+          ultimaAlertaRef.current.set(ticket.ordenId, ahora);
           reproducirAlerta();
         }
       }
@@ -62,11 +78,17 @@ export function CocinaPage() {
   /** Aplica al estado local los ítems que el backend acaba de devolver ya
    *  actualizados, en vez de esperar el próximo poll o pedir de nuevo la cola
    *  completa — evita un viaje de red extra por acción, que es justo lo que se
-   *  siente como demora en un plan gratuito de Render/Supabase. */
+   *  siente como demora en un plan gratuito de Render/Supabase.
+   *  Merge superficial (no reemplazo completo): estas mutaciones devuelven las
+   *  columnas crudas de orden_items (RETURNING *), sin los JOIN de producto/mesa/
+   *  mesero que trae listItemsCocina — reemplazar el objeto entero los borraría. */
   function aplicarActualizacion(actualizados: ItemCocina[]) {
     setItems((actual) => {
       const porId = new Map(actualizados.map((i) => [i.id, i]));
-      return actual.map((i) => porId.get(i.id) ?? i);
+      return actual.map((i) => {
+        const nuevo = porId.get(i.id);
+        return nuevo ? { ...i, ...nuevo } : i;
+      });
     });
   }
 
@@ -131,8 +153,10 @@ export function CocinaPage() {
             const puedeMarcarListo =
               preparando.length > 0 && pendientes.length === 0 && preparando.every((i) => i.listo_cocina);
             const procesando = procesandoId === ticket.ordenId;
-            const minutosEsperando = (Date.now() - new Date(ticket.items[0].created_at).getTime()) / 60000;
-            const vencido = minutosEsperando >= MINUTOS_ALERTA;
+            const inicioEspera =
+              pendientes.length > 0 ? Math.min(...pendientes.map((i) => new Date(i.created_at).getTime())) : null;
+            const minutosEsperando = inicioEspera !== null ? (Date.now() - inicioEspera) / 60000 : 0;
+            const vencido = pendientes.length > 0 && minutosEsperando >= MINUTOS_ALERTA;
 
             return (
               <div
@@ -210,8 +234,20 @@ export function CocinaPage() {
                           >
                             {item.listo_cocina ? "✓" : ""}
                           </span>
-                          <span className="flex-1 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
-                            {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                          <span className="flex-1">
+                            <span className="block text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
+                              {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                            </span>
+                            {item.producto_descripcion && (
+                              <span className="block text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                                {item.producto_descripcion}
+                              </span>
+                            )}
+                            {item.observaciones && (
+                              <span className="block text-sm font-semibold text-amber-700 dark:text-amber-400">
+                                ⚠ {item.observaciones}
+                              </span>
+                            )}
                           </span>
                         </button>
                       </li>

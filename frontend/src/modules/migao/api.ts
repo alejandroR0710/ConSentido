@@ -45,6 +45,7 @@ export interface OrdenItem {
   cantidad: string;
   precio_unitario: string;
   estado: string;
+  observaciones: string | null;
   subtotal: number;
 }
 
@@ -80,6 +81,12 @@ export interface OrdenDetalle {
 
 export type MetodoPago = "efectivo" | "banco";
 
+// "mixto" no es un método real (ver backend shared/utils/pago-mixto.ts): el
+// backend lo descompone en 1-2 pagos/movimientos ya con método puro.
+export type PagoInput =
+  | { metodoPago: "efectivo" | "banco" }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+
 // "servido" solo aparece en el historial de despachados (GET /cocina/historial);
 // la cola activa (GET /cocina/items) nunca devuelve pendiente/preparando/listo.
 export type EstadoItemCocina = "pendiente" | "preparando" | "listo" | "servido";
@@ -95,6 +102,10 @@ export interface ItemCocina {
   mesa_numero: string | null;
   mesa_piso: number | null;
   mesero_nombre: string | null;
+  // Solo la cola activa (GET /cocina/items) los trae — el historial de
+  // despachados no los necesita, así que quedan opcionales.
+  observaciones?: string | null;
+  producto_descripcion?: string | null;
 }
 
 export interface ItemActivo extends ItemCocina {
@@ -127,10 +138,18 @@ export const migaoApi = {
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
   listarHistorialPropio: () => apiFetch<OrdenHistorialResumen[]>("/migao/ordenes/historial-propio"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),
-  cerrarOrden: (ordenId: string, metodoPago: MetodoPago) =>
+  cerrarOrden: (ordenId: string, pago: PagoInput) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
       method: "POST",
-      body: { metodoPago },
+      body: { dividir: false, ...pago },
+    }),
+  // Cuenta dividida: cada parte trae su propio método de pago (simple o mixto)
+  // y los ids de los productos que le corresponden (todos los productos de la
+  // orden deben quedar asignados a alguna parte, el backend lo valida).
+  cerrarOrdenDividida: (ordenId: string, partes: (PagoInput & { itemIds: number[] })[]) =>
+    apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
+      method: "POST",
+      body: { dividir: true, partes },
     }),
   cancelarOrden: (ordenId: string) =>
     apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),
@@ -177,7 +196,7 @@ export const migaoApi = {
   listarItemsActivos: () => apiFetch<ItemActivo[]>("/migao/items/activos"),
   crearOrden: (
     mesaNumero: string,
-    items: { productoId: string; cantidad: number; precioUnitario: number }[],
+    items: { productoId: string; cantidad: number; precioUnitario: number; observaciones?: string }[],
     numeroPersonas?: number,
     piso?: number,
   ) =>
@@ -185,10 +204,16 @@ export const migaoApi = {
       method: "POST",
       body: { mesaNumero, items, numeroPersonas, piso },
     }),
-  agregarItem: (ordenId: string, productoId: string, cantidad: number, precioUnitario: number) =>
+  agregarItem: (
+    ordenId: string,
+    productoId: string,
+    cantidad: number,
+    precioUnitario: number,
+    observaciones?: string,
+  ) =>
     apiFetch<OrdenItem>(`/migao/ordenes/${ordenId}/items`, {
       method: "POST",
-      body: { productoId, cantidad, precioUnitario },
+      body: { productoId, cantidad, precioUnitario, observaciones },
     }),
   editarCantidadItem: (itemId: number, cantidad: number) =>
     apiFetch<OrdenItem>(`/migao/items/${itemId}`, { method: "PATCH", body: { cantidad } }),

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { cajaApi, type MetodoPago, type ModuloOrigenSlug } from "../api";
+import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
+import { cajaApi, type ModuloOrigenSlug } from "../api";
 
 const MODULOS_ORIGEN: { value: ModuloOrigenSlug; label: string }[] = [
   { value: "migao", label: "Migao (POS)" },
@@ -21,21 +22,23 @@ interface IngresoModalProps {
 export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
   const [modulo, setModulo] = useState<ModuloOrigenSlug>("migao");
   const [monto, setMonto] = useState(0);
-  const [metodo, setMetodo] = useState<MetodoPago>("efectivo");
+  const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [motivo, setMotivo] = useState("");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
+  const puedeRegistrar = pago.metodoPago === "mixto" ? !mixtoInvalido : monto > 0;
+
   async function registrar() {
-    if (monto <= 0) return;
+    if (!puedeRegistrar) return;
     setRegistrando(true);
     setError(null);
     try {
       await cajaApi.registrarIngreso({
         moduloOrigenSlug: modulo,
-        monto,
-        metodoPago: metodo,
         motivo: motivo.trim() || undefined,
+        ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto }),
       });
       await onRegistrado();
       onCerrar();
@@ -62,8 +65,8 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
         ))}
       </select>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <div>
+      {pago.metodoPago !== "mixto" && (
+        <div className="mb-1">
           <label className="mb-1 block text-xs font-medium">Monto</label>
           <MoneyInput
             value={monto}
@@ -71,17 +74,10 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Método</label>
-          <select
-            value={metodo}
-            onChange={(e) => setMetodo(e.target.value as MetodoPago)}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="banco">Banco</option>
-          </select>
-        </div>
+      )}
+      <label className="mb-1 block text-xs font-medium">Método</label>
+      <div className="mb-3">
+        <SelectorMetodoPago value={pago} onChange={setPago} />
       </div>
 
       <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
@@ -95,7 +91,7 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
 
       <button
         onClick={registrar}
-        disabled={registrando || monto <= 0}
+        disabled={registrando || !puedeRegistrar}
         className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
       >
         {registrando ? "Registrando..." : "Registrar ingreso"}

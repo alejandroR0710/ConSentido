@@ -439,6 +439,9 @@ CREATE TABLE orden_items (
   -- Check individual del cocinero mientras la orden completa está en "preparando".
   -- "Marcar listo" (a nivel de toda la orden) exige que todos estén en true.
   listo_cocina    BOOLEAN NOT NULL DEFAULT false,
+  -- Nota libre del mesero al agregar el producto (ej. "sin azúcar"). Solo se le
+  -- muestra a Cocina cuando empieza a preparar la orden, no antes.
+  observaciones   VARCHAR(300),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_orden_items_orden ON orden_items(orden_id);

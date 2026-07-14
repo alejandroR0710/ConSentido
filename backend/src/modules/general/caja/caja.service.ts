@@ -1,10 +1,12 @@
 import { Pool, PoolClient } from "pg";
 import { pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
+import { descomponerPago } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
   CerrarTurnoInput,
+  EditarMetodoPagoMovimientoInput,
   RegistrarEgresoInput,
   RegistrarIngresoInput,
 } from "./caja.schema";
@@ -101,34 +103,50 @@ async function turnoAbiertoOrThrow(executor: Pool | PoolClient) {
  * para que otros módulos (ej. Migao al cerrar una orden) lo incluyan en su misma
  * transacción: si el cierre de la orden falla, el ingreso también se revierte.
  */
+/** "mixto" se descompone en 1-2 movimientos ya con método puro (ver
+ *  descomponerPago) — nunca se guarda "mixto" como tal en la base. */
 export async function registrarIngreso(
   input: RegistrarIngresoInput,
   usuarioId: string,
   executor: Pool | PoolClient = pool,
 ) {
   const turno = await turnoAbiertoOrThrow(executor);
-  return repo.insertIngreso(executor, {
-    turnoId: turno.id,
-    moduloOrigenSlug: input.moduloOrigenSlug,
-    monto: input.monto,
-    metodoPago: input.metodoPago,
-    motivo: input.motivo,
-    referenciaEntidad: input.referenciaEntidad,
-    referenciaId: input.referenciaId,
-    usuarioId,
-  });
+  const partes = descomponerPago(input);
+  const movimientos = [];
+  for (const parte of partes) {
+    movimientos.push(
+      await repo.insertIngreso(executor, {
+        turnoId: turno.id,
+        moduloOrigenSlug: input.moduloOrigenSlug,
+        monto: parte.monto,
+        metodoPago: parte.metodoPago,
+        motivo: input.motivo,
+        referenciaEntidad: input.referenciaEntidad,
+        referenciaId: input.referenciaId,
+        usuarioId,
+      }),
+    );
+  }
+  return movimientos;
 }
 
 export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: string) {
   const turno = await turnoAbiertoOrThrow(pool);
-  return repo.insertEgreso({
-    turnoId: turno.id,
-    categoriaGastoId: input.categoriaGastoId,
-    monto: input.monto,
-    metodoPago: input.metodoPago,
-    motivo: input.motivo,
-    usuarioId,
-  });
+  const partes = descomponerPago(input);
+  const movimientos = [];
+  for (const parte of partes) {
+    movimientos.push(
+      await repo.insertEgreso({
+        turnoId: turno.id,
+        categoriaGastoId: input.categoriaGastoId,
+        monto: parte.monto,
+        metodoPago: parte.metodoPago,
+        motivo: input.motivo,
+        usuarioId,
+      }),
+    );
+  }
+  return movimientos;
 }
 
 /**
@@ -139,7 +157,7 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
  * método de pago después desajustaría el `monto_final_calculado_efectivo` sin
  * que nadie vuelva a contar la caja.
  */
-export async function editarMetodoPagoMovimiento(movimientoId: number, metodoPago: "efectivo" | "banco") {
+export async function editarMetodoPagoMovimiento(movimientoId: number, input: EditarMetodoPagoMovimientoInput) {
   const movimiento = await repo.getMovimientoById(movimientoId);
   if (!movimiento) throw Errors.notFound("Movimiento no encontrado");
 
@@ -151,12 +169,57 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, metodoPag
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const actualizado = await repo.actualizarMetodoPagoMovimiento(client, movimientoId, metodoPago);
-    if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
-      await repo.actualizarMetodoPagoPagoPorVenta(client, movimiento.referenciaId, metodoPago);
+
+    if (input.metodoPago !== "mixto") {
+      const actualizado = await repo.actualizarMetodoPagoMovimiento(client, movimientoId, input.metodoPago);
+      if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
+        await repo.actualizarMetodoPagoPagoPorVenta(client, movimiento.referenciaId, input.metodoPago);
+      }
+      await client.query("COMMIT");
+      return [actualizado];
     }
+
+    // Convertir a mixto: el monto original se reparte en 1-2 líneas ya puras,
+    // sin cambiar cuánto se cobró en total (solo cómo se reparte el método).
+    const montoOriginal = Number(movimiento.monto);
+    if (Math.abs(input.montoEfectivo + input.montoBanco - montoOriginal) > 0.01) {
+      throw Errors.badRequest(`La suma de efectivo + banco debe ser igual al monto original (${montoOriginal})`);
+    }
+    const partes = descomponerPago({
+      metodoPago: "mixto",
+      montoEfectivo: input.montoEfectivo,
+      montoBanco: input.montoBanco,
+    });
+
+    if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
+      // Solo se ofrece "Editar" en el frontend cuando la venta tiene exactamente
+      // un pago (ver listOrdenesHistorial) — se revalida aquí antes de tocar nada.
+      const pagosVenta = await repo.listPagosPorVenta(client, movimiento.referenciaId);
+      if (pagosVenta.length !== 1) {
+        throw Errors.conflict("No se puede dividir: esta venta ya no tiene exactamente un pago registrado");
+      }
+      const [pago] = pagosVenta;
+      await repo.borrarPago(client, pago.id);
+      for (const parte of partes) {
+        await repo.crearPagoParaVenta(client, {
+          ordenId: pago.ordenId,
+          ventaId: movimiento.referenciaId,
+          metodoPago: parte.metodoPago,
+          monto: parte.monto,
+          referencia: pago.referencia,
+          usuarioId: pago.usuarioId,
+        });
+      }
+    }
+
+    await repo.borrarMovimiento(client, movimientoId);
+    const nuevos = [];
+    for (const parte of partes) {
+      nuevos.push(await repo.duplicarMovimientoConOtroMetodo(client, movimiento, parte.metodoPago, parte.monto));
+    }
+
     await client.query("COMMIT");
-    return actualizado;
+    return nuevos;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -184,8 +247,13 @@ export async function crearCategoriaGasto(nombre: string) {
 export async function resetearCaja(usuarioId: string) {
   const turnoAbierto = await repo.findTurnoAbierto();
   let turnoCerrado = null;
+  let egresosBorrados = 0;
 
   if (turnoAbierto) {
+    // Los egresos del turno se borran ANTES de calcular el cierre, para que el
+    // monto final calculado ya no los reste (dejaron de existir, no solo de contar).
+    egresosBorrados = await repo.borrarEgresosDelTurno(turnoAbierto.id);
+
     const { ingresosEfectivo, egresosEfectivo, ingresosBanco, egresosBanco } = await repo.sumMovimientosPorTurno(
       turnoAbierto.id,
     );
@@ -200,7 +268,7 @@ export async function resetearCaja(usuarioId: string) {
   }
 
   const marcador = await repo.crearTurnoCerradoEnCero(usuarioId);
-  return { turnoCerrado, marcador };
+  return { turnoCerrado, marcador, egresosBorrados };
 }
 
 export async function obtenerHistorialAnual(anio: number) {

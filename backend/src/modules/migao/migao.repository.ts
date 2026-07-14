@@ -53,16 +53,19 @@ export async function listOrdenesHistorial(meseroId?: string) {
   const result = await pool.query(
     `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
-            u.nombre AS mesero_nombre,
+            u.nombre AS mesero_nombre, mc.id AS movimiento_id, mc.metodo_pago,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id
+       LEFT JOIN ventas v ON v.orden_id = o.id
+       LEFT JOIN movimientos_caja mc ON mc.referencia_entidad = 'ventas' AND mc.referencia_id = v.id::text
       WHERE o.estado IN ('cerrada', 'cancelada')
         AND ($1::uuid IS NULL OR o.mesero_id = $1)
-      GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso, c.nombre, u.nombre
+      GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
+               c.nombre, u.nombre, mc.id, mc.metodo_pago
       ORDER BY o.closed_at DESC
       LIMIT 200`,
     [meseroId ?? null],

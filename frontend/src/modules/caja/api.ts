@@ -91,7 +91,7 @@ export const cajaApi = {
   }) => apiFetch<MovimientoCaja>("/caja/ingresos", { method: "POST", body: input }),
   registrarEgreso: (input: { categoriaGastoId: number; monto: number; metodoPago: MetodoPago; motivo: string }) =>
     apiFetch<MovimientoCaja>("/caja/egresos", { method: "POST", body: input }),
-  editarMetodoPagoMovimiento: (movimientoId: number, metodoPago: MetodoPago) =>
+  editarMetodoPagoMovimiento: (movimientoId: number | string, metodoPago: MetodoPago) =>
     apiFetch<MovimientoCaja>(`/caja/movimientos/${movimientoId}/metodo-pago`, {
       method: "PATCH",
       body: { metodoPago },

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
+import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { formatMoney } from "../../../shared/format/money";
 import {
   migaoApi,
@@ -11,6 +12,7 @@ import {
   type OrdenResumen,
 } from "../api";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
+import { DetalleCuentaMigao } from "../components/DetalleCuentaMigao";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { ResetearOrdenesModal } from "../components/ResetearOrdenesModal";
 import { BADGE_POR_ESTADO, ETIQUETA_POR_ESTADO, FILA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
@@ -48,6 +50,28 @@ export function MigaoPage() {
   const [loading, setLoading] = useState(true);
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "reset" | null>(null);
+  type MovimientoEditando =
+    | {
+        tipo: "ingreso_manual";
+        movimientoId: number | string;
+        metodoPagoActual: MetodoPago;
+        monto: number;
+        etiqueta: string;
+      }
+    | {
+        tipo: "orden";
+        movimientoId: number | string;
+        metodoPagoActual: MetodoPago;
+        monto: number;
+        etiqueta: string;
+        ordenId: string;
+        mesaNumero: string | null;
+        mesaPiso: number | null;
+        meseroNombre: string | null;
+        numeroPersonas: number | null;
+        fecha: string | null;
+      };
+  const [movimientoEditando, setMovimientoEditando] = useState<MovimientoEditando | null>(null);
 
   // Ref (no state) para que el intervalo de polling, creado una sola vez al montar,
   // siempre lea cuál es la orden seleccionada actual sin necesidad de recrearse.
@@ -282,14 +306,16 @@ export function MigaoPage() {
                 <th className="px-3 py-2">Mesa</th>
                 <th className="px-3 py-2">Mesero</th>
                 <th className="px-3 py-2">Estado</th>
+                <th className="px-3 py-2">Método</th>
                 <th className="px-3 py-2">Fecha y hora</th>
                 <th className="px-3 py-2">Total</th>
+                {esSuperRoot && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody>
               {historial.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={esSuperRoot ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
                     Todavía no hay órdenes cobradas ni canceladas.
                   </td>
                 </tr>
@@ -306,11 +332,30 @@ export function MigaoPage() {
                       <td className="px-3 py-2">{h.usuario_nombre ?? "—"}</td>
                       <td className="px-3 py-2">
                         <span className="rounded-full bg-brand-green-400 px-2 py-0.5 text-xs font-bold whitespace-nowrap text-white">
-                          Ingreso manual · {h.metodo_pago}
+                          Ingreso manual
                         </span>
                       </td>
+                      <td className="px-3 py-2">{h.metodo_pago}</td>
                       <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                       <td className="px-3 py-2">{formatMoney(h.monto)}</td>
+                      {esSuperRoot && (
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() =>
+                              setMovimientoEditando({
+                                tipo: "ingreso_manual",
+                                movimientoId: h.id,
+                                metodoPagoActual: h.metodo_pago as MetodoPago,
+                                monto: Number(h.monto),
+                                etiqueta: h.motivo ?? "Ingreso manual",
+                              })
+                            }
+                            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                          >
+                            Editar
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ) : (
                     <tr
@@ -335,8 +380,35 @@ export function MigaoPage() {
                           {h.estado === "cerrada" ? "Cobrada" : "Cancelada"}
                         </span>
                       </td>
+                      <td className="px-3 py-2">{h.metodo_pago ?? "—"}</td>
                       <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                       <td className="px-3 py-2">{formatMoney(h.total)}</td>
+                      {esSuperRoot && (
+                        <td className="px-3 py-2">
+                          {h.estado === "cerrada" && h.movimiento_id != null && (
+                            <button
+                              onClick={() =>
+                                setMovimientoEditando({
+                                  tipo: "orden",
+                                  movimientoId: h.movimiento_id!,
+                                  metodoPagoActual: h.metodo_pago!,
+                                  monto: Number(h.total),
+                                  etiqueta: `Mesa ${h.mesa_numero ?? "—"}`,
+                                  ordenId: h.id,
+                                  mesaNumero: h.mesa_numero,
+                                  mesaPiso: h.mesa_piso,
+                                  meseroNombre: h.mesero_nombre,
+                                  numeroPersonas: h.numero_personas,
+                                  fecha: h.closed_at,
+                                })
+                              }
+                              className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                            >
+                              Editar
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ),
                 )
@@ -386,6 +458,28 @@ export function MigaoPage() {
             await cargarHistorial();
           }}
         />
+      )}
+
+      {movimientoEditando && (
+        <EditarMetodoPagoModal
+          movimientoId={movimientoEditando.movimientoId}
+          metodoPagoActual={movimientoEditando.metodoPagoActual}
+          monto={movimientoEditando.monto}
+          etiqueta={movimientoEditando.etiqueta}
+          onCerrar={() => setMovimientoEditando(null)}
+          onGuardado={cargarHistorial}
+        >
+          {movimientoEditando.tipo === "orden" && (
+            <DetalleCuentaMigao
+              ordenId={movimientoEditando.ordenId}
+              mesaNumero={movimientoEditando.mesaNumero}
+              mesaPiso={movimientoEditando.mesaPiso}
+              meseroNombre={movimientoEditando.meseroNombre}
+              numeroPersonas={movimientoEditando.numeroPersonas}
+              fecha={movimientoEditando.fecha}
+            />
+          )}
+        </EditarMetodoPagoModal>
       )}
     </div>
   );

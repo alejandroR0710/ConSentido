@@ -19,6 +19,8 @@ export interface OrdenHistorialResumen extends OrdenResumen {
 
 export interface HistorialEntradaOrden extends OrdenHistorialResumen {
   tipo: "orden";
+  movimiento_id: number | null;
+  metodo_pago: MetodoPago | null;
 }
 
 /** Ingreso registrado a mano desde Caja con origen "Migao (POS)" que no viene de

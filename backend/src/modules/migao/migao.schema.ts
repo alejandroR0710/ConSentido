@@ -55,14 +55,25 @@ export type CrearOrdenInput = z.infer<typeof crearOrdenSchema>;
 // "mixto" no es un método real en la base: es una comodidad de UI que se
 // descompone en 1-2 líneas ya puras al cobrar (ver shared/utils/pago-mixto.ts).
 const MENSAJE_MIXTO_VACIO = "El total del pago mixto debe ser mayor a 0";
+// Cada parte se arma por UNIDADES de producto, no por ítem completo: un ítem
+// con cantidad 2 (ej. "2x Americano") puede repartirse 1 unidad a cada
+// persona. El backend valida que la suma de cantidades asignadas a un mismo
+// itemId, entre todas las partes, sea exactamente igual a su cantidad real.
 // z.coerce: orden_items.id es BIGSERIAL, que node-postgres devuelve como
 // string — el frontend lo reenvía tal cual lo recibió, número o string.
-const itemIdsSchema = z.array(z.coerce.number().int().positive()).min(1, "Cada parte necesita al menos un producto");
+const unidadesSchema = z
+  .array(
+    z.object({
+      itemId: z.coerce.number().int().positive(),
+      cantidad: z.number().positive(),
+    }),
+  )
+  .min(1, "Cada parte necesita al menos un producto");
 
 // Cobro normal (un solo método, o mixto efectivo+banco) o dividido (varias
-// partes, cada una con sus propios productos y su propio método de pago,
-// también simple o mixto) — ej. dos comensales que pidieron junto en una sola
-// orden pero quieren pagar cada uno lo suyo.
+// partes, cada una con sus propias unidades de producto y su propio método
+// de pago, también simple o mixto) — ej. dos comensales que pidieron junto en
+// una sola orden pero quieren pagar cada uno lo suyo.
 export const cerrarOrdenSchema = z.union([
   z.object({
     dividir: z.literal(false),
@@ -83,13 +94,13 @@ export const cerrarOrdenSchema = z.union([
     partes: z
       .array(
         z.union([
-          z.object({ metodoPago: z.enum(["efectivo", "banco"]), itemIds: itemIdsSchema }),
+          z.object({ metodoPago: z.enum(["efectivo", "banco"]), unidades: unidadesSchema }),
           z
             .object({
               metodoPago: z.literal("mixto"),
               montoEfectivo: z.number().nonnegative(),
               montoBanco: z.number().nonnegative(),
-              itemIds: itemIdsSchema,
+              unidades: unidadesSchema,
             })
             .refine((d) => d.montoEfectivo + d.montoBanco > 0, {
               message: MENSAJE_MIXTO_VACIO,

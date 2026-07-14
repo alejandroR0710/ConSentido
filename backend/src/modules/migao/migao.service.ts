@@ -206,6 +206,18 @@ function calcularItemsConSubtotal<T extends { cantidad: string; precio_unitario:
   return items.map((i) => ({ ...i, subtotal: Number(i.cantidad) * Number(i.precio_unitario) }));
 }
 
+/** Suma cuánto vale, en total, lo que una parte se llevó — según las unidades
+ *  (posiblemente fracciones de la cantidad de un mismo ítem) que le tocaron. */
+function calcularMontoPorUnidades<T extends { id: unknown; precio_unitario: string }>(
+  items: T[],
+  unidades: { itemId: number; cantidad: number }[],
+) {
+  return unidades.reduce((acc, u) => {
+    const item = items.find((i) => Number(i.id) === u.itemId)!;
+    return acc + u.cantidad * Number(item.precio_unitario);
+  }, 0);
+}
+
 export async function listarColaDeCocina() {
   return repo.listItemsCocina();
 }
@@ -343,33 +355,34 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     const total = items.reduce((acc, i) => acc + i.subtotal, 0);
 
     if (input.dividir) {
-      // Cada producto debe quedar asignado a exactamente una parte: ni repetido
-      // ni faltante. El monto de cada parte se calcula de sus propios productos,
-      // así que la suma de las partes siempre cuadra con el total sin redondeos.
-      // Se valida ANTES de escribir nada, para no crear una venta a medias.
-      const idsValidos = new Set(items.map((i) => Number(i.id)));
-      const idsAsignados = new Set<number>();
+      // Cada producto se reparte por UNIDADES, no por ítem completo: "2x
+      // Americano" puede repartirse 1 unidad a cada persona. La suma de
+      // cantidades asignadas a un mismo itemId, entre todas las partes, debe
+      // ser EXACTAMENTE su cantidad real — ni de más ni de menos. Se valida
+      // ANTES de escribir nada, para no crear una venta a medias.
+      const cantidadPorItem = new Map(items.map((i) => [Number(i.id), Number(i.cantidad)]));
+      const asignadoPorItem = new Map<number, number>();
       for (const parte of input.partes) {
-        for (const itemId of parte.itemIds) {
-          if (!idsValidos.has(itemId)) {
-            throw Errors.badRequest(`El producto ${itemId} no pertenece a esta orden o está cancelado`);
+        for (const u of parte.unidades) {
+          if (!cantidadPorItem.has(u.itemId)) {
+            throw Errors.badRequest(`El producto ${u.itemId} no pertenece a esta orden o está cancelado`);
           }
-          if (idsAsignados.has(itemId)) {
-            throw Errors.badRequest(`El producto ${itemId} quedó asignado a más de una parte`);
-          }
-          idsAsignados.add(itemId);
+          asignadoPorItem.set(u.itemId, (asignadoPorItem.get(u.itemId) ?? 0) + u.cantidad);
         }
       }
-      if (idsAsignados.size !== items.length) {
-        throw Errors.badRequest("Todos los productos deben quedar asignados a alguna parte antes de cobrar");
+      for (const [itemId, cantidadReal] of cantidadPorItem) {
+        const asignado = asignadoPorItem.get(itemId) ?? 0;
+        if (Math.abs(asignado - cantidadReal) > 0.001) {
+          throw Errors.badRequest(
+            `El producto ${itemId} debe quedar completamente asignado (cantidad ${cantidadReal}, se asignó ${asignado})`,
+          );
+        }
       }
       // Si una parte es mixta, sus dos montos deben sumar justo el subtotal de
-      // SUS productos (calculado del lado del servidor, no lo que mande el cliente).
+      // SUS unidades (calculado del lado del servidor, no lo que mande el cliente).
       for (const [idx, parte] of input.partes.entries()) {
         if (parte.metodoPago !== "mixto") continue;
-        const montoParte = items
-          .filter((i) => parte.itemIds.includes(Number(i.id)))
-          .reduce((acc, i) => acc + i.subtotal, 0);
+        const montoParte = calcularMontoPorUnidades(items, parte.unidades);
         if (Math.abs(parte.montoEfectivo + parte.montoBanco - montoParte) > 0.01) {
           throw Errors.badRequest(
             `La parte ${idx + 1}: efectivo + banco debe sumar el subtotal de sus productos (${montoParte})`,
@@ -402,8 +415,7 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
 
     if (input.dividir) {
       for (const [idx, parte] of input.partes.entries()) {
-        const itemsParte = items.filter((i) => parte.itemIds.includes(Number(i.id)));
-        const montoParte = itemsParte.reduce((acc, i) => acc + i.subtotal, 0);
+        const montoParte = calcularMontoPorUnidades(items, parte.unidades);
         const lineas =
           parte.metodoPago === "mixto"
             ? descomponerPago({ metodoPago: "mixto", montoEfectivo: parte.montoEfectivo, montoBanco: parte.montoBanco })

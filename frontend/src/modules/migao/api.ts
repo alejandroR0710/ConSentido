@@ -144,9 +144,13 @@ export const migaoApi = {
       body: { dividir: false, ...pago },
     }),
   // Cuenta dividida: cada parte trae su propio método de pago (simple o mixto)
-  // y los ids de los productos que le corresponden (todos los productos de la
-  // orden deben quedar asignados a alguna parte, el backend lo valida).
-  cerrarOrdenDividida: (ordenId: string, partes: (PagoInput & { itemIds: number[] })[]) =>
+  // y las UNIDADES de producto que le corresponden — un ítem con cantidad 2
+  // puede repartirse 1 unidad a cada parte (todas las unidades de la orden
+  // deben quedar asignadas, el backend lo valida).
+  cerrarOrdenDividida: (
+    ordenId: string,
+    partes: (PagoInput & { unidades: { itemId: number; cantidad: number }[] })[],
+  ) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
       method: "POST",
       body: { dividir: true, partes },

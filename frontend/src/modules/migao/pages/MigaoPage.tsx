@@ -56,7 +56,10 @@ export function MigaoPage() {
   const [dividirCuenta, setDividirCuenta] = useState(false);
   const [numPartes, setNumPartes] = useState(2);
   // itemId (de orden_items) -> índice de parte (0-based) a la que quedó asignado.
-  const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
+  // Clave por UNIDAD de producto (no por ítem): un ítem con cantidad 2 genera
+  // dos claves asignables por separado, para poder repartir "2x Americano"
+  // entre dos personas en vez de mandarlo entero a una sola.
+  const [asignaciones, setAsignaciones] = useState<Record<string, number>>({});
   const [pagosPartes, setPagosPartes] = useState<MetodoPagoValor[]>([
     { metodoPago: "efectivo" },
     { metodoPago: "efectivo" },
@@ -199,8 +202,38 @@ export function MigaoPage() {
     }
   }
 
-  const itemsCobrables = detalle ? detalle.items.filter((i) => i.estado !== "cancelado") : [];
-  const todosAsignados = itemsCobrables.length > 0 && itemsCobrables.every((i) => asignaciones[i.id] !== undefined);
+  // Una unidad por cada unidad física del producto: "2x Americano" (cantidad
+  // entera > 1) se parte en 2 filas de 1 unidad cada una, asignables por
+  // separado. Cantidades no enteras (poco comunes en Migao) se dejan como una
+  // sola fila — no tiene sentido partir "1.5" en unidades discretas.
+  const unidadesCobrables = detalle
+    ? detalle.items
+        .filter((i) => i.estado !== "cancelado")
+        .flatMap((item) => {
+          const cantidad = Number(item.cantidad);
+          const precioUnitario = Number(item.precio_unitario);
+          if (Number.isInteger(cantidad) && cantidad > 1) {
+            return Array.from({ length: cantidad }, (_, idx) => ({
+              key: `${item.id}-${idx}`,
+              itemId: item.id,
+              productoNombre: item.producto_nombre,
+              cantidadUnidad: 1,
+              subtotalUnidad: precioUnitario,
+            }));
+          }
+          return [
+            {
+              key: `${item.id}-0`,
+              itemId: item.id,
+              productoNombre: item.producto_nombre,
+              cantidadUnidad: cantidad,
+              subtotalUnidad: item.subtotal,
+            },
+          ];
+        })
+    : [];
+  const todosAsignados =
+    unidadesCobrables.length > 0 && unidadesCobrables.every((u) => asignaciones[u.key] !== undefined);
 
   function cambiarNumPartes(n: number) {
     const nuevo = Math.max(2, n);
@@ -210,20 +243,33 @@ export function MigaoPage() {
       while (copia.length < nuevo) copia.push({ metodoPago: "efectivo" });
       return copia;
     });
-    // Los productos que quedaron asignados a una parte que ya no existe vuelven a quedar sin asignar.
+    // Las unidades que quedaron asignadas a una parte que ya no existe vuelven a quedar sin asignar.
     setAsignaciones((actual) => {
-      const copia: Record<number, number> = {};
-      for (const [itemId, parteIdx] of Object.entries(actual)) {
-        if (parteIdx < nuevo) copia[Number(itemId)] = parteIdx;
+      const copia: Record<string, number> = {};
+      for (const [key, parteIdx] of Object.entries(actual)) {
+        if (parteIdx < nuevo) copia[key] = parteIdx;
       }
       return copia;
     });
   }
 
   function subtotalParte(parteIdx: number) {
-    return itemsCobrables
-      .filter((i) => asignaciones[i.id] === parteIdx)
-      .reduce((acc, i) => acc + i.subtotal, 0);
+    return unidadesCobrables
+      .filter((u) => asignaciones[u.key] === parteIdx)
+      .reduce((acc, u) => acc + u.subtotalUnidad, 0);
+  }
+
+  /** Agrupa las unidades de una parte por itemId (una parte puede llevarse
+   *  más de una unidad del mismo producto), para mandarle al backend cuánta
+   *  cantidad de cada ítem le corresponde. */
+  function unidadesAsignadasAParte(parteIdx: number) {
+    const porItem = new Map<number, number>();
+    for (const u of unidadesCobrables) {
+      if (asignaciones[u.key] === parteIdx) {
+        porItem.set(u.itemId, (porItem.get(u.itemId) ?? 0) + u.cantidadUnidad);
+      }
+    }
+    return Array.from(porItem.entries()).map(([itemId, cantidad]) => ({ itemId, cantidad }));
   }
 
   const algunaParteMixtaInvalida = Array.from({ length: numPartes }, (_, idx) => {
@@ -234,10 +280,13 @@ export function MigaoPage() {
 
   async function cerrarYCobrarDividido() {
     if (!ordenSeleccionadaId || !todosAsignados || algunaParteMixtaInvalida) return;
-    const partes: (PagoInput & { itemIds: number[] })[] = Array.from({ length: numPartes }, (_, idx) => ({
-      ...pagosPartes[idx],
-      itemIds: itemsCobrables.filter((i) => asignaciones[i.id] === idx).map((i) => i.id),
-    }));
+    const partes: (PagoInput & { unidades: { itemId: number; cantidad: number }[] })[] = Array.from(
+      { length: numPartes },
+      (_, idx) => ({
+        ...pagosPartes[idx],
+        unidades: unidadesAsignadasAParte(idx),
+      }),
+    );
     setCobrando(true);
     setError(null);
     setMensaje(null);
@@ -376,7 +425,7 @@ export function MigaoPage() {
                   type="checkbox"
                   checked={dividirCuenta}
                   onChange={(e) => (e.target.checked ? setDividirCuenta(true) : reiniciarDivision())}
-                  disabled={itemsCobrables.length < 2}
+                  disabled={unidadesCobrables.length < 2}
                   className="h-4 w-4"
                 />
                 Dividir cuenta entre varias personas
@@ -418,7 +467,7 @@ export function MigaoPage() {
                       <button
                         type="button"
                         onClick={() => cambiarNumPartes(numPartes + 1)}
-                        disabled={numPartes >= itemsCobrables.length}
+                        disabled={numPartes >= unidadesCobrables.length}
                         className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
                       >
                         +
@@ -430,19 +479,19 @@ export function MigaoPage() {
                     <span className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
                       Toca la parte a la que corresponde cada producto:
                     </span>
-                    {itemsCobrables.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                    {unidadesCobrables.map((unidad) => (
+                      <div key={unidad.key} className="flex items-center justify-between gap-2 text-sm">
                         <span className="text-brand-ink dark:text-brand-vanilla">
-                          {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                          {formatCantidad(unidad.cantidadUnidad)}× {unidad.productoNombre}
                         </span>
                         <div className="flex shrink-0 gap-1">
                           {Array.from({ length: numPartes }, (_, idx) => (
                             <button
                               key={idx}
                               type="button"
-                              onClick={() => setAsignaciones((actual) => ({ ...actual, [item.id]: idx }))}
+                              onClick={() => setAsignaciones((actual) => ({ ...actual, [unidad.key]: idx }))}
                               className={`flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold ${
-                                asignaciones[item.id] === idx
+                                asignaciones[unidad.key] === idx
                                   ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
                                   : "border-brand-vanilla-dark text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
                               }`}

@@ -4,6 +4,8 @@ import { requirePermission } from "../../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../../shared/utils/async-handler";
 import {
   abrirTurnoController,
+  borrarHistorialDiaController,
+  borrarTurnoController,
   cerrarTurnoController,
   crearCategoriaGastoController,
   editarMetodoPagoMovimientoController,
@@ -12,6 +14,7 @@ import {
   obtenerProyeccionAperturaController,
   obtenerResumenTurnoController,
   obtenerTurnoAbiertoController,
+  obtenerTurnosPorFechaController,
   registrarEgresoController,
   registrarIngresoController,
   resetearCajaController,
@@ -60,6 +63,24 @@ cajaRouter.post(
 );
 
 cajaRouter.get("/historial", requirePermission("general.caja.ver"), asyncHandler(obtenerHistorialCajaController));
+cajaRouter.get(
+  "/turnos-por-fecha",
+  requirePermission("general.caja.ver"),
+  asyncHandler(obtenerTurnosPorFechaController),
+);
+
+// Borrados permanentes exclusivos de Super Root (ver caja.service.ts): a
+// diferencia del reset, estos SÍ borran datos y no se pueden deshacer.
+cajaRouter.post(
+  "/historial/borrar-dia",
+  requirePermission("general.caja.borrar_historial"),
+  asyncHandler(borrarHistorialDiaController),
+);
+cajaRouter.delete(
+  "/turnos/:id",
+  requirePermission("general.caja.borrar_historial"),
+  asyncHandler(borrarTurnoController),
+);
 
 // Corrección de método de pago exclusiva de Super Root (ver caja.service.ts).
 cajaRouter.patch(

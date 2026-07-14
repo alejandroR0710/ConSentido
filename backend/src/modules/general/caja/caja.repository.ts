@@ -347,6 +347,35 @@ export async function insertEgreso(params: {
  *  día/semana/mes y la grilla tipo calendario del historial de Caja. Se agrupa
  *  por la fecha del movimiento, no por turno (un turno puede quedar abierto de
  *  un día para otro, pero cada movimiento ya tiene su propio timestamp real). */
+/** Turnos que arrancaron ese día calendario (mismo criterio to_char que
+ *  getHistorialDiario, para que "ese día" signifique lo mismo en toda Caja). */
+export async function listTurnosPorFecha(fecha: string): Promise<TurnoCaja[]> {
+  const result = await pool.query(
+    `SELECT * FROM turnos_caja WHERE to_char(abierto_en, 'YYYY-MM-DD') = $1 ORDER BY abierto_en ASC`,
+    [fecha],
+  );
+  return result.rows.map(mapTurno);
+}
+
+/** Borra permanentemente todos los movimientos (ingresos y egresos) de un día
+ *  calendario. No toca turnos_caja: el turno en sí (con sus montos de apertura
+ *  y cierre ya calculados) queda como registro, solo desaparece su detalle. */
+export async function borrarMovimientosDelDia(fecha: string) {
+  const result = await pool.query(`DELETE FROM movimientos_caja WHERE to_char(created_at, 'YYYY-MM-DD') = $1`, [
+    fecha,
+  ]);
+  return result.rowCount ?? 0;
+}
+
+export async function borrarMovimientosDeTurno(client: PoolClient, turnoId: string) {
+  const result = await client.query(`DELETE FROM movimientos_caja WHERE turno_id = $1`, [turnoId]);
+  return result.rowCount ?? 0;
+}
+
+export async function borrarTurnoRow(client: PoolClient, turnoId: string) {
+  await client.query(`DELETE FROM turnos_caja WHERE id = $1`, [turnoId]);
+}
+
 export async function getHistorialDiario(anio: number) {
   // to_char en vez de ::date: pg devuelve DATE como objeto Date (JS) parseado en
   // la zona horaria local del proceso, y al serializar a JSON puede desplazar el

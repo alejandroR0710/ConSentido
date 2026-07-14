@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { created, ok } from "../../../shared/utils/response";
 import {
   abrirTurnoSchema,
+  borrarHistorialDiaSchema,
+  borrarTurnoSchema,
   cerrarTurnoSchema,
   crearCategoriaGastoSchema,
   editarMetodoPagoMovimientoSchema,
@@ -9,6 +11,7 @@ import {
   registrarEgresoSchema,
   registrarIngresoSchema,
   resetearCajaSchema,
+  turnosPorFechaSchema,
 } from "./caja.schema";
 import * as service from "./caja.service";
 
@@ -78,4 +81,22 @@ export async function obtenerHistorialCajaController(req: Request, res: Response
   const { anio } = historialCajaSchema.parse(req.query);
   const historial = await service.obtenerHistorialAnual(anio);
   return ok(res, historial);
+}
+
+export async function obtenerTurnosPorFechaController(req: Request, res: Response) {
+  const { fecha } = turnosPorFechaSchema.parse(req.query);
+  const turnos = await service.obtenerTurnosPorFecha(fecha);
+  return ok(res, turnos);
+}
+
+export async function borrarHistorialDiaController(req: Request, res: Response) {
+  const data = borrarHistorialDiaSchema.parse(req.body);
+  const resultado = await service.borrarHistorialDia(data.fecha);
+  return ok(res, resultado);
+}
+
+export async function borrarTurnoController(req: Request, res: Response) {
+  borrarTurnoSchema.parse(req.body);
+  const resultado = await service.borrarTurno(req.params.id);
+  return ok(res, resultado);
 }

@@ -7,6 +7,16 @@ function obtenerContexto(): AudioContext | null {
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       contextoCompartido = new AudioContextClass();
     }
+    // Android (y iOS) suspenden el AudioContext no solo al cargar la página,
+    // sino cada vez que se bloquea la pantalla o la pestaña pasa a segundo
+    // plano un rato. Si solo se reactivara una vez (al primer toque), las
+    // notificaciones de Cocina/Mesero quedaban mudas para siempre después del
+    // primer bloqueo de pantalla, sin ningún error visible.
+    if (contextoCompartido.state === "suspended") {
+      contextoCompartido.resume().catch(() => {
+        /* se reintenta solo en la próxima reproducción */
+      });
+    }
     return contextoCompartido;
   } catch {
     return null;

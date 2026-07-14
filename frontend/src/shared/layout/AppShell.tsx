@@ -17,14 +17,12 @@ export function AppShell() {
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   useEffect(() => {
-    // Desbloquea el audio con el primer toque/clic real del usuario en la sesión
-    // (necesario en móvil, ver beep.ts) y se quita solo después de lograrlo.
-    function alPrimerToque() {
-      desbloquearAudio();
-      window.removeEventListener("pointerdown", alPrimerToque);
-    }
-    window.addEventListener("pointerdown", alPrimerToque);
-    return () => window.removeEventListener("pointerdown", alPrimerToque);
+    // Reactiva el audio en cada toque (no solo el primero): en móvil el
+    // AudioContext se vuelve a suspender solo al bloquear pantalla o volver de
+    // segundo plano, así que hay que darle oportunidad de reactivarse en cada
+    // toque de la sesión, no nada más al arrancar (ver beep.ts).
+    window.addEventListener("pointerdown", desbloquearAudio);
+    return () => window.removeEventListener("pointerdown", desbloquearAudio);
   }, []);
 
   if (!usuario) return null;

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { Modal } from "../../../shared/components/Modal";
-import { cajaApi, type DiaHistorialCaja } from "../api";
+import { cajaApi, type DiaHistorialCaja, type TurnoCaja } from "../api";
+import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
+import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
 
 const MESES = [
   "Enero",
@@ -131,12 +134,31 @@ function MesGrid({ anio, mesIdx, porFecha, maxAbs, hoyISO, onSeleccionar }: MesG
 }
 
 export function CajaHistorialPage() {
+  const { usuario } = useAuth();
+  const esSuperRoot = usuario?.rol === "Super Root";
+
   const anioActual = new Date().getFullYear();
   const [anio, setAnio] = useState(anioActual);
   const [dias, setDias] = useState<DiaHistorialCaja[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
   const [diaSeleccionado, setDiaSeleccionado] = useState<DiaHistorialCaja | null>(null);
+  const [turnosDelDia, setTurnosDelDia] = useState<TurnoCaja[]>([]);
+  const [turnoABorrar, setTurnoABorrar] = useState<TurnoCaja | null>(null);
+  const [borrarDiaAbierto, setBorrarDiaAbierto] = useState(false);
+
+  async function cargarHistorial() {
+    setLoading(true);
+    setError(null);
+    try {
+      setDias(await cajaApi.obtenerHistorialAnual(anio));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelado = false;
@@ -157,6 +179,19 @@ export function CajaHistorialPage() {
       cancelado = true;
     };
   }, [anio]);
+
+  function seleccionarDia(dia: DiaHistorialCaja) {
+    setDiaSeleccionado(dia);
+    setTurnosDelDia([]);
+    if (esSuperRoot) {
+      cajaApi
+        .listarTurnosPorFecha(dia.fecha)
+        .then(setTurnosDelDia)
+        .catch(() => {
+          /* la lista de turnos del día simplemente queda vacía */
+        });
+    }
+  }
 
   const porFecha = useMemo(() => {
     const map = new Map<string, DiaHistorialCaja>();
@@ -203,6 +238,7 @@ export function CajaHistorialPage() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <ResumenCard titulo="Hoy" totales={totalHoy} />
@@ -222,7 +258,7 @@ export function CajaHistorialPage() {
               porFecha={porFecha}
               maxAbs={maxAbs}
               hoyISO={hoyISO}
-              onSeleccionar={setDiaSeleccionado}
+              onSeleccionar={seleccionarDia}
             />
           ))}
         </div>
@@ -248,8 +284,73 @@ export function CajaHistorialPage() {
             <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
               {diaSeleccionado.movimientos} movimiento{diaSeleccionado.movimientos === 1 ? "" : "s"} ese día.
             </div>
+
+            {esSuperRoot && (
+              <div className="mt-3 flex flex-col gap-3 rounded-lg border-2 border-dashed border-red-300 p-3 dark:border-red-800">
+                <span className="text-xs font-medium text-red-600">Zona de Super Root</span>
+
+                {turnosDelDia.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                      Turnos que empezaron este día:
+                    </span>
+                    {turnosDelDia.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-2 rounded-md border border-brand-vanilla-dark px-2 py-1.5 text-xs dark:border-brand-green-700"
+                      >
+                        <span>
+                          {new Date(t.abiertoEn).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                          {t.estado === "abierto" ? "abierto" : "cerrado"}
+                        </span>
+                        <button
+                          onClick={() => setTurnoABorrar(t)}
+                          disabled={t.estado === "abierto"}
+                          title={t.estado === "abierto" ? 'Usa "Reiniciar Caja" para el turno abierto' : undefined}
+                          className="rounded-md border border-red-300 px-2 py-1 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Borrar turno
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setBorrarDiaAbierto(true)}
+                  disabled={diaSeleccionado.movimientos === 0}
+                  className="w-full rounded-md border-2 border-red-600 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-red-950/30"
+                >
+                  Borrar historial completo de este día
+                </button>
+              </div>
+            )}
           </div>
         </Modal>
+      )}
+
+      {borrarDiaAbierto && diaSeleccionado && (
+        <BorrarHistorialDiaModal
+          fecha={diaSeleccionado.fecha}
+          onCerrar={() => setBorrarDiaAbierto(false)}
+          onBorrado={async (msg) => {
+            setMensaje(msg);
+            setDiaSeleccionado(null);
+            await cargarHistorial();
+          }}
+        />
+      )}
+
+      {turnoABorrar && (
+        <BorrarTurnoModal
+          turno={turnoABorrar}
+          onCerrar={() => setTurnoABorrar(null)}
+          onBorrado={async (msg) => {
+            setMensaje(msg);
+            setDiaSeleccionado(null);
+            await cargarHistorial();
+          }}
+        />
       )}
     </div>
   );

@@ -271,6 +271,42 @@ export async function resetearCaja(usuarioId: string) {
   return { turnoCerrado, marcador, egresosBorrados };
 }
 
+export async function obtenerTurnosPorFecha(fecha: string) {
+  return repo.listTurnosPorFecha(fecha);
+}
+
+/** Borra permanentemente el historial de movimientos de un día — Super Root. */
+export async function borrarHistorialDia(fecha: string) {
+  const movimientosBorrados = await repo.borrarMovimientosDelDia(fecha);
+  return { movimientosBorrados };
+}
+
+/** Borra permanentemente un turno completo (y sus movimientos) — Super Root.
+ *  No se permite sobre el turno abierto: para ese caso ya existe "Reiniciar
+ *  Caja", que además deja al negocio con un saldo consistente para seguir
+ *  operando; borrar el turno abierto a secas dejaría la caja sin turno activo. */
+export async function borrarTurno(turnoId: string) {
+  const turno = await repo.getTurnoById(turnoId);
+  if (!turno) throw Errors.notFound("Turno no encontrado");
+  if (turno.estado === "abierto") {
+    throw Errors.conflict('No se puede borrar el turno abierto — usa "Reiniciar Caja" para eso.');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const movimientosBorrados = await repo.borrarMovimientosDeTurno(client, turnoId);
+    await repo.borrarTurnoRow(client, turnoId);
+    await client.query("COMMIT");
+    return { movimientosBorrados };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function obtenerHistorialAnual(anio: number) {
   const dias = await repo.getHistorialDiario(anio);
   return dias.map((d) => ({

@@ -114,4 +114,17 @@ export const cajaApi = {
       method: "POST",
       body: { confirmacion: "REINICIAR CAJA" },
     }),
+  listarTurnosPorFecha: (fecha: string) => apiFetch<TurnoCaja[]>(`/caja/turnos-por-fecha?fecha=${fecha}`),
+  // Borrados permanentes, exclusivos de Super Root: a diferencia de resetear(),
+  // estos sí borran datos y no se pueden deshacer.
+  borrarHistorialDia: (fecha: string) =>
+    apiFetch<{ movimientosBorrados: number }>("/caja/historial/borrar-dia", {
+      method: "POST",
+      body: { fecha, confirmacion: "BORRAR HISTORIAL DEL DIA" },
+    }),
+  borrarTurno: (turnoId: string) =>
+    apiFetch<{ movimientosBorrados: number }>(`/caja/turnos/${turnoId}`, {
+      method: "DELETE",
+      body: { confirmacion: "BORRAR TURNO" },
+    }),
 };

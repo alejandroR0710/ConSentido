@@ -87,3 +87,23 @@ export const historialCajaSchema = z.object({
   anio: z.coerce.number().int().min(2000).max(2100),
 });
 export type HistorialCajaInput = z.infer<typeof historialCajaSchema>;
+
+const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+export const turnosPorFechaSchema = z.object({
+  fecha: z.string().regex(FECHA_REGEX, "Formato de fecha inválido (YYYY-MM-DD)"),
+});
+export type TurnosPorFechaInput = z.infer<typeof turnosPorFechaSchema>;
+
+// Borrados exclusivos de Super Root: exigen escribir la frase exacta como
+// segunda confirmación, igual que el resto de acciones destructivas de Caja.
+export const borrarHistorialDiaSchema = z.object({
+  fecha: z.string().regex(FECHA_REGEX, "Formato de fecha inválido (YYYY-MM-DD)"),
+  confirmacion: z.literal("BORRAR HISTORIAL DEL DIA"),
+});
+export type BorrarHistorialDiaInput = z.infer<typeof borrarHistorialDiaSchema>;
+
+export const borrarTurnoSchema = z.object({
+  confirmacion: z.literal("BORRAR TURNO"),
+});
+export type BorrarTurnoInput = z.infer<typeof borrarTurnoSchema>;

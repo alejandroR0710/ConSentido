@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type CategoriaProducto, type ProductoAdmin } from "../api";
 import { EditarProductoModal } from "../components/EditarProductoModal";
 import { NuevoProductoModal } from "../components/NuevoProductoModal";
@@ -50,6 +51,8 @@ export function MenuPage() {
   useEffect(() => {
     cargar();
   }, []);
+
+  useRegistrarRefresco(cargar);
 
   function agregarCategoria(categoria: CategoriaProducto) {
     setCategorias((actual) => [...actual, categoria].sort((a, b) => a.nombre.localeCompare(b.nombre)));

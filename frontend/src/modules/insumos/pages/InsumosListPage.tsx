@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { insumosApi, type Almacen, type Insumo } from "../api";
 import { EditarInsumoModal } from "../components/EditarInsumoModal";
 import { NuevoInsumoModal } from "../components/NuevoInsumoModal";
@@ -34,6 +35,8 @@ export function InsumosListPage() {
   useEffect(() => {
     cargar();
   }, []);
+
+  useRegistrarRefresco(cargar);
 
   return (
     <div className="flex flex-col gap-6">

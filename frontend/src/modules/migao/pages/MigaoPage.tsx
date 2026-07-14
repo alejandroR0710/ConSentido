@@ -5,6 +5,7 @@ import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
   migaoApi,
   type HistorialOrdenEntrada,
@@ -95,20 +96,38 @@ export function MigaoPage() {
     ordenSeleccionadaIdRef.current = ordenSeleccionadaId;
   }, [ordenSeleccionadaId]);
 
+  // "Última petición gana": si el sondeo automático (cada 8s) ya había salido
+  // justo antes de cobrar una orden, su respuesta puede llegar DESPUÉS del
+  // refresco explícito que se dispara al cobrar y pisarlo con datos viejos —
+  // la orden recién cerrada seguía viéndose unos segundos más. Con un id que
+  // se incrementa en cada llamada, se descarta cualquier respuesta que ya no
+  // sea la más reciente, sin importar el orden en que lleguen.
+  const ordenesRequestIdRef = useRef(0);
+  const historialRequestIdRef = useRef(0);
+
   async function cargarOrdenes() {
+    const requestId = ++ordenesRequestIdRef.current;
     try {
-      setOrdenes(await migaoApi.listarOrdenesAbiertas());
-      setItemsActivos(await migaoApi.listarItemsActivos());
+      const [ordenesData, itemsData] = await Promise.all([
+        migaoApi.listarOrdenesAbiertas(),
+        migaoApi.listarItemsActivos(),
+      ]);
+      if (requestId !== ordenesRequestIdRef.current) return;
+      setOrdenes(ordenesData);
+      setItemsActivos(itemsData);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudieron cargar las órdenes");
+      if (requestId === ordenesRequestIdRef.current) {
+        setError(err instanceof ApiError ? err.message : "No se pudieron cargar las órdenes");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === ordenesRequestIdRef.current) setLoading(false);
     }
 
     const ordenSeleccionadaActual = ordenSeleccionadaIdRef.current;
     if (ordenSeleccionadaActual) {
       try {
-        setDetalle(await migaoApi.obtenerDetalle(ordenSeleccionadaActual));
+        const detalleData = await migaoApi.obtenerDetalle(ordenSeleccionadaActual);
+        if (requestId === ordenesRequestIdRef.current) setDetalle(detalleData);
       } catch {
         // Si la orden ya no existe (se cerró/canceló desde otro dispositivo), el
         // detalle se deja como estaba; cerrarYCobrar/seleccionarOrden lo limpian.
@@ -117,19 +136,26 @@ export function MigaoPage() {
   }
 
   async function cargarHistorial() {
+    const requestId = ++historialRequestIdRef.current;
     try {
-      setHistorial(await migaoApi.listarHistorialOrdenes());
+      const historialData = await migaoApi.listarHistorialOrdenes();
+      if (requestId === historialRequestIdRef.current) setHistorial(historialData);
     } catch {
-      /* la tabla de historial simplemente queda como estaba */
+      /* la tabla de historial simplemente queda como estaba; el próximo sondeo reintenta */
     }
   }
 
   useEffect(() => {
     cargarOrdenes();
     cargarHistorial();
-    const intervalo = setInterval(cargarOrdenes, POLL_MS);
+    const intervalo = setInterval(() => {
+      cargarOrdenes();
+      cargarHistorial();
+    }, POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
+
+  useRegistrarRefresco(() => Promise.all([cargarOrdenes(), cargarHistorial()]));
 
   function reiniciarDivision() {
     setDividirCuenta(false);

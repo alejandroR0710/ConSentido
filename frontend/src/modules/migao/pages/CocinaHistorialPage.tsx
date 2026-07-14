@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
 import { formatCantidad } from "../format";
@@ -21,13 +22,23 @@ export function CocinaHistorialPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function cargar() {
+    setLoading(true);
+    try {
+      setItems(await migaoApi.listarHistorialDespachados());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    migaoApi
-      .listarHistorialDespachados()
-      .then(setItems)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial"))
-      .finally(() => setLoading(false));
+    cargar();
   }, []);
+
+  useRegistrarRefresco(cargar);
 
   const tickets = useMemo(() => agruparPorOrden(items), [items]);
 

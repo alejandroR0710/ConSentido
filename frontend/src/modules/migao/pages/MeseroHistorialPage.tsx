@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type OrdenHistorialResumen } from "../api";
 
 function formatearFechaHora(fechaIso: string | null) {
@@ -26,13 +27,23 @@ export function MeseroHistorialPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function cargar() {
+    setLoading(true);
+    try {
+      setHistorial(await migaoApi.listarHistorialPropio());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar tu historial");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    migaoApi
-      .listarHistorialPropio()
-      .then(setHistorial)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar tu historial"))
-      .finally(() => setLoading(false));
+    cargar();
   }, []);
+
+  useRegistrarRefresco(cargar);
 
   return (
     <div className="flex flex-col gap-6">

@@ -3,6 +3,7 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { Modal } from "../../../shared/components/Modal";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type DiaHistorialCaja, type TurnoCaja } from "../api";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
@@ -159,6 +160,8 @@ export function CajaHistorialPage() {
       setLoading(false);
     }
   }
+
+  useRegistrarRefresco(cargarHistorial);
 
   useEffect(() => {
     let cancelado = false;

@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
 import { reproducirAlerta, reproducirNotificacionSuave } from "../beep";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { formatCantidad } from "../format";
 
 const REFRESCO_MS = 8000;
@@ -72,6 +73,8 @@ export function CocinaPage() {
     const intervalo = setInterval(cargar, REFRESCO_MS);
     return () => clearInterval(intervalo);
   }, []);
+
+  useRegistrarRefresco(cargar);
 
   const tickets = useMemo(() => agruparPorOrden(items), [items]);
 

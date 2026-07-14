@@ -10,6 +10,7 @@ import { BORDE_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { formatCantidad } from "../format";
 import { Modal } from "../../../shared/components/Modal";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 
 const POLL_MS = 5000;
 // El menú cambia poco (un producto nuevo cada tanto) comparado con el estado de
@@ -149,6 +150,11 @@ export function MeseroPage() {
       clearInterval(intervaloProductos);
     };
   }, []);
+
+  useRegistrarRefresco(async () => {
+    await Promise.all([cargarProductos(), cargarOrdenes(), revisarNotificaciones()]);
+    if (ordenSeleccionadaRef.current) await cargarDetalle(ordenSeleccionadaRef.current);
+  });
 
   function irALista() {
     setVista("lista");

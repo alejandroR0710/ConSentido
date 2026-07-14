@@ -5,6 +5,7 @@ import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ProyeccionApertura, type ResumenTurno } from "../api";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
@@ -85,6 +86,8 @@ export function CajaPage() {
     }, POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
+
+  useRegistrarRefresco(() => Promise.all([cargarCategorias(), cargarResumenDeTurnoActual()]));
 
   async function abrirTurno(e: FormEvent) {
     e.preventDefault();

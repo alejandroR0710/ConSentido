@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { analyticsApi, type AnalyticsMigao } from "../api";
 
 type Rango = "hoy" | "semana" | "mes";
@@ -51,26 +52,25 @@ export function MigaoAnalyticsSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelado = false;
+  async function cargar() {
     setLoading(true);
     setError(null);
     const { desde, hasta } = rangoFechas(rango);
-    analyticsApi
-      .obtenerMigao(desde, hasta)
-      .then((data) => {
-        if (!cancelado) setDatos(data);
-      })
-      .catch((err) => {
-        if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudieron cargar las analíticas");
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false);
-      });
-    return () => {
-      cancelado = true;
-    };
+    try {
+      setDatos(await analyticsApi.obtenerMigao(desde, hasta));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron cargar las analíticas");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rango]);
+
+  useRegistrarRefresco(cargar);
 
   return (
     <div className="flex flex-col gap-4">

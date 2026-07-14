@@ -3,7 +3,26 @@ import { Outlet } from "react-router-dom";
 import { desbloquearAudio } from "../../modules/migao/beep";
 import { useAuth } from "../auth/useAuth";
 import { Modal } from "../components/Modal";
+import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
 import { RoleNav } from "./RoleNav";
+
+/** Botón único de "actualizar" para todas las vistas (ver RefrescoContext.tsx):
+ *  ejecuta la función de carga que haya registrado la pantalla actual, sin
+ *  recargar la página completa. */
+function BotonRefrescar() {
+  const { refrescar, refrescando } = useRefrescoVista();
+  return (
+    <button
+      onClick={() => refrescar()}
+      disabled={refrescando}
+      aria-label="Actualizar vista"
+      title="Actualizar vista"
+      className="flex items-center justify-center rounded-md p-1.5 text-lg text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+    >
+      <span className={refrescando ? "inline-block animate-spin" : ""}>⟳</span>
+    </button>
+  );
+}
 
 /**
  * Layout responsive único para todos los roles: en desktop prioriza un sidebar
@@ -28,50 +47,53 @@ export function AppShell() {
   if (!usuario) return null;
 
   return (
-    <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
-      <header className="flex items-center justify-between border-b border-brand-vanilla-dark px-4 py-3 dark:border-brand-green-700">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button
-            onClick={() => setMenuAbierto(true)}
-            aria-label="Abrir menú"
-            className="-ml-1 rounded-md p-1.5 text-xl text-brand-green-700 hover:bg-brand-green-50 md:hidden dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-          >
-            ☰
-          </button>
-          <span className="min-w-0 flex-1 truncate text-base font-semibold text-brand-green-700 dark:text-brand-vanilla sm:text-lg">
-            Con Sentido / El Rinconcito del Migao
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-3 text-sm">
-          <span className="hidden sm:inline">{usuario.nombre}</span>
-          <button
-            onClick={() => logout()}
-            className="rounded-md border border-brand-green-700 px-3 py-1 text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700"
-          >
-            Salir
-          </button>
-        </div>
-      </header>
+    <RefrescoProvider>
+      <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
+        <header className="flex items-center justify-between border-b border-brand-vanilla-dark px-4 py-3 dark:border-brand-green-700">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              onClick={() => setMenuAbierto(true)}
+              aria-label="Abrir menú"
+              className="-ml-1 rounded-md p-1.5 text-xl text-brand-green-700 hover:bg-brand-green-50 md:hidden dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+            >
+              ☰
+            </button>
+            <span className="min-w-0 flex-1 truncate text-base font-semibold text-brand-green-700 dark:text-brand-vanilla sm:text-lg">
+              Con Sentido / El Rinconcito del Migao
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-sm">
+            <span className="hidden sm:inline">{usuario.nombre}</span>
+            <BotonRefrescar />
+            <button
+              onClick={() => logout()}
+              className="rounded-md border border-brand-green-700 px-3 py-1 text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700"
+            >
+              Salir
+            </button>
+          </div>
+        </header>
 
-      <div className="mx-auto flex max-w-6xl">
-        <aside className="sticky top-0 hidden h-[calc(100svh-57px)] w-56 shrink-0 border-r border-brand-vanilla-dark p-3 md:block dark:border-brand-green-700">
-          <RoleNav modulosPermitidos={usuario.modulos} rol={usuario.rol} />
-        </aside>
+        <div className="mx-auto flex max-w-6xl">
+          <aside className="sticky top-0 hidden h-[calc(100svh-57px)] w-56 shrink-0 border-r border-brand-vanilla-dark p-3 md:block dark:border-brand-green-700">
+            <RoleNav modulosPermitidos={usuario.modulos} rol={usuario.rol} />
+          </aside>
 
-        <main className="min-h-[calc(100svh-57px)] flex-1 p-4">
-          <Outlet />
-        </main>
+          <main className="min-h-[calc(100svh-57px)] flex-1 p-4">
+            <Outlet />
+          </main>
+        </div>
+
+        {menuAbierto && (
+          <Modal titulo="Menú" onCerrar={() => setMenuAbierto(false)}>
+            <RoleNav
+              modulosPermitidos={usuario.modulos}
+              rol={usuario.rol}
+              onNavigate={() => setMenuAbierto(false)}
+            />
+          </Modal>
+        )}
       </div>
-
-      {menuAbierto && (
-        <Modal titulo="Menú" onCerrar={() => setMenuAbierto(false)}>
-          <RoleNav
-            modulosPermitidos={usuario.modulos}
-            rol={usuario.rol}
-            onNavigate={() => setMenuAbierto(false)}
-          />
-        </Modal>
-      )}
-    </div>
+    </RefrescoProvider>
   );
 }

@@ -526,3 +526,41 @@ export async function resetearOrdenesCompleto() {
     client.release();
   }
 }
+
+/**
+ * Reinicio total exclusivo de Super Root: borra TODO el historial transaccional
+ * de Migao y de Caja General (órdenes, ventas, pagos, turnos y movimientos de
+ * caja de cualquier módulo, no solo Migao) — deja el negocio como recién
+ * instalado. Lo único que se conserva es el catálogo (productos, categorías),
+ * usuarios y roles/permisos.
+ *
+ * Orden de borrado (importa por las foreign keys): movimientos_caja depende de
+ * turnos_caja; pagos y ventas dependen de ordenes; hay que borrar los hijos
+ * antes que los padres o Postgres rechaza el DELETE.
+ */
+export async function reiniciarTodoCompleto() {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const movimientos = await client.query(`DELETE FROM movimientos_caja`);
+    const pagos = await client.query(`DELETE FROM pagos WHERE orden_id IS NOT NULL`);
+    const ventas = await client.query(`DELETE FROM ventas WHERE orden_id IS NOT NULL`);
+    const ordenes = await client.query(`DELETE FROM ordenes`);
+    const turnos = await client.query(`DELETE FROM turnos_caja`);
+
+    await client.query("COMMIT");
+    return {
+      ordenesBorradas: ordenes.rowCount ?? 0,
+      ventasBorradas: ventas.rowCount ?? 0,
+      pagosBorrados: pagos.rowCount ?? 0,
+      movimientosCajaBorrados: movimientos.rowCount ?? 0,
+      turnosBorrados: turnos.rowCount ?? 0,
+    };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
@@ -23,7 +24,10 @@ function formatearHora(fechaIso: string) {
 
 export function CajaPage() {
   const { usuario } = useAuth();
+  // Reiniciar Caja es exclusivo de Super Root; corregir el método de pago de un
+  // movimiento es una capacidad más general que "Root" también tiene.
   const esSuperRoot = usuario?.rol === "Super Root";
+  const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
 
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [sinTurno, setSinTurno] = useState(false);
@@ -268,7 +272,7 @@ export function CajaPage() {
                         {m.tipo === "egreso" ? "-" : "+"}
                         {formatearMoneda(Number(m.monto))}
                       </div>
-                      {esSuperRoot && (
+                      {puedeEditarPagos && (
                         <button
                           onClick={() => setMovimientoEditando(m)}
                           className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"

@@ -27,6 +27,7 @@ import {
   marcarCheckItemController,
   marcarOrdenListaController,
   obtenerDetalleOrdenController,
+  reiniciarTodoController,
   resetearOrdenesController,
   subirImagenProductoController,
 } from "./migao.controller";
@@ -121,6 +122,14 @@ migaoRouter.post(
   "/ordenes/reset",
   requirePermission("migao.ordenes.resetear"),
   asyncHandler(resetearOrdenesController),
+);
+
+// Reinicio total exclusivo de Super Root: borra TODO el historial de Migao y
+// de Caja General de una sola vez (ver migao.repository.ts::reiniciarTodoCompleto).
+migaoRouter.post(
+  "/reiniciar-todo",
+  requirePermission("general.sistema.reiniciar_todo"),
+  asyncHandler(reiniciarTodoController),
 );
 
 // Cocina: solo ve la cola de ítems pendientes/en preparación de todas las órdenes.

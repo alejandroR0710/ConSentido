@@ -18,6 +18,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'general'), 'resetear',             'general.caja.resetear'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'editar_movimiento',    'general.caja.editar_movimiento'),
   ((SELECT id FROM modulos WHERE slug = 'general'), 'borrar_historial',     'general.caja.borrar_historial'),
+  ((SELECT id FROM modulos WHERE slug = 'general'), 'reiniciar_todo',       'general.sistema.reiniciar_todo'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver',          'migao.ordenes.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear',        'migao.ordenes.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),
@@ -35,6 +36,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES
   ('Super Root', 'Acceso total: administración de usuarios, configuración general y supervisión global.'),
+  ('Root', 'Mismo alcance que Super Root (todas las vistas y módulos), salvo los botones de reinicio/borrado de historial (Caja, Órdenes, Reinicio total).'),
   ('Cajero', 'Centraliza pagos de cualquier módulo en Caja General; único rol que puede cerrar una mesa/orden en Migao.'),
   ('Cocina', 'Únicamente ve la cola de pedidos realizados y puede marcarlos como preparando o listo.'),
   ('Mesero', 'Crea órdenes y agrega/edita/cancela sus ítems; cada cambio queda en el historial de la orden. No puede cerrar ni cobrar.'),
@@ -44,6 +46,18 @@ INSERT INTO roles (nombre, descripcion) VALUES
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT (SELECT id FROM roles WHERE nombre = 'Super Root'), p.id
 FROM permisos p;
+
+-- Root: todos los permisos EXCEPTO los botones de reinicio/borrado de
+-- historial — esos siguen siendo exclusivos de Super Root.
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT (SELECT id FROM roles WHERE nombre = 'Root'), p.id
+FROM permisos p
+WHERE p.codigo NOT IN (
+  'general.caja.resetear',
+  'general.caja.borrar_historial',
+  'general.sistema.reiniciar_todo',
+  'migao.ordenes.resetear'
+);
 
 -- Cajero: Caja General completa + ver y cerrar órdenes de Migao (NO crear/agregar_item: eso es del mesero)
 INSERT INTO roles_permisos (rol_id, permiso_id)
@@ -110,6 +124,11 @@ INSERT INTO usuarios (nombre, email, password_hash, rol_id) VALUES (
   (SELECT id FROM roles WHERE nombre = 'Super Root')
 );
 
+-- Usuarios Root (acceso total salvo botones de reinicio/borrado)
+INSERT INTO usuarios (nombre, email, password_hash, rol_id) VALUES
+  ('Alejandra', 'alejandra@sistemapos.local', crypt('Root2026!', gen_salt('bf')), (SELECT id FROM roles WHERE nombre = 'Root')),
+  ('Julian', 'julian@sistemapos.local', crypt('Root2026!', gen_salt('bf')), (SELECT id FROM roles WHERE nombre = 'Root'));
+
 -- Usuario de prueba para el rol Cocina
 INSERT INTO usuarios (nombre, email, password_hash, rol_id) VALUES (
   'Cocina',
@@ -151,3 +170,10 @@ INSERT INTO usuarios (nombre, email, password_hash, rol_id) VALUES (
 INSERT INTO usuarios_modulos (usuario_id, modulo_id)
 SELECT (SELECT id FROM usuarios WHERE email = 'admin@sistemapos.local'), m.id
 FROM modulos m;
+
+-- Mismo acceso total a módulos para los usuarios Root.
+INSERT INTO usuarios_modulos (usuario_id, modulo_id)
+SELECT u.id, m.id
+FROM usuarios u
+CROSS JOIN modulos m
+WHERE u.email IN ('alejandra@sistemapos.local', 'julian@sistemapos.local');

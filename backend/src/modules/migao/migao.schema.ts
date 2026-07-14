@@ -109,6 +109,13 @@ export const resetearOrdenesSchema = z.object({
 });
 export type ResetearOrdenesInput = z.infer<typeof resetearOrdenesSchema>;
 
+// Reinicio total exclusivo de Super Root: frase distinta a la de arriba a
+// propósito, para que no se pueda confundir con el reset parcial de órdenes.
+export const reiniciarTodoSchema = z.object({
+  confirmacion: z.literal("REINICIAR TODO"),
+});
+export type ReiniciarTodoInput = z.infer<typeof reiniciarTodoSchema>;
+
 // Cocina marca/desmarca el check de un producto individual mientras la orden
 // está en preparación. No cambia el estado del ítem, solo el check.
 export const checkItemSchema = z.object({

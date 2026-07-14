@@ -11,6 +11,7 @@ import {
   crearProductoSchema,
   editarItemSchema,
   editarProductoSchema,
+  reiniciarTodoSchema,
   resetearOrdenesSchema,
 } from "./migao.schema";
 import * as service from "./migao.service";
@@ -114,6 +115,12 @@ export async function cancelarOrdenController(req: Request, res: Response) {
 export async function resetearOrdenesController(req: Request, res: Response) {
   resetearOrdenesSchema.parse(req.body);
   const resultado = await service.resetearOrdenes();
+  return ok(res, resultado);
+}
+
+export async function reiniciarTodoController(req: Request, res: Response) {
+  reiniciarTodoSchema.parse(req.body);
+  const resultado = await service.reiniciarTodo();
   return ok(res, resultado);
 }
 

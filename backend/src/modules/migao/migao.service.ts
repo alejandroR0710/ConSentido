@@ -490,3 +490,10 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
 export async function resetearOrdenes() {
   return repo.resetearOrdenesCompleto();
 }
+
+/** Reinicio total exclusivo de Super Root: borra TODO el historial de Migao y
+ *  de Caja General de una sola vez (ver migao.repository.ts). Deja intacto el
+ *  catálogo (productos, categorías), usuarios y roles/permisos. */
+export async function reiniciarTodo() {
+  return repo.reiniciarTodoCompleto();
+}

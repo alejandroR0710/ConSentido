@@ -33,9 +33,11 @@ export const MODULES_META: ModuloMeta[] = [
  * un único trabajo puntual y entran directo a su pantalla. Dashboard queda
  * reservado a roles con visión transversal del negocio. Estos mismos roles
  * también saltan el filtro por `roles` de MODULES_META (ven todo lo de su
- * módulo, no solo lo suyo).
+ * módulo, no solo lo suyo). "Root" ve exactamente lo mismo que "Super Root"
+ * (todas las vistas) — lo único que no tiene son los permisos de reinicio/
+ * borrado de historial, que ya se filtran aparte a nivel de botón/backend.
  */
-export const ROLES_CON_DASHBOARD = ["Super Root"];
+export const ROLES_CON_DASHBOARD = ["Super Root", "Root"];
 
 /** A dónde aterriza cada rol al iniciar sesión, en vez del Dashboard genérico. */
 export const ROLE_HOME: Record<string, string> = {

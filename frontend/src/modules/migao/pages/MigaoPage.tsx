@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
@@ -39,7 +40,11 @@ const FILA_HISTORIAL_POR_ESTADO: Record<string, string> = {
 
 export function MigaoPage() {
   const { usuario } = useAuth();
+  // Reiniciar historial de órdenes es exclusivo de Super Root; corregir el
+  // método de pago de una cuenta ya cobrada es una capacidad más general que
+  // "Root" también tiene.
   const esSuperRoot = usuario?.rol === "Super Root";
+  const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
 
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [historial, setHistorial] = useState<HistorialOrdenEntrada[]>([]);
@@ -498,13 +503,13 @@ export function MigaoPage() {
                 <th className="px-3 py-2">Método</th>
                 <th className="px-3 py-2">Fecha y hora</th>
                 <th className="px-3 py-2">Total</th>
-                {esSuperRoot && <th className="px-3 py-2"></th>}
+                {puedeEditarPagos && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody>
               {historial.length === 0 ? (
                 <tr>
-                  <td colSpan={esSuperRoot ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
                     Todavía no hay órdenes cobradas ni canceladas.
                   </td>
                 </tr>
@@ -527,7 +532,7 @@ export function MigaoPage() {
                       <td className="px-3 py-2">{h.metodo_pago}</td>
                       <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                       <td className="px-3 py-2">{formatMoney(h.monto)}</td>
-                      {esSuperRoot && (
+                      {puedeEditarPagos && (
                         <td className="px-3 py-2">
                           <button
                             onClick={() =>
@@ -572,7 +577,7 @@ export function MigaoPage() {
                       <td className="px-3 py-2">{h.metodo_pago ?? "—"}</td>
                       <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                       <td className="px-3 py-2">{formatMoney(h.total)}</td>
-                      {esSuperRoot && (
+                      {puedeEditarPagos && (
                         <td className="px-3 py-2">
                           {h.estado === "cerrada" && h.movimiento_id != null && (
                             <button

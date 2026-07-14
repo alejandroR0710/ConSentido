@@ -158,6 +158,16 @@ export const migaoApi = {
       "/migao/ordenes/reset",
       { method: "POST", body: { confirmacion: "REINICIAR ORDENES" } },
     ),
+  // Reinicio total exclusivo de Super Root: borra TODO el historial de Migao y
+  // de Caja General de una sola vez.
+  reiniciarTodo: () =>
+    apiFetch<{
+      ordenesBorradas: number;
+      ventasBorradas: number;
+      pagosBorrados: number;
+      movimientosCajaBorrados: number;
+      turnosBorrados: number;
+    }>("/migao/reiniciar-todo", { method: "POST", body: { confirmacion: "REINICIAR TODO" } }),
   listarColaCocina: () => apiFetch<ItemCocina[]>("/migao/cocina/items"),
   listarHistorialDespachados: () => apiFetch<ItemCocina[]>("/migao/cocina/historial"),
   empezarPreparar: (ordenId: string) =>

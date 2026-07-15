@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
+import { CambiarMesaModal } from "../components/CambiarMesaModal";
 import { EditarItemModal } from "../components/EditarItemModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { HistorialOrden } from "../components/HistorialOrden";
@@ -11,6 +12,10 @@ import { formatCantidad } from "../format";
 import { Modal } from "../../../shared/components/Modal";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
+
+function formatearHora(fechaIso: string) {
+  return new Date(fechaIso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
 
 const POLL_MS = 5000;
 // El menú cambia poco (un producto nuevo cada tanto) comparado con el estado de
@@ -44,6 +49,7 @@ export function MeseroPage() {
   const [agregandoId, setAgregandoId] = useState<string | null>(null);
   const [itemEditando, setItemEditando] = useState<OrdenItem | null>(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [cambiarMesaAbierto, setCambiarMesaAbierto] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -286,6 +292,17 @@ export function MeseroPage() {
     }
   }
 
+  async function guardarNuevaMesa(mesaNumero: string, piso: number) {
+    if (!ordenSeleccionadaId) return;
+    try {
+      await migaoApi.cambiarMesa(ordenSeleccionadaId, mesaNumero, piso);
+      await cargarOrdenes();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar la mesa");
+      throw err;
+    }
+  }
+
   const totalBorrador = borradorItems.reduce((acc, i) => acc + i.cantidad * Number(i.producto.precio), 0);
   const ordenActual = ordenes.find((o) => o.id === ordenSeleccionadaId);
 
@@ -374,7 +391,7 @@ export function MeseroPage() {
                     )}
                   </div>
                   <div className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-                    {o.estado} · Total {formatMoney(o.total)}
+                    {formatearHora(o.created_at)} · {o.estado} · Total {formatMoney(o.total)}
                     {o.mesero_nombre && <span> · Mesero: {o.mesero_nombre}</span>}
                   </div>
                 </button>
@@ -504,15 +521,24 @@ export function MeseroPage() {
             </button>
           </div>
 
-          <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
-            Mesa {ordenActual?.mesa_numero ?? "—"}
-            {ordenActual?.mesa_piso && <span className="text-sm font-normal"> (piso {ordenActual.mesa_piso})</span>} ·
-            Comensal {detalle.orden.comensal_numero}
-            {detalle.orden.numero_personas && (
-              <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                👥 {detalle.orden.numero_personas}
-              </span>
-            )}
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            <span>
+              Mesa {ordenActual?.mesa_numero ?? "—"}
+              {ordenActual?.mesa_piso && <span className="text-sm font-normal"> (piso {ordenActual.mesa_piso})</span>} ·
+              Comensal {detalle.orden.comensal_numero}
+              {detalle.orden.numero_personas && (
+                <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                  👥 {detalle.orden.numero_personas}
+                </span>
+              )}
+            </span>
+            <button
+              onClick={() => setCambiarMesaAbierto(true)}
+              aria-label="Cambiar mesa"
+              className="rounded-md px-1.5 py-1 text-sm text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
+            >
+              ✏️
+            </button>
           </h2>
           {ordenActual?.mesero_nombre && (
             <p className="-mt-3 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
@@ -596,6 +622,15 @@ export function MeseroPage() {
         <Modal titulo="Historial de esta orden" onCerrar={() => setHistorialAbierto(false)}>
           <HistorialOrden entradas={detalle.historial} />
         </Modal>
+      )}
+
+      {cambiarMesaAbierto && (
+        <CambiarMesaModal
+          mesaActual={ordenActual?.mesa_numero ?? null}
+          pisoActual={ordenActual?.mesa_piso ?? null}
+          onCerrar={() => setCambiarMesaAbierto(false)}
+          onGuardar={guardarNuevaMesa}
+        />
       )}
     </div>
   );

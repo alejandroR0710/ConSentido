@@ -4,6 +4,7 @@ import { Errors } from "../../shared/utils/app-error";
 import { created, ok } from "../../shared/utils/response";
 import {
   agregarItemSchema,
+  cambiarMesaSchema,
   cerrarOrdenSchema,
   checkItemSchema,
   crearCategoriaProductoSchema,
@@ -65,6 +66,12 @@ export async function editarItemController(req: Request, res: Response) {
   const data = editarItemSchema.parse(req.body);
   const item = await service.editarItem(req.params.id, data, req.auth!.usuarioId);
   return ok(res, item);
+}
+
+export async function cambiarMesaController(req: Request, res: Response) {
+  const data = cambiarMesaSchema.parse(req.body);
+  const orden = await service.cambiarMesaOrden(req.params.id, data);
+  return ok(res, orden);
 }
 
 export async function listarProductosController(_req: Request, res: Response) {

@@ -420,6 +420,16 @@ export async function getOrdenById(ordenId: string, executor: Executor = pool, f
   return result.rowCount ? result.rows[0] : null;
 }
 
+/** Cambia la mesa de una orden ya creada (ej. los comensales se cambiaron de
+ *  mesa a mitad del pedido). No toca nada más de la orden. */
+export async function actualizarMesaOrden(ordenId: string, mesaId: number, executor: Executor = pool) {
+  const result = await executor.query(`UPDATE ordenes SET mesa_id = $2 WHERE id = $1 RETURNING *`, [
+    ordenId,
+    mesaId,
+  ]);
+  return result.rows[0];
+}
+
 export async function getItemsPorOrden(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
     `SELECT oi.*, p.nombre AS producto_nombre

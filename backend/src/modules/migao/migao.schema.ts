@@ -127,6 +127,14 @@ export const reiniciarTodoSchema = z.object({
 });
 export type ReiniciarTodoInput = z.infer<typeof reiniciarTodoSchema>;
 
+// El mesero cambia la mesa de una orden ya abierta (ej. los comensales se
+// cambiaron de mesa). La mesa se resuelve/crea por número, igual que al crear la orden.
+export const cambiarMesaSchema = z.object({
+  mesaNumero: z.string().trim().min(1).max(10),
+  piso: z.number().int().min(1).max(2).default(1),
+});
+export type CambiarMesaInput = z.infer<typeof cambiarMesaSchema>;
+
 // Cocina marca/desmarca el check de un producto individual mientras la orden
 // está en preparación. No cambia el estado del ítem, solo el check.
 export const checkItemSchema = z.object({

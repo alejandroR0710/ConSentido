@@ -5,6 +5,7 @@ import * as cajaService from "../general/caja/caja.service";
 import * as repo from "./migao.repository";
 import {
   AgregarItemInput,
+  CambiarMesaInput,
   CerrarOrdenInput,
   CheckItemInput,
   CrearOrdenInput,
@@ -179,6 +180,19 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
     usuarioId,
   });
   return actualizado;
+}
+
+/** El mesero cambia la mesa de una orden ya abierta (ej. los comensales se
+ *  cambiaron de mesa). Igual que al crear la orden, la mesa se resuelve/crea
+ *  por número — no hace falta que ya exista. */
+export async function cambiarMesaOrden(ordenId: string, input: CambiarMesaInput) {
+  const orden = await repo.getOrdenById(ordenId);
+  if (!orden) throw Errors.notFound("Orden no encontrada");
+  if (orden.estado === "cerrada" || orden.estado === "cancelada") {
+    throw Errors.conflict("No se puede cambiar la mesa de una orden cerrada o cancelada");
+  }
+  const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
+  return repo.actualizarMesaOrden(ordenId, mesa.id);
 }
 
 export async function listarItemsActivos() {

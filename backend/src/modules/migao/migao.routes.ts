@@ -5,6 +5,7 @@ import { crearUploaderImagen } from "../../shared/middlewares/upload.middleware"
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   agregarItemController,
+  cambiarMesaController,
   cancelarOrdenController,
   cerrarOrdenController,
   crearCategoriaController,
@@ -83,6 +84,13 @@ migaoRouter.get(
   asyncHandler(listarHistorialPropioController),
 );
 migaoRouter.get("/ordenes/:id", requirePermission("migao.ordenes.ver"), asyncHandler(obtenerDetalleOrdenController));
+// El mesero cambia la mesa de una orden abierta (ej. los comensales se
+// cambiaron de mesa a mitad del pedido).
+migaoRouter.patch(
+  "/ordenes/:id/mesa",
+  requirePermission("migao.ordenes.cambiar_mesa"),
+  asyncHandler(cambiarMesaController),
+);
 migaoRouter.post(
   "/ordenes/:id/items",
   requirePermission("migao.ordenes.agregar_item"),

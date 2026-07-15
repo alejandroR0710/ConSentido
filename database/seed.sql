@@ -24,6 +24,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear',        'migao.ordenes.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_item',   'migao.ordenes.editar_item'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'cambiar_mesa',  'migao.ordenes.cambiar_mesa'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'entregar_item', 'migao.ordenes.entregar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cerrar',       'migao.ordenes.cerrar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cancelar',     'migao.ordenes.cancelar'),
@@ -98,6 +99,7 @@ WHERE p.codigo IN (
   'migao.ordenes.agregar_item',
   'migao.ordenes.editar_item',
   'migao.ordenes.entregar_item',
+  'migao.ordenes.cambiar_mesa',
   'migao.productos.ver'
 );
 

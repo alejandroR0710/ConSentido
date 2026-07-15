@@ -157,6 +157,14 @@ export const migaoApi = {
     }),
   cancelarOrden: (ordenId: string) =>
     apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),
+  // El mesero cambia la mesa de una orden abierta (ej. los comensales se
+  // cambiaron de mesa a mitad del pedido). La mesa se resuelve/crea por
+  // número, igual que al crear la orden.
+  cambiarMesa: (ordenId: string, mesaNumero: string, piso: number) =>
+    apiFetch<{ id: string }>(`/migao/ordenes/${ordenId}/mesa`, {
+      method: "PATCH",
+      body: { mesaNumero, piso },
+    }),
   resetearOrdenes: () =>
     apiFetch<{ ordenesBorradas: number; ventasBorradas: number; pagosBorrados: number; movimientosCajaBorrados: number }>(
       "/migao/ordenes/reset",

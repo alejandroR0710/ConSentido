@@ -11,6 +11,7 @@ import {
   editarMetodoPagoMovimientoController,
   listarCategoriasGastoController,
   obtenerHistorialCajaController,
+  obtenerMovimientosDelDiaController,
   obtenerResumenTurnoController,
   obtenerTurnoAbiertoController,
   obtenerTurnosPorFechaController,
@@ -59,6 +60,12 @@ cajaRouter.get(
   "/turnos-por-fecha",
   requirePermission("general.caja.ver"),
   asyncHandler(obtenerTurnosPorFechaController),
+);
+// Detalle de movimientos de un día del historial (de qué es cada ingreso/egreso).
+cajaRouter.get(
+  "/movimientos-por-fecha",
+  requirePermission("general.caja.ver"),
+  asyncHandler(obtenerMovimientosDelDiaController),
 );
 
 // Borrados permanentes exclusivos de Super Root (ver caja.service.ts): a

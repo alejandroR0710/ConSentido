@@ -114,6 +114,8 @@ export const cajaApi = {
       body: { confirmacion: "REINICIAR CAJA" },
     }),
   listarTurnosPorFecha: (fecha: string) => apiFetch<TurnoCaja[]>(`/caja/turnos-por-fecha?fecha=${fecha}`),
+  listarMovimientosPorFecha: (fecha: string) =>
+    apiFetch<MovimientoCaja[]>(`/caja/movimientos-por-fecha?fecha=${fecha}`),
   // Borrados permanentes, exclusivos de Super Root: a diferencia de resetear(),
   // estos sí borran datos y no se pueden deshacer.
   borrarHistorialDia: (fecha: string) =>

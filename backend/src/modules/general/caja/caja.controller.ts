@@ -84,6 +84,12 @@ export async function obtenerTurnosPorFechaController(req: Request, res: Respons
   return ok(res, turnos);
 }
 
+export async function obtenerMovimientosDelDiaController(req: Request, res: Response) {
+  const { fecha } = turnosPorFechaSchema.parse(req.query);
+  const movimientos = await service.obtenerMovimientosDelDia(fecha);
+  return ok(res, movimientos);
+}
+
 export async function borrarHistorialDiaController(req: Request, res: Response) {
   const data = borrarHistorialDiaSchema.parse(req.body);
   const resultado = await service.borrarHistorialDia(data.fecha);

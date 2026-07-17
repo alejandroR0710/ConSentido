@@ -251,6 +251,12 @@ export async function obtenerTurnosPorFecha(fecha: string) {
   return repo.listTurnosPorFecha(fecha);
 }
 
+/** Detalle de movimientos de un día del historial — de qué es cada ingreso/
+ *  egreso, no solo el total agregado. */
+export async function obtenerMovimientosDelDia(fecha: string) {
+  return repo.listMovimientosDelDia(fecha);
+}
+
 /** Borra permanentemente el historial de movimientos de un día — Super Root. */
 export async function borrarHistorialDia(fecha: string) {
   const movimientosBorrados = await repo.borrarMovimientosDelDia(fecha);

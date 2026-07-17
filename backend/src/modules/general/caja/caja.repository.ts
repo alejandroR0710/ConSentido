@@ -352,6 +352,24 @@ export async function listTurnosPorFecha(fecha: string): Promise<TurnoCaja[]> {
   return result.rows.map(mapTurno);
 }
 
+/** Detalle completo (no solo la suma) de los movimientos de un día calendario
+ *  — para que el historial muestre de qué es cada ingreso/egreso, no solo el
+ *  total. Mismo criterio de fecha (to_char sobre created_at) que el resto del
+ *  historial, y mismos JOINs que listMovimientosPorTurno para traer el origen
+ *  legible (módulo o categoría de gasto). */
+export async function listMovimientosDelDia(fecha: string) {
+  const result = await pool.query(
+    `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre
+       FROM movimientos_caja mc
+       LEFT JOIN modulos m ON m.id = mc.modulo_origen_id
+       LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+      WHERE to_char(mc.created_at, 'YYYY-MM-DD') = $1
+      ORDER BY mc.created_at ASC`,
+    [fecha],
+  );
+  return result.rows;
+}
+
 /** Borra permanentemente todos los movimientos (ingresos y egresos) de un día
  *  calendario. No toca turnos_caja: el turno en sí (con sus montos de apertura
  *  y cierre ya calculados) queda como registro, solo desaparece su detalle. */

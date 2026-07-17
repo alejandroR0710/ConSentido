@@ -4,9 +4,10 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { Modal } from "../../../shared/components/Modal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { cajaApi, type DiaHistorialCaja, type TurnoCaja } from "../api";
+import { cajaApi, type DiaHistorialCaja, type MovimientoCaja, type TurnoCaja } from "../api";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
+import { LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
   "Enero",
@@ -41,6 +42,26 @@ interface Totales {
   ingresos: number;
   egresos: number;
   neto: number;
+}
+
+function formatearHora(fechaIso: string) {
+  return new Date(fechaIso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Agrupa movimientos de un mismo tipo (ingreso/egreso) por su etiqueta de
+ *  origen (área o categoría de gasto), para mostrar de qué se compone el
+ *  total — no solo la suma. */
+function agruparPorEtiqueta(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
+  const porEtiqueta = new Map<string, number>();
+  for (const m of movimientos) {
+    if (m.tipo !== tipo) continue;
+    const etiqueta =
+      tipo === "ingreso"
+        ? (m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Otro")
+        : (m.categoria_gasto_nombre ?? "Otro");
+    porEtiqueta.set(etiqueta, (porEtiqueta.get(etiqueta) ?? 0) + Number(m.monto));
+  }
+  return Array.from(porEtiqueta.entries()).sort((a, b) => b[1] - a[1]);
 }
 
 function sumar(dias: DiaHistorialCaja[]): Totales {
@@ -145,6 +166,8 @@ export function CajaHistorialPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [diaSeleccionado, setDiaSeleccionado] = useState<DiaHistorialCaja | null>(null);
+  const [movimientosDelDia, setMovimientosDelDia] = useState<MovimientoCaja[]>([]);
+  const [cargandoMovimientos, setCargandoMovimientos] = useState(false);
   const [turnosDelDia, setTurnosDelDia] = useState<TurnoCaja[]>([]);
   const [turnoABorrar, setTurnoABorrar] = useState<TurnoCaja | null>(null);
   const [borrarDiaAbierto, setBorrarDiaAbierto] = useState(false);
@@ -186,6 +209,15 @@ export function CajaHistorialPage() {
   function seleccionarDia(dia: DiaHistorialCaja) {
     setDiaSeleccionado(dia);
     setTurnosDelDia([]);
+    setMovimientosDelDia([]);
+    setCargandoMovimientos(true);
+    cajaApi
+      .listarMovimientosPorFecha(dia.fecha)
+      .then(setMovimientosDelDia)
+      .catch(() => {
+        /* el detalle simplemente queda vacío; el resumen ya cargado se ve igual */
+      })
+      .finally(() => setCargandoMovimientos(false));
     if (esSuperRoot) {
       cajaApi
         .listarTurnosPorFecha(dia.fecha)
@@ -268,7 +300,7 @@ export function CajaHistorialPage() {
       )}
 
       {diaSeleccionado && (
-        <Modal titulo={diaSeleccionado.fecha} onCerrar={() => setDiaSeleccionado(null)}>
+        <Modal titulo={diaSeleccionado.fecha} onCerrar={() => setDiaSeleccionado(null)} maxWidth="sm:max-w-lg">
           <div className="flex flex-col gap-2 text-sm">
             <div className="flex justify-between">
               <span className="text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</span>
@@ -287,6 +319,85 @@ export function CajaHistorialPage() {
             <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
               {diaSeleccionado.movimientos} movimiento{diaSeleccionado.movimientos === 1 ? "" : "s"} ese día.
             </div>
+
+            {cargandoMovimientos ? (
+              <p className="mt-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Cargando detalle...</p>
+            ) : (
+              movimientosDelDia.length > 0 && (
+                <>
+                  <div className="mt-2 flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700 sm:flex-row">
+                    {agruparPorEtiqueta(movimientosDelDia, "ingreso").length > 0 && (
+                      <div className="flex-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+                          Ingresos por área
+                        </span>
+                        <div className="mt-1 flex flex-col gap-0.5">
+                          {agruparPorEtiqueta(movimientosDelDia, "ingreso").map(([etiqueta, monto]) => (
+                            <div key={etiqueta} className="flex justify-between text-xs">
+                              <span className="text-brand-ink/70 dark:text-brand-vanilla/70">{etiqueta}</span>
+                              <span className="text-brand-ink dark:text-brand-vanilla">{formatMoney(monto)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {agruparPorEtiqueta(movimientosDelDia, "egreso").length > 0 && (
+                      <div className="flex-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+                          Egresos por categoría
+                        </span>
+                        <div className="mt-1 flex flex-col gap-0.5">
+                          {agruparPorEtiqueta(movimientosDelDia, "egreso").map(([etiqueta, monto]) => (
+                            <div key={etiqueta} className="flex justify-between text-xs">
+                              <span className="text-brand-ink/70 dark:text-brand-vanilla/70">{etiqueta}</span>
+                              <span className="text-brand-ink dark:text-brand-vanilla">{formatMoney(monto)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-1 flex flex-col gap-1.5 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
+                    <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+                      Detalle de movimientos
+                    </span>
+                    <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
+                      {movimientosDelDia.map((m) => (
+                        <div
+                          key={m.id}
+                          className={`flex items-center justify-between gap-2 rounded-md border-l-4 bg-brand-vanilla-dark/20 px-2 py-1.5 text-xs dark:bg-brand-green-700/10 ${
+                            m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-brand-ink dark:text-brand-vanilla">
+                              {m.tipo === "ingreso"
+                                ? (m.modulo_origen_slug
+                                    ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug)
+                                    : "Otro")
+                                : (m.categoria_gasto_nombre ?? "Otro")}
+                              {m.motivo && <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> · {m.motivo}</span>}
+                            </div>
+                            <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
+                              {formatearHora(m.created_at)} · {m.metodo_pago}
+                            </div>
+                          </div>
+                          <span
+                            className={`shrink-0 font-semibold ${
+                              m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                            }`}
+                          >
+                            {m.tipo === "egreso" ? "-" : "+"}
+                            {formatMoney(m.monto)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )
+            )}
 
             {esSuperRoot && (
               <div className="mt-3 flex flex-col gap-3 rounded-lg border-2 border-dashed border-red-300 p-3 dark:border-red-800">

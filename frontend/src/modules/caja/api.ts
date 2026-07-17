@@ -46,10 +46,17 @@ export interface MovimientoCaja {
   categoria_gasto_nombre: string | null;
 }
 
+export interface IngresoPorArea {
+  slug: string;
+  nombre: string;
+  total: number;
+}
+
 export interface ResumenTurno {
   turno: TurnoCaja;
   movimientos: MovimientoCaja[];
   saldos: { efectivo: number; banco: number; general: number };
+  ingresosPorArea: IngresoPorArea[];
   ingresosEfectivo: number;
   egresosEfectivo: number;
   ingresosBanco: number;
@@ -72,19 +79,11 @@ export interface DiaHistorialCaja {
 
 export interface ResetearCajaResultado {
   turnoCerrado: TurnoCaja | null;
-  marcador: TurnoCaja;
   egresosBorrados: number;
-}
-
-export interface ProyeccionApertura {
-  hayCierreAnterior: boolean;
-  montoInicialEfectivo: number;
-  montoInicialBanco: number;
 }
 
 export const cajaApi = {
   obtenerTurnoActual: () => apiFetch<TurnoCaja | null>("/caja/turno-actual"),
-  obtenerProyeccionApertura: () => apiFetch<ProyeccionApertura>("/caja/proxima-apertura"),
   abrirTurno: (montoInicialEfectivo?: number, montoInicialBanco?: number) =>
     apiFetch<TurnoCaja>("/caja/turnos", {
       method: "POST",

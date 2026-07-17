@@ -3,8 +3,8 @@ import { z } from "zod";
 const METODOS_PAGO = ["efectivo", "banco"] as const;
 
 export const abrirTurnoSchema = z.object({
-  // Solo se usan si nunca se ha cerrado un turno antes (arranque del negocio);
-  // si existe un cierre previo, sus montos se heredan automáticamente y esto se ignora.
+  // Base declarada a mano por el cajero para el turno del día — no se hereda
+  // nada del cierre anterior, cada turno arranca con lo que se escriba aquí.
   montoInicialEfectivo: z.number().nonnegative().optional(),
   montoInicialBanco: z.number().nonnegative().optional(),
 });

@@ -20,11 +20,6 @@ export async function obtenerTurnoAbiertoController(_req: Request, res: Response
   return ok(res, turno);
 }
 
-export async function obtenerProyeccionAperturaController(_req: Request, res: Response) {
-  const proyeccion = await service.obtenerProyeccionApertura();
-  return ok(res, proyeccion);
-}
-
 export async function abrirTurnoController(req: Request, res: Response) {
   const data = abrirTurnoSchema.parse(req.body ?? {});
   const turno = await service.abrirTurno(req.auth!.usuarioId, data);
@@ -73,7 +68,7 @@ export async function editarMetodoPagoMovimientoController(req: Request, res: Re
 
 export async function resetearCajaController(req: Request, res: Response) {
   resetearCajaSchema.parse(req.body);
-  const resultado = await service.resetearCaja(req.auth!.usuarioId);
+  const resultado = await service.resetearCaja();
   return ok(res, resultado);
 }
 

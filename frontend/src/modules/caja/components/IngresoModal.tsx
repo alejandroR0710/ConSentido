@@ -4,15 +4,7 @@ import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { cajaApi, type ModuloOrigenSlug } from "../api";
-
-const MODULOS_ORIGEN: { value: ModuloOrigenSlug; label: string }[] = [
-  { value: "migao", label: "Migao (POS)" },
-  { value: "con_sentido", label: "Con Sentido" },
-  { value: "talleres", label: "Talleres" },
-  { value: "pedidos", label: "Pedidos" },
-  { value: "insumos", label: "Insumos" },
-  { value: "general", label: "General" },
-];
+import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface IngresoModalProps {
   onCerrar: () => void;

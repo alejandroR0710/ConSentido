@@ -16,24 +16,9 @@ export async function obtenerTurnoAbierto() {
 }
 
 /**
- * Vista previa de con cuánto va a abrir el próximo turno, para mostrarla ANTES
- * de que el cajero confirme "Abrir turno" (si no, tiene que adivinar o abrir a
- * ciegas para enterarse). Misma cuenta que hace `abrirTurno`, pero de solo
- * lectura — no crea nada.
- */
-export async function obtenerProyeccionApertura() {
-  const ultimoCerrado = await repo.findUltimoTurnoCerrado();
-  return {
-    hayCierreAnterior: ultimoCerrado !== null,
-    montoInicialEfectivo: ultimoCerrado ? Number(ultimoCerrado.montoFinalDeclaradoEfectivo) : 0,
-    montoInicialBanco: ultimoCerrado ? Number(ultimoCerrado.montoFinalCalculadoBanco) : 0,
-  };
-}
-
-/**
- * Abre el turno del día. El ingreso es diario: los montos iniciales (efectivo y
- * banco) se heredan automáticamente del cierre del turno anterior, sin importar
- * qué cajero lo abrió. Solo puede haber un turno abierto para todo el negocio.
+ * Abre el turno del día con la base que el cajero declare (efectivo/banco).
+ * El negocio trabaja día a día: no se hereda nada del cierre anterior. Solo
+ * puede haber un turno abierto para todo el negocio a la vez.
  */
 export async function abrirTurno(cajeroId: string, input: AbrirTurnoInput) {
   const turnoAbierto = await repo.findTurnoAbierto();
@@ -41,15 +26,7 @@ export async function abrirTurno(cajeroId: string, input: AbrirTurnoInput) {
     throw Errors.conflict("Ya hay un turno de caja abierto. Ciérralo antes de abrir uno nuevo.");
   }
 
-  const ultimoCerrado = await repo.findUltimoTurnoCerrado();
-  const montoInicialEfectivo = ultimoCerrado
-    ? Number(ultimoCerrado.montoFinalDeclaradoEfectivo)
-    : (input.montoInicialEfectivo ?? 0);
-  const montoInicialBanco = ultimoCerrado
-    ? Number(ultimoCerrado.montoFinalCalculadoBanco)
-    : (input.montoInicialBanco ?? 0);
-
-  return repo.crearTurno(cajeroId, montoInicialEfectivo, montoInicialBanco);
+  return repo.crearTurno(cajeroId, input.montoInicialEfectivo ?? 0, input.montoInicialBanco ?? 0);
 }
 
 export async function cerrarTurno(turnoId: string, input: CerrarTurnoInput) {
@@ -79,6 +56,7 @@ export async function obtenerResumenTurno(turnoId: string) {
   const saldoEfectivo = Number(turno.montoInicialEfectivo) + suma.ingresosEfectivo - suma.egresosEfectivo;
   const saldoBanco = Number(turno.montoInicialBanco) + suma.ingresosBanco - suma.egresosBanco;
   const movimientos = await repo.listMovimientosPorTurno(turnoId);
+  const ingresosPorArea = await repo.sumIngresosPorModuloTurno(turnoId);
 
   return {
     turno,
@@ -88,6 +66,7 @@ export async function obtenerResumenTurno(turnoId: string) {
       banco: saldoBanco,
       general: saldoEfectivo + saldoBanco,
     },
+    ingresosPorArea,
     ...suma,
   };
 }
@@ -237,38 +216,35 @@ export async function crearCategoriaGasto(nombre: string) {
 }
 
 /**
- * Reset exclusivo de Super Root: NO borra ningún turno ni movimiento (el
- * historial queda intacto para los reportes de Caja). Si hay un turno abierto,
- * lo cierra primero con los montos ya calculados (sin conteo físico manual,
- * asume que el declarado coincide con el calculado). Después inserta un
- * "turno cero" ya cerrado, que pasa a ser el último cierre — así el próximo
- * turno que abra un Cajero hereda 0/0 en vez del saldo anterior.
+ * Reset exclusivo de Super Root: NO borra ningún turno ni movimiento previo (el
+ * historial queda intacto para los reportes de Caja). Fuerza el cierre del
+ * turno abierto sin pedir conteo físico (asume que el declarado coincide con
+ * el calculado) y borra por completo sus egresos. El próximo turno arranca con
+ * la base que el cajero declare al abrirlo, como cualquier otro día.
  */
-export async function resetearCaja(usuarioId: string) {
+export async function resetearCaja() {
   const turnoAbierto = await repo.findTurnoAbierto();
-  let turnoCerrado = null;
-  let egresosBorrados = 0;
-
-  if (turnoAbierto) {
-    // Los egresos del turno se borran ANTES de calcular el cierre, para que el
-    // monto final calculado ya no los reste (dejaron de existir, no solo de contar).
-    egresosBorrados = await repo.borrarEgresosDelTurno(turnoAbierto.id);
-
-    const { ingresosEfectivo, egresosEfectivo, ingresosBanco, egresosBanco } = await repo.sumMovimientosPorTurno(
-      turnoAbierto.id,
-    );
-    const montoFinalCalculadoEfectivo = Number(turnoAbierto.montoInicialEfectivo) + ingresosEfectivo - egresosEfectivo;
-    const montoFinalCalculadoBanco = Number(turnoAbierto.montoInicialBanco) + ingresosBanco - egresosBanco;
-    turnoCerrado = await repo.cerrarTurno(
-      turnoAbierto.id,
-      montoFinalCalculadoEfectivo,
-      montoFinalCalculadoEfectivo,
-      montoFinalCalculadoBanco,
-    );
+  if (!turnoAbierto) {
+    throw Errors.conflict("No hay ningún turno abierto para reiniciar.");
   }
 
-  const marcador = await repo.crearTurnoCerradoEnCero(usuarioId);
-  return { turnoCerrado, marcador, egresosBorrados };
+  // Los egresos del turno se borran ANTES de calcular el cierre, para que el
+  // monto final calculado ya no los reste (dejaron de existir, no solo de contar).
+  const egresosBorrados = await repo.borrarEgresosDelTurno(turnoAbierto.id);
+
+  const { ingresosEfectivo, egresosEfectivo, ingresosBanco, egresosBanco } = await repo.sumMovimientosPorTurno(
+    turnoAbierto.id,
+  );
+  const montoFinalCalculadoEfectivo = Number(turnoAbierto.montoInicialEfectivo) + ingresosEfectivo - egresosEfectivo;
+  const montoFinalCalculadoBanco = Number(turnoAbierto.montoInicialBanco) + ingresosBanco - egresosBanco;
+  const turnoCerrado = await repo.cerrarTurno(
+    turnoAbierto.id,
+    montoFinalCalculadoEfectivo,
+    montoFinalCalculadoEfectivo,
+    montoFinalCalculadoBanco,
+  );
+
+  return { turnoCerrado, egresosBorrados };
 }
 
 export async function obtenerTurnosPorFecha(fecha: string) {

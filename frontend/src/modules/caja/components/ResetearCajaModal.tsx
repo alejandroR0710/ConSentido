@@ -40,8 +40,9 @@ export function ResetearCajaModal({ onCerrar, onReseteado }: ResetearCajaModalPr
   return (
     <Modal titulo="Reiniciar Caja General" onCerrar={onCerrar}>
       <p className="mb-3 text-sm text-brand-ink dark:text-brand-vanilla">
-        Esto cierra el turno actual (si hay uno abierto) y hace que el próximo turno arranque en{" "}
-        <strong>$0 efectivo y $0 banco</strong>, en vez de heredar el saldo del cierre anterior.
+        Esto cierra el turno actual <strong>sin pedir el conteo físico de efectivo</strong> (asume que el efectivo
+        contado coincide con lo calculado). El próximo turno arranca con la base que declares al abrirlo, como
+        cualquier otro día.
       </p>
       <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
         Los <strong>egresos del turno abierto se borran por completo</strong> (esto no se puede deshacer). Los

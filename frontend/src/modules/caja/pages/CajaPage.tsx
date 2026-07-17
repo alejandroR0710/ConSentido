@@ -6,7 +6,7 @@ import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ProyeccionApertura, type ResumenTurno } from "../api";
+import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ResumenTurno } from "../api";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
 import { IngresoModal } from "../components/IngresoModal";
@@ -37,7 +37,6 @@ export function CajaPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
-  const [proyeccion, setProyeccion] = useState<ProyeccionApertura | null>(null);
   const [montoInicialEfectivo, setMontoInicialEfectivo] = useState(0);
   const [montoInicialBanco, setMontoInicialBanco] = useState(0);
   const [abriendo, setAbriendo] = useState(false);
@@ -62,11 +61,6 @@ export function CajaPage() {
       if (!turno) {
         setSinTurno(true);
         setResumen(null);
-        try {
-          setProyeccion(await cajaApi.obtenerProyeccionApertura());
-        } catch {
-          /* si falla, el formulario simplemente no muestra la proyección */
-        }
         return;
       }
       setSinTurno(false);
@@ -115,23 +109,23 @@ export function CajaPage() {
         <div>
           <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja General</h1>
           <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-            Un solo turno para todo el negocio. El saldo inicial se hereda del cierre anterior.
+            Un solo turno para todo el negocio. Cada turno arranca con la base que escribas — no se hereda nada del
+            día anterior.
           </p>
         </div>
-        <div className="rounded-lg border-2 border-brand-green-600 px-4 py-2 text-right dark:border-brand-green-500">
-          <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-            Efectivo que debe haber
+        {resumen && (
+          <div className="rounded-lg border-2 border-brand-green-600 px-4 py-2 text-right dark:border-brand-green-500">
+            <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+              Efectivo que debe haber
+            </div>
+            <div className="text-2xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+              {formatearMoneda(resumen.saldos.efectivo)}
+            </div>
+            <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Base con la que abrió el turno: {formatearMoneda(Number(resumen.turno.montoInicialEfectivo))}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-            {formatearMoneda(resumen ? resumen.saldos.efectivo : (proyeccion?.montoInicialEfectivo ?? 0))}
-          </div>
-          <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-            Base con la que abrió el turno:{" "}
-            {formatearMoneda(
-              resumen ? Number(resumen.turno.montoInicialEfectivo) : (proyeccion?.montoInicialEfectivo ?? 0),
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -144,51 +138,23 @@ export function CajaPage() {
         >
           <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">Abrir turno</h2>
 
-          {proyeccion?.hayCierreAnterior ? (
-            <>
-              <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                Con lo que dejó el cierre anterior, este turno abre así (no hace falta escribir nada):
-              </p>
-              <div className="mb-4 grid grid-cols-2 gap-2">
-                <div className="rounded-md border border-brand-vanilla-dark p-3 text-center dark:border-brand-green-700">
-                  <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-                    Efectivo
-                  </div>
-                  <div className="text-xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                    {formatearMoneda(proyeccion.montoInicialEfectivo)}
-                  </div>
-                </div>
-                <div className="rounded-md border border-brand-vanilla-dark p-3 text-center dark:border-brand-green-700">
-                  <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-                    Banco
-                  </div>
-                  <div className="text-xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                    {formatearMoneda(proyeccion.montoInicialBanco)}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                Todavía no hay ningún cierre anterior (primer turno de la caja) — escribe con cuánto arranca.
-              </p>
+          <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+            Escribe con cuánto arranca la caja hoy (no se hereda nada del día anterior).
+          </p>
 
-              <label className="mb-1 block text-xs font-medium">Efectivo inicial</label>
-              <MoneyInput
-                value={montoInicialEfectivo}
-                onChange={setMontoInicialEfectivo}
-                className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-              />
+          <label className="mb-1 block text-xs font-medium">Efectivo inicial</label>
+          <MoneyInput
+            value={montoInicialEfectivo}
+            onChange={setMontoInicialEfectivo}
+            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
 
-              <label className="mb-1 block text-xs font-medium">Banco inicial</label>
-              <MoneyInput
-                value={montoInicialBanco}
-                onChange={setMontoInicialBanco}
-                className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-              />
-            </>
-          )}
+          <label className="mb-1 block text-xs font-medium">Banco inicial</label>
+          <MoneyInput
+            value={montoInicialBanco}
+            onChange={setMontoInicialBanco}
+            className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
 
           <button
             type="submit"
@@ -330,7 +296,7 @@ export function CajaPage() {
 
       {modalAbierto === "cierre" && resumen && (
         <CerrarTurnoModal
-          turnoId={resumen.turno.id}
+          resumen={resumen}
           onCerrar={() => setModalAbierto(null)}
           onCerrado={async (mensajeCierre) => {
             setMensaje(mensajeCierre);

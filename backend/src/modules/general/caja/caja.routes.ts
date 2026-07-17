@@ -11,7 +11,6 @@ import {
   editarMetodoPagoMovimientoController,
   listarCategoriasGastoController,
   obtenerHistorialCajaController,
-  obtenerProyeccionAperturaController,
   obtenerResumenTurnoController,
   obtenerTurnoAbiertoController,
   obtenerTurnosPorFechaController,
@@ -25,13 +24,6 @@ export const cajaRouter = Router();
 cajaRouter.use(authMiddleware);
 
 cajaRouter.get("/turno-actual", requirePermission("general.caja.ver"), asyncHandler(obtenerTurnoAbiertoController));
-// Vista previa de con cuánto abrirá el próximo turno (heredado del último cierre),
-// para mostrarla antes de que el cajero confirme "Abrir turno".
-cajaRouter.get(
-  "/proxima-apertura",
-  requirePermission("general.caja.ver"),
-  asyncHandler(obtenerProyeccionAperturaController),
-);
 cajaRouter.post("/turnos", requirePermission("general.caja.abrir_turno"), asyncHandler(abrirTurnoController));
 cajaRouter.patch(
   "/turnos/:id/cerrar",
@@ -89,6 +81,6 @@ cajaRouter.patch(
   asyncHandler(editarMetodoPagoMovimientoController),
 );
 
-// Reset exclusivo de Super Root: no borra historial, solo hace que el próximo
-// turno arranque en 0/0 en vez de heredar el saldo anterior (ver caja.service.ts).
+// Reset exclusivo de Super Root: no borra historial, fuerza el cierre del
+// turno abierto sin conteo físico y borra sus egresos (ver caja.service.ts).
 cajaRouter.post("/reset", requirePermission("general.caja.resetear"), asyncHandler(resetearCajaController));

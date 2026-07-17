@@ -41,14 +41,6 @@ export async function findTurnoAbierto(executor: Executor = pool): Promise<Turno
   return result.rowCount ? mapTurno(result.rows[0]) : null;
 }
 
-/** El turno nuevo hereda sus montos iniciales de este cierre (efectivo declarado, banco calculado). */
-export async function findUltimoTurnoCerrado(): Promise<TurnoCaja | null> {
-  const result = await pool.query(
-    `SELECT * FROM turnos_caja WHERE estado = 'cerrado' ORDER BY cerrado_en DESC LIMIT 1`,
-  );
-  return result.rowCount ? mapTurno(result.rows[0]) : null;
-}
-
 export async function getTurnoById(turnoId: string): Promise<TurnoCaja | null> {
   const result = await pool.query(`SELECT * FROM turnos_caja WHERE id = $1`, [turnoId]);
   return result.rowCount ? mapTurno(result.rows[0]) : null;
@@ -89,25 +81,6 @@ export async function cerrarTurno(
   return mapTurno(result.rows[0]);
 }
 
-/**
- * Marcador de reset: un turno que nace y se cierra en el mismo instante con todo
- * en cero. No borra ningún turno/movimiento anterior (queda íntegro para el
- * historial) — simplemente se convierte en "el último cierre", así que el
- * próximo turno real que se abra hereda 0/0 en vez del saldo previo.
- */
-export async function crearTurnoCerradoEnCero(usuarioId: string): Promise<TurnoCaja> {
-  const result = await pool.query(
-    `INSERT INTO turnos_caja
-       (cajero_id, monto_inicial_efectivo, monto_inicial_banco,
-        monto_final_declarado_efectivo, monto_final_calculado_efectivo,
-        diferencia_efectivo, monto_final_calculado_banco, estado, cerrado_en)
-     VALUES ($1, 0, 0, 0, 0, 0, 0, 'cerrado', now())
-     RETURNING *`,
-    [usuarioId],
-  );
-  return mapTurno(result.rows[0]);
-}
-
 export interface SumaPorMetodo {
   ingresosEfectivo: number;
   egresosEfectivo: number;
@@ -133,6 +106,28 @@ export async function sumMovimientosPorTurno(turnoId: string): Promise<SumaPorMe
     ingresosBanco: Number(row.ingresos_banco),
     egresosBanco: Number(row.egresos_banco),
   };
+}
+
+export interface IngresoPorArea {
+  slug: string;
+  nombre: string;
+  total: number;
+}
+
+/** Cuánto entró por cada área (módulo de origen) dentro de un turno — para la
+ *  tabla de desglose al cerrar. LEFT JOIN desde `modulos` para que las áreas
+ *  sin movimientos en ese turno igual aparezcan, en 0. */
+export async function sumIngresosPorModuloTurno(turnoId: string): Promise<IngresoPorArea[]> {
+  const result = await pool.query(
+    `SELECT m.slug, m.nombre, COALESCE(SUM(mc.monto), 0) AS total
+       FROM modulos m
+       LEFT JOIN movimientos_caja mc
+              ON mc.modulo_origen_id = m.id AND mc.turno_id = $1 AND mc.tipo = 'ingreso'
+      GROUP BY m.id, m.slug, m.nombre
+      ORDER BY m.nombre`,
+    [turnoId],
+  );
+  return result.rows.map((row) => ({ slug: row.slug, nombre: row.nombre, total: Number(row.total) }));
 }
 
 export interface MovimientoCaja {

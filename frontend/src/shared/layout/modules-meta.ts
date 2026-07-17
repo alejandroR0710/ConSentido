@@ -13,6 +13,7 @@ export interface ModuloMeta {
 }
 
 export const MODULES_META: ModuloMeta[] = [
+  { slug: "migao", label: "Caja Migao", path: "/migao", icon: "🍽️", roles: ["Cajero"] },
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
   { slug: "general", label: "Caja", path: "/caja", icon: "💰", roles: ["Cajero"] },
   { slug: "general", label: "Historial de Caja", path: "/caja/historial", icon: "📅", roles: ["Cajero"] },
@@ -21,7 +22,6 @@ export const MODULES_META: ModuloMeta[] = [
   { slug: "con_sentido", label: "Con Sentido", path: "/con-sentido", icon: "🛍️" },
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
   { slug: "migao", label: "Mi historial", path: "/mesero/historial", icon: "🧾", roles: ["Mesero"] },
-  { slug: "migao", label: "Migao (POS)", path: "/migao", icon: "🍽️", roles: ["Cajero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
   { slug: "migao", label: "Historial", path: "/cocina/historial", icon: "🧾", roles: ["Cocina"] },
   { slug: "migao", label: "Menú", path: "/menu", icon: "🗂️", roles: ["Administrador"] },

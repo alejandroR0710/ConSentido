@@ -308,7 +308,7 @@ export function MigaoPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Migao (POS)</h1>
+        <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja Migao</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Cobro de mesas/órdenes. Cerrar o cancelar una orden es una acción exclusiva del rol Cajero.
         </p>

@@ -9,6 +9,7 @@ import { CocinaPage } from "./modules/migao/pages/CocinaPage";
 import { MenuPage } from "./modules/migao/pages/MenuPage";
 import { MeseroHistorialPage } from "./modules/migao/pages/MeseroHistorialPage";
 import { MeseroPage } from "./modules/migao/pages/MeseroPage";
+import { MigaoHistorialPage } from "./modules/migao/pages/MigaoHistorialPage";
 import { MigaoPage } from "./modules/migao/pages/MigaoPage";
 import { RequireAuth } from "./shared/auth/RequireAuth";
 import { AppShell } from "./shared/layout/AppShell";
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/mesero" element={<MeseroPage />} />
         <Route path="/mesero/historial" element={<MeseroHistorialPage />} />
         <Route path="/migao" element={<MigaoPage />} />
+        <Route path="/migao/historial" element={<MigaoHistorialPage />} />
         <Route path="/cocina" element={<CocinaPage />} />
         <Route path="/cocina/historial" element={<CocinaHistorialPage />} />
         <Route path="/menu" element={<MenuPage />} />

@@ -1,54 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
-import { tieneAccesoTotal } from "../../../shared/auth/roles";
-import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import {
-  migaoApi,
-  type HistorialOrdenEntrada,
-  type ItemActivo,
-  type MetodoPago,
-  type OrdenDetalle,
-  type OrdenResumen,
-  type PagoInput,
-} from "../api";
+import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
-import { DetalleCuentaMigao } from "../components/DetalleCuentaMigao";
 import { EstadoBadge } from "../components/EstadoBadge";
-import { ResetearOrdenesModal } from "../components/ResetearOrdenesModal";
-import { BADGE_POR_ESTADO, ETIQUETA_POR_ESTADO, FILA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
+import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { formatCantidad } from "../format";
 
 const POLL_MS = 8000;
 
-function formatearFechaHora(fechaIso: string | null) {
-  if (!fechaIso) return "—";
-  return new Date(fechaIso).toLocaleString("es", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const FILA_HISTORIAL_POR_ESTADO: Record<string, string> = {
-  cerrada: "border-l-4 border-brand-green-600 bg-brand-green-50/40 dark:bg-brand-green-700/10",
-  cancelada: "border-l-4 border-red-400 bg-red-50/40 dark:bg-red-950/10",
-};
-
 export function MigaoPage() {
-  const { usuario } = useAuth();
-  // Reiniciar historial de órdenes es exclusivo de Super Root; corregir el
-  // método de pago de una cuenta ya cobrada es una capacidad más general que
-  // "Root" también tiene.
-  const esSuperRoot = usuario?.rol === "Super Root";
-  const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
-
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
-  const [historial, setHistorial] = useState<HistorialOrdenEntrada[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
@@ -68,29 +32,7 @@ export function MigaoPage() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cobrando, setCobrando] = useState(false);
-  const [modalAbierto, setModalAbierto] = useState<"cancelar" | "reset" | null>(null);
-  type MovimientoEditando =
-    | {
-        tipo: "ingreso_manual";
-        movimientoId: number | string;
-        metodoPagoActual: MetodoPago;
-        monto: number;
-        etiqueta: string;
-      }
-    | {
-        tipo: "orden";
-        movimientoId: number | string;
-        metodoPagoActual: MetodoPago;
-        monto: number;
-        etiqueta: string;
-        ordenId: string;
-        mesaNumero: string | null;
-        mesaPiso: number | null;
-        meseroNombre: string | null;
-        numeroPersonas: number | null;
-        fecha: string | null;
-      };
-  const [movimientoEditando, setMovimientoEditando] = useState<MovimientoEditando | null>(null);
+  const [modalAbierto, setModalAbierto] = useState<"cancelar" | null>(null);
 
   // Ref (no state) para que el intervalo de polling, creado una sola vez al montar,
   // siempre lea cuál es la orden seleccionada actual sin necesidad de recrearse.
@@ -106,7 +48,6 @@ export function MigaoPage() {
   // se incrementa en cada llamada, se descarta cualquier respuesta que ya no
   // sea la más reciente, sin importar el orden en que lleguen.
   const ordenesRequestIdRef = useRef(0);
-  const historialRequestIdRef = useRef(0);
 
   async function cargarOrdenes() {
     const requestId = ++ordenesRequestIdRef.current;
@@ -138,27 +79,13 @@ export function MigaoPage() {
     }
   }
 
-  async function cargarHistorial() {
-    const requestId = ++historialRequestIdRef.current;
-    try {
-      const historialData = await migaoApi.listarHistorialOrdenes();
-      if (requestId === historialRequestIdRef.current) setHistorial(historialData);
-    } catch {
-      /* la tabla de historial simplemente queda como estaba; el próximo sondeo reintenta */
-    }
-  }
-
   useEffect(() => {
     cargarOrdenes();
-    cargarHistorial();
-    const intervalo = setInterval(() => {
-      cargarOrdenes();
-      cargarHistorial();
-    }, POLL_MS);
+    const intervalo = setInterval(cargarOrdenes, POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
 
-  useRegistrarRefresco(() => Promise.all([cargarOrdenes(), cargarHistorial()]));
+  useRegistrarRefresco(cargarOrdenes);
 
   function reiniciarDivision() {
     setDividirCuenta(false);
@@ -194,7 +121,6 @@ export function MigaoPage() {
       setDetalle(null);
       setOrdenSeleccionadaId(null);
       await cargarOrdenes();
-      await cargarHistorial();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cerrar la orden");
     } finally {
@@ -297,13 +223,14 @@ export function MigaoPage() {
       setOrdenSeleccionadaId(null);
       reiniciarDivision();
       await cargarOrdenes();
-      await cargarHistorial();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cerrar la orden");
     } finally {
       setCobrando(false);
     }
   }
+
+  const ordenActual = ordenes.find((o) => o.id === ordenSeleccionadaId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -314,72 +241,66 @@ export function MigaoPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          <table className="w-full min-w-[360px] text-left text-sm">
-            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
-              <tr>
-                <th className="px-3 py-2">Mesa</th>
-                <th className="px-3 py-2">Mesero</th>
-                <th className="px-3 py-2">Cliente</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
-                    Cargando...
-                  </td>
-                </tr>
-              ) : ordenes.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
-                    No hay órdenes abiertas.
-                  </td>
-                </tr>
-              ) : (
-                ordenes.map((o) => {
-                  const estadoCocina = estadoAgregadoOrden(o.id, itemsActivos);
-                  return (
-                    <tr
-                      key={o.id}
-                      onClick={() => seleccionarOrden(o.id)}
-                      className={`cursor-pointer border-t border-brand-vanilla-dark hover:bg-brand-green-50 dark:border-brand-green-700 dark:hover:bg-brand-green-700/30 ${
-                        estadoCocina ? FILA_POR_ESTADO[estadoCocina] : ""
-                      } ${ordenSeleccionadaId === o.id ? "bg-brand-green-50 dark:bg-brand-green-700/30" : ""}`}
-                    >
-                      <td className="px-3 py-2">
-                        {o.mesa_numero ?? "—"}
-                        {o.mesa_piso && (
-                          <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (piso {o.mesa_piso})</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{o.mesero_nombre ?? "—"}</td>
-                      <td className="px-3 py-2">{o.cliente_nombre ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        {estadoCocina ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${BADGE_POR_ESTADO[estadoCocina]}`}
-                          >
-                            {ETIQUETA_POR_ESTADO[estadoCocina]}
-                          </span>
-                        ) : (
-                          o.estado
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{formatMoney(o.total)}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.2fr]">
+        <div className="flex flex-col gap-3">
+          <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
+            Órdenes abiertas {ordenes.length > 0 && <span className="text-brand-ink/50">({ordenes.length})</span>}
+          </h2>
+
+          {loading ? (
+            <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
+              Cargando...
+            </p>
+          ) : ordenes.length === 0 ? (
+            <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
+              No hay órdenes abiertas.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {ordenes.map((o) => {
+                const estadoCocina = estadoAgregadoOrden(o.id, itemsActivos);
+                const seleccionada = ordenSeleccionadaId === o.id;
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => seleccionarOrden(o.id)}
+                    className={`rounded-lg p-4 text-left transition-colors hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30 ${
+                      estadoCocina
+                        ? BORDE_POR_ESTADO[estadoCocina]
+                        : "border border-brand-vanilla-dark dark:border-brand-green-700"
+                    } ${seleccionada ? "bg-brand-green-50 dark:bg-brand-green-700/30" : ""}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
+                        Mesa {o.mesa_numero ?? "—"}
+                        {o.mesa_piso && <span className="text-sm font-normal"> (piso {o.mesa_piso})</span>}
+                      </div>
+                      {estadoCocina && (
+                        <span
+                          className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold ${BADGE_POR_ESTADO[estadoCocina]}`}
+                        >
+                          {ETIQUETA_POR_ESTADO[estadoCocina]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                      {o.mesero_nombre && <span>Mesero: {o.mesero_nombre} · </span>}
+                      {o.cliente_nombre && <span>Cliente: {o.cliente_nombre} · </span>}
+                      Total {formatMoney(o.total)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
-          <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">Detalle para cobro</h2>
+        <div className="sticky top-4 rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
+          <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">
+            {ordenActual
+              ? `Detalle para cobro · Mesa ${ordenActual.mesa_numero ?? "—"}`
+              : "Detalle para cobro"}
+          </h2>
 
           {!detalle ? (
             <p className="text-sm text-brand-ink/60">Selecciona una orden de la lista para ver su detalle.</p>
@@ -564,144 +485,6 @@ export function MigaoPage() {
         </div>
       </div>
 
-      <div>
-        <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">
-          Historial (órdenes cobradas/canceladas + ingresos manuales de Migao)
-        </h2>
-        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          <table className="w-full min-w-[420px] text-left text-sm">
-            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
-              <tr>
-                <th className="px-3 py-2">Mesa</th>
-                <th className="px-3 py-2">Mesero</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Método</th>
-                <th className="px-3 py-2">Fecha y hora</th>
-                <th className="px-3 py-2">Total</th>
-                {puedeEditarPagos && <th className="px-3 py-2"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {historial.length === 0 ? (
-                <tr>
-                  <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
-                    Todavía no hay órdenes cobradas ni canceladas.
-                  </td>
-                </tr>
-              ) : (
-                historial.map((h) =>
-                  h.tipo === "ingreso_manual" ? (
-                    <tr
-                      key={`ingreso-${h.id}`}
-                      className="border-t border-l-4 border-brand-vanilla-dark border-l-brand-green-400 bg-brand-green-50/20 dark:border-brand-green-700 dark:bg-brand-green-700/10"
-                    >
-                      <td className="px-3 py-2 italic text-brand-ink/60 dark:text-brand-vanilla/60">
-                        {h.motivo ?? "Sin mesa (ingreso manual)"}
-                      </td>
-                      <td className="px-3 py-2">{h.usuario_nombre ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded-full bg-brand-green-400 px-2 py-0.5 text-xs font-bold whitespace-nowrap text-white">
-                          Ingreso manual
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{h.metodo_pago}</td>
-                      <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
-                      <td className="px-3 py-2">{formatMoney(h.monto)}</td>
-                      {puedeEditarPagos && (
-                        <td className="px-3 py-2">
-                          <button
-                            onClick={() =>
-                              setMovimientoEditando({
-                                tipo: "ingreso_manual",
-                                movimientoId: h.id,
-                                metodoPagoActual: h.metodo_pago as MetodoPago,
-                                monto: Number(h.monto),
-                                etiqueta: h.motivo ?? "Ingreso manual",
-                              })
-                            }
-                            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                          >
-                            Editar
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ) : (
-                    <tr
-                      key={h.id}
-                      className={`border-t border-brand-vanilla-dark dark:border-brand-green-700 ${
-                        FILA_HISTORIAL_POR_ESTADO[h.estado] ?? ""
-                      }`}
-                    >
-                      <td className="px-3 py-2">
-                        {h.mesa_numero ?? "—"}
-                        {h.mesa_piso && (
-                          <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (piso {h.mesa_piso})</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{h.mesero_nombre ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${
-                            h.estado === "cerrada" ? "bg-brand-green-600 text-brand-vanilla" : "bg-red-400 text-white"
-                          }`}
-                        >
-                          {h.estado === "cerrada" ? "Cobrada" : "Cancelada"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{h.metodo_pago ?? "—"}</td>
-                      <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
-                      <td className="px-3 py-2">{formatMoney(h.total)}</td>
-                      {puedeEditarPagos && (
-                        <td className="px-3 py-2">
-                          {h.estado === "cerrada" && h.movimiento_id != null && (
-                            <button
-                              onClick={() =>
-                                setMovimientoEditando({
-                                  tipo: "orden",
-                                  movimientoId: h.movimiento_id!,
-                                  metodoPagoActual: h.metodo_pago!,
-                                  monto: Number(h.total),
-                                  etiqueta: `Mesa ${h.mesa_numero ?? "—"}`,
-                                  ordenId: h.id,
-                                  mesaNumero: h.mesa_numero,
-                                  mesaPiso: h.mesa_piso,
-                                  meseroNombre: h.mesero_nombre,
-                                  numeroPersonas: h.numero_personas,
-                                  fecha: h.closed_at,
-                                })
-                              }
-                              className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                            >
-                              Editar
-                            </button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ),
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {esSuperRoot && (
-        <div className="rounded-lg border-2 border-dashed border-red-300 p-4 dark:border-red-800">
-          <h2 className="mb-1 font-medium text-red-600">Zona de Super Root</h2>
-          <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-            Borra por completo el historial de órdenes (no queda nada para consultar después).
-          </p>
-          <button
-            onClick={() => setModalAbierto("reset")}
-            className="w-full max-w-xs rounded-md border-2 border-red-600 px-4 py-2 font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-          >
-            Reiniciar historial de órdenes
-          </button>
-        </div>
-      )}
-
       {modalAbierto === "cancelar" && ordenSeleccionadaId && (
         <CancelarOrdenModal
           ordenId={ordenSeleccionadaId}
@@ -711,44 +494,8 @@ export function MigaoPage() {
             setDetalle(null);
             setOrdenSeleccionadaId(null);
             await cargarOrdenes();
-            await cargarHistorial();
           }}
         />
-      )}
-
-      {modalAbierto === "reset" && (
-        <ResetearOrdenesModal
-          onCerrar={() => setModalAbierto(null)}
-          onReseteado={async (mensajeReset) => {
-            setMensaje(mensajeReset);
-            setDetalle(null);
-            setOrdenSeleccionadaId(null);
-            await cargarOrdenes();
-            await cargarHistorial();
-          }}
-        />
-      )}
-
-      {movimientoEditando && (
-        <EditarMetodoPagoModal
-          movimientoId={movimientoEditando.movimientoId}
-          metodoPagoActual={movimientoEditando.metodoPagoActual}
-          monto={movimientoEditando.monto}
-          etiqueta={movimientoEditando.etiqueta}
-          onCerrar={() => setMovimientoEditando(null)}
-          onGuardado={cargarHistorial}
-        >
-          {movimientoEditando.tipo === "orden" && (
-            <DetalleCuentaMigao
-              ordenId={movimientoEditando.ordenId}
-              mesaNumero={movimientoEditando.mesaNumero}
-              mesaPiso={movimientoEditando.mesaPiso}
-              meseroNombre={movimientoEditando.meseroNombre}
-              numeroPersonas={movimientoEditando.numeroPersonas}
-              fecha={movimientoEditando.fecha}
-            />
-          )}
-        </EditarMetodoPagoModal>
       )}
     </div>
   );

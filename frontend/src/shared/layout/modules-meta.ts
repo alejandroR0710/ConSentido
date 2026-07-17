@@ -14,8 +14,9 @@ export interface ModuloMeta {
 
 export const MODULES_META: ModuloMeta[] = [
   { slug: "migao", label: "Caja Migao", path: "/migao", icon: "🍽️", roles: ["Cajero"] },
+  { slug: "migao", label: "Historial Migao", path: "/migao/historial", icon: "🧾", roles: ["Cajero"] },
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
-  { slug: "general", label: "Caja", path: "/caja", icon: "💰", roles: ["Cajero"] },
+  { slug: "general", label: "Caja General", path: "/caja", icon: "💰", roles: ["Cajero"] },
   { slug: "general", label: "Historial de Caja", path: "/caja/historial", icon: "📅", roles: ["Cajero"] },
   { slug: "insumos", label: "Insumos", path: "/insumos", icon: "📦" },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },

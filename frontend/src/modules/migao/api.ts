@@ -47,6 +47,7 @@ export interface OrdenItem {
   estado: string;
   observaciones: string | null;
   subtotal: number;
+  es_para_llevar: boolean;
 }
 
 export interface HistorialEntry {
@@ -119,6 +120,7 @@ export interface Producto {
   categoria_id: number | null;
   categoria_nombre: string | null;
   descripcion: string | null;
+  es_para_llevar: boolean;
 }
 
 export interface ProductoAdmin extends Producto {
@@ -190,6 +192,10 @@ export const migaoApi = {
     apiFetch<ItemCocina[]>(`/migao/ordenes/${ordenId}/marcar-listo`, { method: "POST" }),
 
   listarProductos: () => apiFetch<Producto[]>("/migao/productos"),
+  // Solo los productos marcados "para llevar" — es lo único que ve el Cajero
+  // del catálogo, para cobrar envases/cargos adicionales (no tiene acceso al
+  // menú completo).
+  listarProductosParaLlevar: () => apiFetch<Producto[]>("/migao/productos/para-llevar"),
   crearProducto: (input: {
     nombre: string;
     precio: number;
@@ -197,6 +203,7 @@ export const migaoApi = {
     unidadMedida?: string;
     categoriaId?: number;
     descripcion?: string;
+    esParaLlevar?: boolean;
   }) => apiFetch<Producto>("/migao/productos", { method: "POST", body: input }),
   listarProductosAdmin: () => apiFetch<ProductoAdmin[]>("/migao/productos/admin"),
   editarProducto: (
@@ -209,8 +216,23 @@ export const migaoApi = {
       categoriaId?: number;
       descripcion?: string;
       activo?: boolean;
+      esParaLlevar?: boolean;
     },
   ) => apiFetch<ProductoAdmin>(`/migao/productos/${id}`, { method: "PATCH", body: input }),
+  // Vía acotada del Cajero para agregar un cargo "para llevar" al cobrar (ver
+  // agregarCargoParaLlevar en el backend: rechaza cualquier producto que no
+  // esté marcado así).
+  agregarCargoParaLlevar: (
+    ordenId: string,
+    productoId: string,
+    cantidad: number,
+    precioUnitario: number,
+    observaciones?: string,
+  ) =>
+    apiFetch<OrdenItem>(`/migao/ordenes/${ordenId}/items/para-llevar`, {
+      method: "POST",
+      body: { productoId, cantidad, precioUnitario, observaciones },
+    }),
   subirImagenProducto: (id: string, file: File) => apiUpload<ProductoAdmin>(`/migao/productos/${id}/imagen`, file),
   listarCategorias: () => apiFetch<CategoriaProducto[]>("/migao/categorias"),
   crearCategoria: (nombre: string) =>

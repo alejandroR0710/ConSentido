@@ -5,6 +5,7 @@ import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/compon
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
+import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
@@ -83,7 +84,7 @@ export function MigaoPage() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cobrando, setCobrando] = useState(false);
-  const [modalAbierto, setModalAbierto] = useState<"cancelar" | null>(null);
+  const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
 
   // Ref (no state) para que el intervalo de polling, creado una sola vez al montar,
   // siempre lea cuál es la orden seleccionada actual sin necesidad de recrearse.
@@ -166,6 +167,18 @@ export function MigaoPage() {
     setDetalle(null);
     setError(null);
     setMensaje(null);
+  }
+
+  /** Recarga el detalle sin tocar el método de pago ni la división ya elegidos
+   *  — a diferencia de seleccionarOrden(), que sí los reinicia porque cambia
+   *  de orden. Se usa después de agregar un cargo de "para llevar". */
+  async function refrescarDetalle() {
+    if (!ordenSeleccionadaId) return;
+    try {
+      setDetalle(await migaoApi.obtenerDetalle(ordenSeleccionadaId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo actualizar el detalle de la orden");
+    }
   }
 
   const pagoMixtoInvalido =
@@ -389,10 +402,15 @@ export function MigaoPage() {
                 {detalle.items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
+                    className={`flex items-center justify-between rounded-lg border p-3 ${
+                      item.es_para_llevar
+                        ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
+                        : "border-brand-vanilla-dark dark:border-brand-green-700"
+                    }`}
                   >
                     <div>
                       <div className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
+                        {item.es_para_llevar && "🥡 "}
                         {formatCantidad(item.cantidad)}× {item.producto_nombre}
                       </div>
                       <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -413,6 +431,13 @@ export function MigaoPage() {
                   </div>
                 ))}
               </div>
+
+              <button
+                onClick={() => setModalAbierto("para-llevar")}
+                className="w-full rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              >
+                🥡 Agregar para llevar
+              </button>
 
               {detalle.items.some((i) => i.estado === "pendiente" || i.estado === "preparando") && (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
@@ -597,6 +622,14 @@ export function MigaoPage() {
             setOrdenSeleccionadaId(null);
             await cargarOrdenes();
           }}
+        />
+      )}
+
+      {modalAbierto === "para-llevar" && ordenSeleccionadaId && (
+        <AgregarParaLlevarModal
+          ordenId={ordenSeleccionadaId}
+          onCerrar={() => setModalAbierto(null)}
+          onAgregado={refrescarDetalle}
         />
       )}
     </div>

@@ -7,6 +7,9 @@ export const crearProductoSchema = z.object({
   unidadMedida: z.string().trim().min(1).max(20).default("unidad"),
   categoriaId: z.number().int().positive().optional(),
   descripcion: z.string().trim().max(2000).optional(),
+  // Cargo de "para llevar" (ej. envases): habilita que el Cajero pueda
+  // agregarlo a una orden desde cobro (ver migao.ordenes.agregar_para_llevar).
+  esParaLlevar: z.boolean().default(false),
 });
 export type CrearProductoInput = z.infer<typeof crearProductoSchema>;
 
@@ -22,6 +25,7 @@ export const editarProductoSchema = z.object({
   categoriaId: z.number().int().positive().optional(),
   descripcion: z.string().trim().max(2000).optional(),
   activo: z.boolean().optional(),
+  esParaLlevar: z.boolean().optional(),
 });
 export type EditarProductoInput = z.infer<typeof editarProductoSchema>;
 

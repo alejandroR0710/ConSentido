@@ -327,6 +327,9 @@ CREATE TABLE productos (
   imagen_url    TEXT,
   descripcion   TEXT,
   activo        BOOLEAN NOT NULL DEFAULT true,
+  -- Cargo de "para llevar" (ej. envases): se agrega a una orden como un ítem
+  -- más, pero se resalta en cobro para no confundirlo con el consumo normal.
+  es_para_llevar BOOLEAN NOT NULL DEFAULT false,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

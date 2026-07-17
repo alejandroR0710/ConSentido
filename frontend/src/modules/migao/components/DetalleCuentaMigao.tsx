@@ -72,6 +72,7 @@ export function DetalleCuentaMigao({
               <li key={item.id} className="text-xs">
                 <div className="flex items-center justify-between">
                   <span>
+                    {item.es_para_llevar && "🥡 "}
                     {formatCantidad(item.cantidad)}× {item.producto_nombre}
                   </span>
                   <span>{formatMoney(item.subtotal)}</span>

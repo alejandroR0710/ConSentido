@@ -124,6 +124,11 @@ export function MenuPage() {
                         </td>
                         <td className="px-3 py-2">
                           {p.nombre}
+                          {p.es_para_llevar && (
+                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                              🥡 para llevar
+                            </span>
+                          )}
                           {p.descripcion && (
                             <details className="mt-1">
                               <summary className="cursor-pointer select-none text-xs text-brand-green-700 dark:text-brand-vanilla/80">

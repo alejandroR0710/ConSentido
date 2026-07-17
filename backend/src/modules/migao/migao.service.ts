@@ -64,6 +64,13 @@ export async function listarProductos() {
   return repo.listProductosMigao();
 }
 
+/** Solo los productos marcados como cargo de "para llevar" — lo que ve el
+ *  Cajero al cobrar (no tiene acceso al catálogo completo, ver
+ *  agregarCargoParaLlevar). */
+export async function listarProductosParaLlevar() {
+  return repo.listProductosParaLlevar();
+}
+
 export async function crearProducto(input: CrearProductoInput) {
   return repo.crearProductoMigao(input);
 }
@@ -140,6 +147,21 @@ export async function agregarItem(ordenId: string, input: AgregarItemInput, usua
     usuarioId,
   });
   return item;
+}
+
+/**
+ * Vía acotada para que el Cajero agregue un cargo de "para llevar" al cobrar,
+ * sin darle el permiso general de agregar cualquier producto (eso sigue
+ * siendo exclusivo del Mesero). Solo acepta productos marcados
+ * `es_para_llevar`; para cualquier otro producto responde 400, sin importar
+ * qué productoId le manden.
+ */
+export async function agregarCargoParaLlevar(ordenId: string, input: AgregarItemInput, usuarioId: string) {
+  const producto = await repo.getProductoMigaoById(input.productoId);
+  if (!producto || !producto.es_para_llevar) {
+    throw Errors.badRequest('Este producto no está marcado como "para llevar"');
+  }
+  return agregarItem(ordenId, input, usuarioId);
 }
 
 /**

@@ -21,6 +21,7 @@ export function NuevoProductoModal({
   const [precio, setPrecio] = useState(0);
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [descripcion, setDescripcion] = useState("");
+  const [esParaLlevar, setEsParaLlevar] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +54,7 @@ export function NuevoProductoModal({
         precio,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
+        esParaLlevar,
       });
       await onCreado();
       onCerrar();
@@ -120,6 +122,16 @@ export function NuevoProductoModal({
         placeholder="Ej. Jarra personal de chocolate caliente, queso, almojábana..."
         className="mb-4 w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <label className="mb-4 flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+        <input
+          type="checkbox"
+          checked={esParaLlevar}
+          onChange={(e) => setEsParaLlevar(e.target.checked)}
+          className="h-4 w-4"
+        />
+        Es para llevar (envase / cargo adicional)
+      </label>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

@@ -126,7 +126,7 @@ export async function crearOrden(
 
 export async function listProductosMigao() {
   const result = await pool.query(
-    `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, cp.nombre AS categoria_nombre
+    `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, p.es_para_llevar, cp.nombre AS categoria_nombre
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
@@ -136,6 +136,28 @@ export async function listProductosMigao() {
   return result.rows;
 }
 
+/** Solo los productos marcados como cargo de "para llevar" — para el picker
+ *  que usa el Cajero en cobro (ver agregarCargoParaLlevar). */
+export async function listProductosParaLlevar() {
+  const result = await pool.query(
+    `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, p.es_para_llevar, cp.nombre AS categoria_nombre
+       FROM productos p
+       JOIN modulos m ON m.id = p.modulo_id
+       LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+      WHERE m.slug = 'migao' AND p.activo = true AND p.es_para_llevar = true
+      ORDER BY p.nombre ASC`,
+  );
+  return result.rows;
+}
+
+export async function getProductoMigaoById(id: string) {
+  const result = await pool.query(
+    `SELECT id, nombre, precio, categoria_id, descripcion, es_para_llevar, activo FROM productos WHERE id = $1`,
+    [id],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
 export async function crearProductoMigao(params: {
   nombre: string;
   precio: number;
@@ -143,11 +165,12 @@ export async function crearProductoMigao(params: {
   unidadMedida: string;
   categoriaId?: number;
   descripcion?: string;
+  esParaLlevar: boolean;
 }) {
   const result = await pool.query(
-    `INSERT INTO productos (nombre, modulo_id, precio, costo, unidad_medida, categoria_id, descripcion)
-     VALUES ($1, (SELECT id FROM modulos WHERE slug = 'migao'), $2, $3, $4, $5, $6)
-     RETURNING id, nombre, precio, costo, unidad_medida, categoria_id, descripcion, activo`,
+    `INSERT INTO productos (nombre, modulo_id, precio, costo, unidad_medida, categoria_id, descripcion, es_para_llevar)
+     VALUES ($1, (SELECT id FROM modulos WHERE slug = 'migao'), $2, $3, $4, $5, $6, $7)
+     RETURNING id, nombre, precio, costo, unidad_medida, categoria_id, descripcion, activo, es_para_llevar`,
     [
       params.nombre,
       params.precio,
@@ -155,6 +178,7 @@ export async function crearProductoMigao(params: {
       params.unidadMedida,
       params.categoriaId ?? null,
       params.descripcion ?? null,
+      params.esParaLlevar,
     ],
   );
   return result.rows[0];
@@ -164,7 +188,7 @@ export async function crearProductoMigao(params: {
 export async function listProductosMigaoAdmin() {
   const result = await pool.query(
     `SELECT p.id, p.nombre, p.precio, p.costo, p.unidad_medida, p.imagen_url, p.categoria_id,
-            p.descripcion, cp.nombre AS categoria_nombre, p.activo
+            p.descripcion, cp.nombre AS categoria_nombre, p.activo, p.es_para_llevar
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
@@ -206,6 +230,7 @@ export async function actualizarProductoMigao(
     categoriaId?: number | null;
     descripcion?: string;
     activo?: boolean;
+    esParaLlevar?: boolean;
   },
 ) {
   const result = await pool.query(
@@ -216,9 +241,10 @@ export async function actualizarProductoMigao(
        unidad_medida = COALESCE($5, unidad_medida),
        categoria_id = COALESCE($6, categoria_id),
        descripcion = COALESCE($7, descripcion),
-       activo = COALESCE($8, activo)
+       activo = COALESCE($8, activo),
+       es_para_llevar = COALESCE($9, es_para_llevar)
      WHERE id = $1
-     RETURNING id, nombre, precio, costo, unidad_medida, imagen_url, categoria_id, descripcion, activo`,
+     RETURNING id, nombre, precio, costo, unidad_medida, imagen_url, categoria_id, descripcion, activo, es_para_llevar`,
     [
       id,
       data.nombre ?? null,
@@ -228,6 +254,7 @@ export async function actualizarProductoMigao(
       data.categoriaId ?? null,
       data.descripcion ?? null,
       data.activo ?? null,
+      data.esParaLlevar ?? null,
     ],
   );
   return result.rowCount ? result.rows[0] : null;
@@ -432,7 +459,7 @@ export async function actualizarMesaOrden(ordenId: string, mesaId: number, execu
 
 export async function getItemsPorOrden(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
-    `SELECT oi.*, p.nombre AS producto_nombre
+    `SELECT oi.*, p.nombre AS producto_nombre, p.es_para_llevar
        FROM orden_items oi
        JOIN productos p ON p.id = oi.producto_id
       WHERE oi.orden_id = $1

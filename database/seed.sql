@@ -25,6 +25,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_item',   'migao.ordenes.editar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cambiar_mesa',  'migao.ordenes.cambiar_mesa'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_para_llevar', 'migao.ordenes.agregar_para_llevar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'entregar_item', 'migao.ordenes.entregar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cerrar',       'migao.ordenes.cerrar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cancelar',     'migao.ordenes.cancelar'),
@@ -74,7 +75,8 @@ WHERE p.codigo IN (
   'general.caja.administrar_categorias',
   'migao.ordenes.ver',
   'migao.ordenes.cerrar',
-  'migao.ordenes.cancelar'
+  'migao.ordenes.cancelar',
+  'migao.ordenes.agregar_para_llevar'
 );
 
 -- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo.

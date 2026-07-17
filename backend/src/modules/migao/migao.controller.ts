@@ -62,6 +62,17 @@ export async function agregarItemController(req: Request, res: Response) {
   return created(res, item);
 }
 
+export async function listarProductosParaLlevarController(_req: Request, res: Response) {
+  const productos = await service.listarProductosParaLlevar();
+  return ok(res, productos);
+}
+
+export async function agregarCargoParaLlevarController(req: Request, res: Response) {
+  const data = agregarItemSchema.parse(req.body);
+  const item = await service.agregarCargoParaLlevar(req.params.id, data, req.auth!.usuarioId);
+  return created(res, item);
+}
+
 export async function editarItemController(req: Request, res: Response) {
   const data = editarItemSchema.parse(req.body);
   const item = await service.editarItem(req.params.id, data, req.auth!.usuarioId);

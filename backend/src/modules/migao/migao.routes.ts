@@ -4,6 +4,7 @@ import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { crearUploaderImagen } from "../../shared/middlewares/upload.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
+  agregarCargoParaLlevarController,
   agregarItemController,
   cambiarMesaController,
   cancelarOrdenController,
@@ -25,6 +26,7 @@ import {
   listarOrdenesAbiertasController,
   listarProductosAdminController,
   listarProductosController,
+  listarProductosParaLlevarController,
   marcarCheckItemController,
   marcarOrdenListaController,
   obtenerDetalleOrdenController,
@@ -44,6 +46,14 @@ migaoRouter.get("/mesas", requirePermission("migao.ordenes.ver"), asyncHandler(l
 // que no necesariamente tiene acceso a órdenes.
 migaoRouter.get("/productos", requirePermission("migao.productos.ver"), asyncHandler(listarProductosController));
 migaoRouter.post("/productos", requirePermission("migao.productos.crear"), asyncHandler(crearProductoController));
+// El Cajero no tiene migao.productos.ver (no ve el catálogo completo): esta
+// lista está acotada a los productos marcados "para llevar", lo único que
+// puede agregar a una orden desde cobro (ver agregarCargoParaLlevar).
+migaoRouter.get(
+  "/productos/para-llevar",
+  requirePermission("migao.ordenes.agregar_para_llevar"),
+  asyncHandler(listarProductosParaLlevarController),
+);
 // Categorías del menú (ej. Migaos, Bebidas calientes, Postres): el Administrador las
 // crea sobre la marcha al armar el menú, igual que las categorías de gasto en Caja.
 migaoRouter.get("/categorias", requirePermission("migao.productos.ver"), asyncHandler(listarCategoriasController));
@@ -95,6 +105,14 @@ migaoRouter.post(
   "/ordenes/:id/items",
   requirePermission("migao.ordenes.agregar_item"),
   asyncHandler(agregarItemController),
+);
+// Vía acotada para que el Cajero cobre envases/cargos "para llevar" sin darle
+// el permiso general de agregar cualquier producto (ver agregarCargoParaLlevar
+// en migao.service.ts: rechaza cualquier producto que no esté marcado así).
+migaoRouter.post(
+  "/ordenes/:id/items/para-llevar",
+  requirePermission("migao.ordenes.agregar_para_llevar"),
+  asyncHandler(agregarCargoParaLlevarController),
 );
 // Ítems activos (pendiente/preparando/listo) de todas las órdenes: el mesero hace
 // polling de esto para notificarse con sonido cuando cocina avanza un ítem.

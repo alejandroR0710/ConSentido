@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { Modal } from "../../../shared/components/Modal";
@@ -244,6 +246,12 @@ export function CajaHistorialPage() {
   const totalHoy = porFecha.get(hoyISO) ?? { fecha: hoyISO, ingresos: 0, egresos: 0, neto: 0, movimientos: 0 };
   const totalSemana = sumar(dias.filter((d) => d.fecha >= fechaISO(inicioSemana) && d.fecha <= hoyISO));
   const totalMes = sumar(dias.filter((d) => d.fecha >= fechaISO(inicioMes) && d.fecha <= hoyISO));
+
+  // Vista exclusiva de Root/Super Root: el Cajero opera desde "Caja General"
+  // pero no tiene por qué auditar el historial de ingresos/egresos.
+  if (!tieneAccesoTotal(usuario?.rol)) {
+    return <Navigate to="/caja" replace />;
+  }
 
   return (
     <div className="flex flex-col gap-6">

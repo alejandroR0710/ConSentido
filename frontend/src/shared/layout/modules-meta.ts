@@ -19,7 +19,9 @@ export const MODULES_META: ModuloMeta[] = [
   { slug: "migao", label: "Historial Migao", path: "/migao/historial", icon: "🧾", roles: ["Super Root", "Root"] },
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
   { slug: "general", label: "Caja General", path: "/caja", icon: "💰", roles: ["Cajero"] },
-  { slug: "general", label: "Historial de Caja", path: "/caja/historial", icon: "📅", roles: ["Cajero"] },
+  // Solo Root/Super Root: el Cajero opera desde "Caja General" pero no audita
+  // el historial de ingresos/egresos (ver el guard en CajaHistorialPage.tsx).
+  { slug: "general", label: "Historial de Caja", path: "/caja/historial", icon: "📅", roles: ["Super Root", "Root"] },
   { slug: "insumos", label: "Insumos", path: "/insumos", icon: "📦" },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },
   { slug: "con_sentido", label: "Con Sentido", path: "/con-sentido", icon: "🛍️" },

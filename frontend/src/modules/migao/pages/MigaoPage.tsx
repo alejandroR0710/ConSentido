@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -11,12 +12,61 @@ import { formatCantidad } from "../format";
 
 const POLL_MS = 8000;
 
+/** Cuánto de lo que se está cobrando es efectivo (para la calculadora de
+ *  vuelta): el total completo si el método es puro efectivo, la porción
+ *  correspondiente si es mixto, o 0 si es puro banco. */
+function montoEfectivoRequerido(pago: MetodoPagoValor, totalSiEsSimple: number): number {
+  if (pago.metodoPago === "efectivo") return totalSiEsSimple;
+  if (pago.metodoPago === "mixto") return pago.montoEfectivo;
+  return 0;
+}
+
+/** Ayuda mental para el cajero: cuánto dio el cliente y cuánto hay que
+ *  devolverle. Es puramente informativo — no se manda al backend, el monto
+ *  cobrado en efectivo sigue siendo el total (o la parte) a pagar, no lo que
+ *  el cliente entregó en mano. Solo aplica cuando hay efectivo de por medio. */
+function CalculadoraVuelta({
+  aPagar,
+  recibido,
+  onChange,
+}: {
+  aPagar: number;
+  recibido: number;
+  onChange: (valor: number) => void;
+}) {
+  const vuelta = recibido - aPagar;
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
+      <span className="w-16 shrink-0 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Recibí</span>
+      <MoneyInput
+        value={recibido}
+        onChange={onChange}
+        className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      />
+      <span
+        className={`w-32 shrink-0 text-right text-sm font-semibold ${
+          recibido <= 0
+            ? "text-brand-ink/40 dark:text-brand-vanilla/40"
+            : vuelta < 0
+              ? "text-red-600"
+              : "text-brand-green-700 dark:text-brand-vanilla"
+        }`}
+      >
+        {recibido <= 0 ? "—" : vuelta < 0 ? `Falta ${formatMoney(-vuelta)}` : `Vuelta ${formatMoney(vuelta)}`}
+      </span>
+    </div>
+  );
+}
+
 export function MigaoPage() {
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
+  // Cuánto dijo el cliente que entregaba en efectivo — solo para calcular la
+  // vuelta en pantalla, no se envía al backend (ver CalculadoraVuelta).
+  const [montoRecibido, setMontoRecibido] = useState(0);
   const [dividirCuenta, setDividirCuenta] = useState(false);
   const [numPartes, setNumPartes] = useState(2);
   // itemId (de orden_items) -> índice de parte (0-based) a la que quedó asignado.
@@ -28,6 +78,7 @@ export function MigaoPage() {
     { metodoPago: "efectivo" },
     { metodoPago: "efectivo" },
   ]);
+  const [montosRecibidosPartes, setMontosRecibidosPartes] = useState<number[]>([0, 0]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +143,7 @@ export function MigaoPage() {
     setNumPartes(2);
     setAsignaciones({});
     setPagosPartes([{ metodoPago: "efectivo" }, { metodoPago: "efectivo" }]);
+    setMontosRecibidosPartes([0, 0]);
   }
 
   async function seleccionarOrden(ordenId: string) {
@@ -99,12 +151,21 @@ export function MigaoPage() {
     setDetalle(null);
     setMensaje(null);
     setError(null);
+    setPago({ metodoPago: "efectivo" });
+    setMontoRecibido(0);
     reiniciarDivision();
     try {
       setDetalle(await migaoApi.obtenerDetalle(ordenId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el detalle de la orden");
     }
+  }
+
+  function volverALista() {
+    setOrdenSeleccionadaId(null);
+    setDetalle(null);
+    setError(null);
+    setMensaje(null);
   }
 
   const pagoMixtoInvalido =
@@ -169,6 +230,11 @@ export function MigaoPage() {
       while (copia.length < nuevo) copia.push({ metodoPago: "efectivo" });
       return copia;
     });
+    setMontosRecibidosPartes((actual) => {
+      const copia = actual.slice(0, nuevo);
+      while (copia.length < nuevo) copia.push(0);
+      return copia;
+    });
     // Las unidades que quedaron asignadas a una parte que ya no existe vuelven a quedar sin asignar.
     setAsignaciones((actual) => {
       const copia: Record<string, number> = {};
@@ -231,6 +297,7 @@ export function MigaoPage() {
   }
 
   const ordenActual = ordenes.find((o) => o.id === ordenSeleccionadaId);
+  const mostrarCobro = ordenSeleccionadaId !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -241,7 +308,10 @@ export function MigaoPage() {
         </p>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.2fr]">
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
+
+      {!mostrarCobro ? (
         <div className="flex flex-col gap-3">
           <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
             Órdenes abiertas {ordenes.length > 0 && <span className="text-brand-ink/50">({ordenes.length})</span>}
@@ -256,10 +326,9 @@ export function MigaoPage() {
               No hay órdenes abiertas.
             </p>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {ordenes.map((o) => {
                 const estadoCocina = estadoAgregadoOrden(o.id, itemsActivos);
-                const seleccionada = ordenSeleccionadaId === o.id;
                 return (
                   <button
                     key={o.id}
@@ -268,7 +337,7 @@ export function MigaoPage() {
                       estadoCocina
                         ? BORDE_POR_ESTADO[estadoCocina]
                         : "border border-brand-vanilla-dark dark:border-brand-green-700"
-                    } ${seleccionada ? "bg-brand-green-50 dark:bg-brand-green-700/30" : ""}`}
+                    }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
@@ -294,19 +363,29 @@ export function MigaoPage() {
             </div>
           )}
         </div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+          <button
+            onClick={volverALista}
+            className="self-start text-sm font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+          >
+            ← Volver a órdenes
+          </button>
 
-        <div className="sticky top-4 rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
-          <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">
-            {ordenActual
-              ? `Detalle para cobro · Mesa ${ordenActual.mesa_numero ?? "—"}`
-              : "Detalle para cobro"}
+          <h2 className="-mt-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            {ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
+            {ordenActual?.mesero_nombre && (
+              <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                Mesero: {ordenActual.mesero_nombre}
+              </span>
+            )}
           </h2>
 
           {!detalle ? (
-            <p className="text-sm text-brand-ink/60">Selecciona una orden de la lista para ver su detalle.</p>
+            <p className="text-sm text-brand-ink/60">Cargando detalle...</p>
           ) : (
             <>
-              <div className="mb-4 flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
                 {detalle.items.map((item) => (
                   <div
                     key={item.id}
@@ -331,17 +410,19 @@ export function MigaoPage() {
               </div>
 
               {detalle.items.some((i) => i.estado === "pendiente" || i.estado === "preparando") && (
-                <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                   Todavía hay productos en cocina sin terminar.
                 </p>
               )}
 
-              <div className="mb-4 flex items-center justify-between border-t border-brand-vanilla-dark pt-3 text-base font-semibold dark:border-brand-green-700">
-                <span>Total</span>
-                <span>{formatMoney(detalle.total)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-brand-green-50 px-4 py-3 dark:bg-brand-green-700/20">
+                <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">Total</span>
+                <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+                  {formatMoney(detalle.total)}
+                </span>
               </div>
 
-              <label className="mb-4 flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+              <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
                 <input
                   type="checkbox"
                   checked={dividirCuenta}
@@ -354,21 +435,27 @@ export function MigaoPage() {
 
               {!dividirCuenta ? (
                 <>
-                  <label className="mb-1 block text-xs font-medium">Método de pago</label>
-                  <div className="mb-4">
-                    <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={detalle.total} />
-                  </div>
+                  <label className="-mb-2 block text-xs font-medium">Método de pago</label>
+                  <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={detalle.total} />
+
+                  {pago.metodoPago !== "banco" && (
+                    <CalculadoraVuelta
+                      aPagar={montoEfectivoRequerido(pago, detalle.total)}
+                      recibido={montoRecibido}
+                      onChange={setMontoRecibido}
+                    />
+                  )}
 
                   <button
                     onClick={cerrarYCobrar}
                     disabled={cobrando || pagoMixtoInvalido}
-                    className="mb-2 w-full rounded-md bg-brand-green-700 px-3 py-2 text-sm font-medium text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                    className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                   >
                     {cobrando ? "Cobrando..." : "Cobrar y cerrar orden"}
                   </button>
                 </>
               ) : (
-                <div className="mb-4 flex flex-col gap-4 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
+                <div className="flex flex-col gap-4 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
                       ¿Entre cuántas partes?
@@ -427,7 +514,7 @@ export function MigaoPage() {
 
                   <div className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
                     {Array.from({ length: numPartes }, (_, idx) => (
-                      <div key={idx} className="flex flex-col gap-1">
+                      <div key={idx} className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
                             Parte {idx + 1}
@@ -447,6 +534,19 @@ export function MigaoPage() {
                           }
                           totalFijo={subtotalParte(idx)}
                         />
+                        {pagosPartes[idx].metodoPago !== "banco" && (
+                          <CalculadoraVuelta
+                            aPagar={montoEfectivoRequerido(pagosPartes[idx], subtotalParte(idx))}
+                            recibido={montosRecibidosPartes[idx] ?? 0}
+                            onChange={(valor) =>
+                              setMontosRecibidosPartes((actual) => {
+                                const copia = [...actual];
+                                copia[idx] = valor;
+                                return copia;
+                              })
+                            }
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -463,7 +563,7 @@ export function MigaoPage() {
                   <button
                     onClick={cerrarYCobrarDividido}
                     disabled={cobrando || !todosAsignados || algunaParteMixtaInvalida}
-                    className="w-full rounded-md bg-brand-green-700 px-3 py-2 text-sm font-medium text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                    className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                   >
                     {cobrando ? "Cobrando..." : `Cobrar y cerrar orden (dividida en ${numPartes})`}
                   </button>
@@ -479,11 +579,8 @@ export function MigaoPage() {
               </button>
             </>
           )}
-
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-          {mensaje && <p className="mt-3 text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
         </div>
-      </div>
+      )}
 
       {modalAbierto === "cancelar" && ordenSeleccionadaId && (
         <CancelarOrdenModal

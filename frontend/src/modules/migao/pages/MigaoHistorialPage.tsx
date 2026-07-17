@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
@@ -91,6 +92,12 @@ export function MigaoHistorialPage() {
   }, []);
 
   useRegistrarRefresco(cargarHistorial);
+
+  // Vista exclusiva de Root/Super Root: el Cajero cobra desde "Caja Migao" pero
+  // no tiene por qué auditar el historial ya cobrado/cancelado.
+  if (!puedeEditarPagos) {
+    return <Navigate to="/migao" replace />;
+  }
 
   return (
     <div className="flex flex-col gap-6">

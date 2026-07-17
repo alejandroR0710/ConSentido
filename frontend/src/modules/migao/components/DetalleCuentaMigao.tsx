@@ -69,11 +69,16 @@ export function DetalleCuentaMigao({
         ) : (
           <ul className="flex flex-col gap-0.5">
             {items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between text-xs">
-                <span>
-                  {formatCantidad(item.cantidad)}× {item.producto_nombre}
-                </span>
-                <span>{formatMoney(item.subtotal)}</span>
+              <li key={item.id} className="text-xs">
+                <div className="flex items-center justify-between">
+                  <span>
+                    {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                  </span>
+                  <span>{formatMoney(item.subtotal)}</span>
+                </div>
+                {item.observaciones && (
+                  <div className="font-semibold text-amber-700 dark:text-amber-400">⚠ {item.observaciones}</div>
+                )}
               </li>
             ))}
           </ul>

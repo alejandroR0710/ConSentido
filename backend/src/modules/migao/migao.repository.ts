@@ -261,7 +261,7 @@ export async function listItemsCocina() {
  */
 export async function listItemsDespachados() {
   const result = await pool.query(
-    `SELECT oi.id, oi.orden_id, oi.cantidad, oi.estado, oi.listo_cocina, oi.created_at,
+    `SELECT oi.id, oi.orden_id, oi.cantidad, oi.estado, oi.listo_cocina, oi.created_at, oi.observaciones,
             p.nombre AS producto_nombre, m.numero AS mesa_numero, m.piso AS mesa_piso,
             u.nombre AS mesero_nombre
        FROM orden_items oi

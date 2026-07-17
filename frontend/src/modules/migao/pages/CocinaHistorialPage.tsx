@@ -90,6 +90,11 @@ export function CocinaHistorialPage() {
                   >
                     {formatCantidad(item.cantidad)}× {item.producto_nombre}
                     <span className="ml-2 text-xs opacity-70">({item.estado})</span>
+                    {item.observaciones && (
+                      <span className="block text-xs font-semibold text-amber-700 dark:text-amber-400">
+                        ⚠ {item.observaciones}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

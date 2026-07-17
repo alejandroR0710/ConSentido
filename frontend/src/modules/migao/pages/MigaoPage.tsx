@@ -398,6 +398,11 @@ export function MigaoPage() {
                       <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                         {formatMoney(item.precio_unitario)} c/u
                       </div>
+                      {item.observaciones && (
+                        <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                          ⚠ {item.observaciones}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <EstadoBadge estado={item.estado} />

@@ -41,6 +41,10 @@ export function EditarItemModal({ item, onCerrar, onGuardar, onCancelarProducto 
 
   return (
     <Modal titulo={item.producto_nombre} onCerrar={onCerrar}>
+      {item.observaciones && (
+        <p className="mb-3 text-sm font-semibold text-amber-700 dark:text-amber-400">⚠ {item.observaciones}</p>
+      )}
+
       <label className="mb-1 block text-xs font-medium">Cantidad</label>
       <input
         type="number"

@@ -116,10 +116,10 @@ export function CajaPage() {
         {resumen && (
           <div className="rounded-lg border-2 border-brand-green-600 px-4 py-2 text-right dark:border-brand-green-500">
             <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-              Efectivo que debe haber
+              Ganancia en efectivo
             </div>
             <div className="text-2xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-              {formatearMoneda(resumen.saldos.efectivo)}
+              {formatearMoneda(resumen.ingresosEfectivo - resumen.egresosEfectivo)}
             </div>
             <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
               Base con la que abrió el turno: {formatearMoneda(Number(resumen.turno.montoInicialEfectivo))}
@@ -169,10 +169,10 @@ export function CajaPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-brand-vanilla-dark p-4 text-center dark:border-brand-green-700">
               <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-                Efectivo
+                Ganancia en efectivo
               </div>
               <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                {formatearMoneda(resumen.saldos.efectivo)}
+                {formatearMoneda(resumen.ingresosEfectivo - resumen.egresosEfectivo)}
               </div>
             </div>
             <div className="rounded-lg border border-brand-vanilla-dark p-4 text-center dark:border-brand-green-700">

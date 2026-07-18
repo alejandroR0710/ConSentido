@@ -6,6 +6,15 @@ import { pool } from "../../../shared/db/pool";
  * que un servidor no-UTC desplace el día al serializar a JSON.
  */
 
+/** Una cuenta pagada "administrativo" no generó ingreso real en Caja General
+ *  (ver migao.service.ts::cerrarOrden) — tampoco debe contar en analíticas de
+ *  pedidos/ganancias, aunque su `ordenes.estado` quede en 'cerrada' igual que
+ *  cualquier otra. Mismo criterio que ya usa migao.repository.ts::listOrdenesHistorial. */
+const SIN_PAGO_ADMINISTRATIVO = `NOT EXISTS (
+  SELECT 1 FROM ventas v JOIN pagos p ON p.venta_id = v.id
+   WHERE v.orden_id = o.id AND p.metodo_pago = 'administrativo'
+)`;
+
 export async function getResumenPedidos(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
@@ -13,23 +22,75 @@ export async function getResumenPedidos(desde: string, hasta: string) {
        COUNT(*) FILTER (WHERE estado = 'cancelada') AS canceladas,
        COALESCE(SUM(numero_personas) FILTER (WHERE estado = 'cerrada'), 0) AS comensales,
        COUNT(DISTINCT cliente_id) FILTER (WHERE estado = 'cerrada' AND cliente_id IS NOT NULL) AS clientes_unicos
-     FROM ordenes
-     WHERE to_char(closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+     FROM ordenes o
+     WHERE to_char(closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+       AND (estado != 'cerrada' OR ${SIN_PAGO_ADMINISTRATIVO})`,
     [desde, hasta],
   );
   return result.rows[0];
 }
 
+/**
+ * Costos y unidades vendidas — a nivel de ítem (orden_items), así que sigue el
+ * criterio de "una orden con fan-out por ítem" que ya se usa en el resto de la
+ * app: la exclusión de "administrativo" y el filtro de fecha se resuelven en
+ * una CTE a nivel de ORDEN antes de unir con orden_items, para no repetir la
+ * subconsulta EXISTS por cada fila de producto.
+ */
 export async function getGanancias(desde: string, hasta: string) {
   const result = await pool.query(
-    `SELECT
-       COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS ingresos,
+    `WITH ordenes_validas AS (
+       SELECT o.id
+         FROM ordenes o
+        WHERE o.estado = 'cerrada'
+          AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND ${SIN_PAGO_ADMINISTRATIVO}
+     )
+     SELECT
        COALESCE(SUM(oi.cantidad * p.costo), 0) AS costos,
        COALESCE(SUM(oi.cantidad), 0) AS items_vendidos
-     FROM orden_items oi
-     JOIN ordenes o ON o.id = oi.orden_id
-     JOIN productos p ON p.id = oi.producto_id
-     WHERE o.estado = 'cerrada' AND oi.estado != 'cancelado'
+     FROM ordenes_validas ov
+     JOIN orden_items oi ON oi.orden_id = ov.id AND oi.estado != 'cancelado'
+     JOIN productos p ON p.id = oi.producto_id`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Ingresos reales de Migao por método de pago, tomados directamente de
+ * `movimientos_caja` (no de `orden_items`/`ventas`): así el monto ya viene con
+ * el descuento aplicado (`monto` es siempre el valor neto, ver
+ * caja.service.ts::registrarIngreso) y las cuentas "administrativo" quedan
+ * excluidas automáticamente — nunca generan una fila ahí.
+ */
+export async function getIngresosPorMetodoPago(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+     FROM movimientos_caja mc
+     JOIN modulos m ON m.id = mc.modulo_origen_id
+     WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
+       AND to_char(mc.created_at, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
+/** Resumen de cuentas pagadas "administrativo" en el rango — el detalle
+ *  completo de cada una vive en su propio historial (ver
+ *  migao.repository.ts::listOrdenesHistorialAdministrativo), esto es solo el
+ *  total/conteo para mostrar en el Dashboard. */
+export async function getResumenAdministrativo(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(*) AS cuentas,
+       COALESCE(SUM(v.total), 0) AS total
+     FROM ordenes o
+     JOIN ventas v ON v.orden_id = o.id
+     JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
+     WHERE o.estado = 'cerrada'
        AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
     [desde, hasta],
   );

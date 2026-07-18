@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { analyticsApi, type AnalyticsMigao } from "../api";
 
 type Rango = "hoy" | "semana" | "mes";
+
+const POLL_MS = 15000;
 
 function fechaISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -67,6 +70,8 @@ export function MigaoAnalyticsSection() {
 
   useEffect(() => {
     cargar();
+    const intervalo = setInterval(cargar, POLL_MS);
+    return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rango]);
 
@@ -117,6 +122,13 @@ export function MigaoAnalyticsSection() {
               valor={formatMoney(datos.ganancias.ganancia)}
               detalle={`${formatMoney(datos.ganancias.ingresos)} ingresos − ${formatMoney(datos.ganancias.costos)} costo`}
             />
+            <StatCard titulo="Ingresos en efectivo" valor={formatMoney(datos.ganancias.efectivo)} />
+            <StatCard titulo="Ingresos en banco" valor={formatMoney(datos.ganancias.banco)} />
+            <StatCard
+              titulo="Total cobrado (Migao)"
+              valor={formatMoney(datos.ganancias.ingresos)}
+              detalle={`${formatMoney(datos.ganancias.efectivo)} efectivo + ${formatMoney(datos.ganancias.banco)} banco`}
+            />
             <StatCard
               titulo="Productos vendidos"
               valor={String(datos.ganancias.itemsVendidos)}
@@ -132,6 +144,23 @@ export function MigaoAnalyticsSection() {
               detalle={`sobre ${datos.entrega.itemsEntregados} producto(s) entregado(s)`}
             />
           </div>
+
+          <Link
+            to="/migao/historial-administrativo"
+            className="flex items-center justify-between rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 hover:bg-amber-100 dark:border-amber-600 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+          >
+            <div>
+              <div className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Pago administrativo (no cuenta en Caja General)
+              </div>
+              <div className="text-xs text-amber-700/80 dark:text-amber-400/80">
+                {datos.administrativo.cuentas} cuenta(s) en este rango — ver historial completo
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+              {formatMoney(datos.administrativo.total)}
+            </div>
+          </Link>
 
           <div>
             <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">

@@ -7,15 +7,19 @@ import * as repo from "./analytics.repository";
  * operativos reales que analizar — se agregan cuando existan.
  */
 export async function obtenerAnalyticsMigao(desde: string, hasta: string) {
-  const [pedidos, ganancias, meseros, cocina, entrega] = await Promise.all([
+  const [pedidos, ganancias, ingresosPorMetodo, administrativo, meseros, cocina, entrega] = await Promise.all([
     repo.getResumenPedidos(desde, hasta),
     repo.getGanancias(desde, hasta),
+    repo.getIngresosPorMetodoPago(desde, hasta),
+    repo.getResumenAdministrativo(desde, hasta),
     repo.getParametrosMeseros(desde, hasta),
     repo.getParametrosCocina(desde, hasta),
     repo.getTiempoEntrega(desde, hasta),
   ]);
 
-  const ingresos = Number(ganancias.ingresos);
+  const efectivo = Number(ingresosPorMetodo.efectivo);
+  const banco = Number(ingresosPorMetodo.banco);
+  const ingresos = efectivo + banco;
   const costos = Number(ganancias.costos);
 
   return {
@@ -27,6 +31,8 @@ export async function obtenerAnalyticsMigao(desde: string, hasta: string) {
     },
     ganancias: {
       ingresos,
+      efectivo,
+      banco,
       costos,
       ganancia: ingresos - costos,
       itemsVendidos: Number(ganancias.items_vendidos),
@@ -46,6 +52,10 @@ export async function obtenerAnalyticsMigao(desde: string, hasta: string) {
     entrega: {
       itemsEntregados: Number(entrega.items_entregados),
       tiempoPromedioMin: entrega.tiempo_promedio_min !== null ? Number(entrega.tiempo_promedio_min) : null,
+    },
+    administrativo: {
+      cuentas: Number(administrativo.cuentas),
+      total: Number(administrativo.total),
     },
   };
 }

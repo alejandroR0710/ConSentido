@@ -45,62 +45,15 @@ function StatCard({ titulo, valor, detalle }: { titulo: string; valor: string; d
   );
 }
 
-/** Analíticas de Migao (módulo priorizado): pedidos, ganancias, desempeño por
- *  mesero y tiempos de Cocina/entrega. Los tiempos de Cocina y de entrega solo
- *  tienen datos desde que se agregó el registro de esas transiciones — pedidos
- *  anteriores a eso no aparecen ahí, aunque sí cuentan en pedidos/ganancias. */
-export function MigaoAnalyticsSection() {
-  const [rango, setRango] = useState<Rango>("hoy");
-  const [datos, setDatos] = useState<AnalyticsMigao | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function cargar() {
-    setLoading(true);
-    setError(null);
-    const { desde, hasta } = rangoFechas(rango);
-    try {
-      setDatos(await analyticsApi.obtenerMigao(desde, hasta));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudieron cargar las analíticas");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    cargar();
-    const intervalo = setInterval(cargar, POLL_MS);
-    return () => clearInterval(intervalo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rango]);
-
-  useRegistrarRefresco(cargar);
-
+/** Un bloque completo de métricas para un rango de fechas ya resuelto (Día,
+ *  Semana o Mes) — puramente presentacional, los datos ya vienen cargados
+ *  desde el componente padre (que es quien sondea las tres en paralelo). */
+function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsMigao | null }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Migao</h2>
-        <div className="flex gap-1 rounded-md border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
-          {(["hoy", "semana", "mes"] as Rango[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRango(r)}
-              className={`rounded px-3 py-1 text-sm capitalize ${
-                rango === r
-                  ? "bg-brand-green-700 text-brand-vanilla"
-                  : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h3 className="text-base font-semibold text-brand-green-700 dark:text-brand-vanilla">{titulo}</h3>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      {loading || !datos ? (
+      {!datos ? (
         <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>
       ) : (
         <>
@@ -129,10 +82,7 @@ export function MigaoAnalyticsSection() {
               valor={formatMoney(datos.ganancias.ingresos)}
               detalle={`${formatMoney(datos.ganancias.efectivo)} efectivo + ${formatMoney(datos.ganancias.banco)} banco`}
             />
-            <StatCard
-              titulo="Productos vendidos"
-              valor={String(datos.ganancias.itemsVendidos)}
-            />
+            <StatCard titulo="Productos vendidos" valor={String(datos.ganancias.itemsVendidos)} />
             <StatCard
               titulo="Tiempo de preparación (Cocina)"
               valor={formatMin(datos.cocina.tiempoPromedioMin)}
@@ -163,9 +113,9 @@ export function MigaoAnalyticsSection() {
           </Link>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            <h4 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
               Desempeño por mesero
-            </h3>
+            </h4>
             {datos.meseros.length === 0 ? (
               <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Sin órdenes cobradas en este rango.</p>
             ) : (
@@ -197,6 +147,58 @@ export function MigaoAnalyticsSection() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Analíticas de Migao (módulo priorizado): tres bloques fijos y simultáneos
+ *  — Día, Semana y Mes — cada uno en tiempo real (sondeo cada 15s), sin
+ *  necesidad de alternar entre ellos. Los tiempos de Cocina y de entrega solo
+ *  tienen datos desde que se agregó el registro de esas transiciones —
+ *  pedidos anteriores a eso no aparecen ahí, aunque sí cuentan en
+ *  pedidos/ganancias. */
+export function MigaoAnalyticsSection() {
+  const [datosHoy, setDatosHoy] = useState<AnalyticsMigao | null>(null);
+  const [datosSemana, setDatosSemana] = useState<AnalyticsMigao | null>(null);
+  const [datosMes, setDatosMes] = useState<AnalyticsMigao | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function cargar() {
+    setError(null);
+    try {
+      const rangoHoy = rangoFechas("hoy");
+      const rangoSemana = rangoFechas("semana");
+      const rangoMes = rangoFechas("mes");
+      const [hoy, semana, mes] = await Promise.all([
+        analyticsApi.obtenerMigao(rangoHoy.desde, rangoHoy.hasta),
+        analyticsApi.obtenerMigao(rangoSemana.desde, rangoSemana.hasta),
+        analyticsApi.obtenerMigao(rangoMes.desde, rangoMes.hasta),
+      ]);
+      setDatosHoy(hoy);
+      setDatosSemana(semana);
+      setDatosMes(mes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron cargar las analíticas");
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+    const intervalo = setInterval(cargar, POLL_MS);
+    return () => clearInterval(intervalo);
+  }, []);
+
+  useRegistrarRefresco(cargar);
+
+  return (
+    <div className="flex flex-col gap-8">
+      <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Migao</h2>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <RangoBlock titulo="Hoy" datos={datosHoy} />
+      <RangoBlock titulo="Esta semana" datos={datosSemana} />
+      <RangoBlock titulo="Este mes" datos={datosMes} />
     </div>
   );
 }

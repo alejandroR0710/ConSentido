@@ -25,6 +25,9 @@ const camposIngreso = {
   motivo: z.string().max(200).optional(),
   referenciaEntidad: z.string().max(80).optional(),
   referenciaId: z.string().max(64).optional(),
+  // Descuento (%) opcional sobre el monto bruto: lo que realmente se registra
+  // (y se suma al turno) ya es el monto neto — ver caja.service.ts::registrarIngreso.
+  descuentoPorcentaje: z.number().min(0).max(100).optional(),
 };
 export const registrarIngresoSchema = z.union([
   z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

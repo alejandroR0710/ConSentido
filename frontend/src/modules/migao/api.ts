@@ -15,12 +15,32 @@ export interface OrdenResumen {
 
 export interface OrdenHistorialResumen extends OrdenResumen {
   closed_at: string | null;
+  // `total` (heredado de OrdenResumen) es el subtotal SIN descuento; si hubo
+  // descuento, `total_cobrado` es lo que realmente se cobró.
+  descuento_porcentaje: number;
+  total_cobrado: string;
 }
 
 export interface HistorialEntradaOrden extends OrdenHistorialResumen {
   tipo: "orden";
   movimiento_id: number | null;
   metodo_pago: MetodoPago | null;
+}
+
+/** Cuenta cerrada con pago "administrativo": no generó ingreso en Caja
+ *  General, vive en su propio historial (ver HistorialAdministrativoPage). */
+export interface HistorialAdministrativoEntrada {
+  id: string;
+  estado: string;
+  created_at: string;
+  closed_at: string | null;
+  mesa_numero: string | null;
+  mesa_piso: number | null;
+  mesero_nombre: string | null;
+  referencia: string | null;
+  total: string;
+  descuento_porcentaje: number;
+  total_cobrado: string;
 }
 
 /** Ingreso registrado a mano desde Caja con origen "Migao (POS)" que no viene de
@@ -84,8 +104,10 @@ export type MetodoPago = "efectivo" | "banco";
 
 // "mixto" no es un método real (ver backend shared/utils/pago-mixto.ts): el
 // backend lo descompone en 1-2 pagos/movimientos ya con método puro.
+// "administrativo": exclusivo de Root/Super Root, no genera ingreso en Caja
+// General (ver migao.service.ts::cerrarOrden) y solo aplica al cobro simple.
 export type PagoInput =
-  | { metodoPago: "efectivo" | "banco" }
+  | { metodoPago: "efectivo" | "banco" | "administrativo" }
   | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
 
 // "servido" solo aparece en el historial de despachados (GET /cocina/historial);
@@ -139,11 +161,14 @@ export const migaoApi = {
   listarOrdenesAbiertas: () => apiFetch<OrdenResumen[]>("/migao/ordenes"),
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
   listarHistorialPropio: () => apiFetch<OrdenHistorialResumen[]>("/migao/ordenes/historial-propio"),
+  // Cuentas cerradas con pago "administrativo" — exclusivo de Root/Super Root.
+  listarHistorialAdministrativo: () =>
+    apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),
-  cerrarOrden: (ordenId: string, pago: PagoInput) =>
+  cerrarOrden: (ordenId: string, pago: PagoInput, descuentoPorcentaje?: number) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
       method: "POST",
-      body: { dividir: false, ...pago },
+      body: { dividir: false, ...pago, descuentoPorcentaje },
     }),
   // Cuenta dividida: cada parte trae su propio método de pago (simple o mixto)
   // y las UNIDADES de producto que le corresponden — un ítem con cantidad 2

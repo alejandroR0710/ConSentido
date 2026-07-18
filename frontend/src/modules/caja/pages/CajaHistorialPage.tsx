@@ -390,6 +390,12 @@ export function CajaHistorialPage() {
                             <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
                               {formatearHora(m.created_at)} · {m.metodo_pago}
                             </div>
+                            {m.descuento_porcentaje != null && (
+                              <div className="text-amber-700 dark:text-amber-400">
+                                Sin descuento: {formatMoney(m.monto_sin_descuento!)} · -
+                                {Number(m.descuento_porcentaje)}%
+                              </div>
+                            )}
                           </div>
                           <span
                             className={`shrink-0 font-semibold ${

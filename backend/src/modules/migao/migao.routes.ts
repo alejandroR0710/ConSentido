@@ -18,6 +18,7 @@ import {
   entregarItemController,
   listarCategoriasController,
   listarColaDeCocinaController,
+  listarHistorialAdministrativoController,
   listarHistorialDespachadosController,
   listarHistorialOrdenesController,
   listarHistorialPropioController,
@@ -92,6 +93,14 @@ migaoRouter.get(
   "/ordenes/historial-propio",
   requirePermission("migao.ordenes.ver"),
   asyncHandler(listarHistorialPropioController),
+);
+// Historial separado de cuentas pagadas "administrativo" — exclusivo de
+// Root/Super Root, registrado antes de /ordenes/:id por el mismo motivo que
+// /ordenes/historial.
+migaoRouter.get(
+  "/ordenes/historial-administrativo",
+  requirePermission("migao.ordenes.pago_administrativo"),
+  asyncHandler(listarHistorialAdministrativoController),
 );
 migaoRouter.get("/ordenes/:id", requirePermission("migao.ordenes.ver"), asyncHandler(obtenerDetalleOrdenController));
 // El mesero cambia la mesa de una orden abierta (ej. los comensales se

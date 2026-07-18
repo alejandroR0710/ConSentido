@@ -231,6 +231,12 @@ export function CajaPage() {
                       <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                         {formatearHora(m.created_at)}
                       </div>
+                      {m.descuento_porcentaje != null && (
+                        <div className="text-xs text-amber-700 dark:text-amber-400">
+                          Sin descuento: {formatearMoneda(Number(m.monto_sin_descuento))} · -
+                          {Number(m.descuento_porcentaje)}%
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div

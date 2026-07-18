@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
-import { MoneyInput } from "../../../shared/components/MoneyInput";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
+import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -22,49 +24,24 @@ function montoEfectivoRequerido(pago: MetodoPagoValor, totalSiEsSimple: number):
   return 0;
 }
 
-/** Ayuda mental para el cajero: cuánto dio el cliente y cuánto hay que
- *  devolverle. Es puramente informativo — no se manda al backend, el monto
- *  cobrado en efectivo sigue siendo el total (o la parte) a pagar, no lo que
- *  el cliente entregó en mano. Solo aplica cuando hay efectivo de por medio. */
-function CalculadoraVuelta({
-  aPagar,
-  recibido,
-  onChange,
-}: {
-  aPagar: number;
-  recibido: number;
-  onChange: (valor: number) => void;
-}) {
-  const vuelta = recibido - aPagar;
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
-      <span className="w-16 shrink-0 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Recibí</span>
-      <MoneyInput
-        value={recibido}
-        onChange={onChange}
-        className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-      <span
-        className={`w-32 shrink-0 text-right text-sm font-semibold ${
-          recibido <= 0
-            ? "text-brand-ink/40 dark:text-brand-vanilla/40"
-            : vuelta < 0
-              ? "text-red-600"
-              : "text-brand-green-700 dark:text-brand-vanilla"
-        }`}
-      >
-        {recibido <= 0 ? "—" : vuelta < 0 ? `Falta ${formatMoney(-vuelta)}` : `Vuelta ${formatMoney(vuelta)}`}
-      </span>
-    </div>
-  );
-}
-
 export function MigaoPage() {
+  const { usuario } = useAuth();
+  // "Pago administrativo" (no genera ingreso en Caja General) es exclusivo de
+  // Root/Super Root — Cajero cobra normal.
+  const puedeAdministrativo = tieneAccesoTotal(usuario?.rol);
+
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
+  // "Pago administrativo": no genera ingreso en Caja General, exclusivo de
+  // Root/Super Root. Aparte del selector normal (efectivo/banco/mixto) porque
+  // ese tipo se comparte con Caja General, que nunca debe ofrecer esta opción.
+  const [esAdministrativo, setEsAdministrativo] = useState(false);
+  // % de descuento sobre el total — solo aplica al cobro simple, no a cuenta
+  // dividida (ver migao.schema.ts::cerrarOrdenSchema).
+  const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(0);
   // Cuánto dijo el cliente que entregaba en efectivo — solo para calcular la
   // vuelta en pantalla, no se envía al backend (ver CalculadoraVuelta).
   const [montoRecibido, setMontoRecibido] = useState(0);
@@ -154,6 +131,8 @@ export function MigaoPage() {
     setError(null);
     setPago({ metodoPago: "efectivo" });
     setMontoRecibido(0);
+    setDescuentoPorcentaje(0);
+    setEsAdministrativo(false);
     reiniciarDivision();
     try {
       setDetalle(await migaoApi.obtenerDetalle(ordenId));
@@ -181,8 +160,15 @@ export function MigaoPage() {
     }
   }
 
+  // El descuento se aplica ANTES de elegir método de pago: el selector y la
+  // calculadora de vuelta siempre trabajan contra el total ya descontado.
+  const totalConDescuento = detalle ? detalle.total * (1 - descuentoPorcentaje / 100) : 0;
+
   const pagoMixtoInvalido =
-    pago.metodoPago === "mixto" && detalle !== null && Math.abs(pago.montoEfectivo + pago.montoBanco - detalle.total) > 0.01;
+    !esAdministrativo &&
+    pago.metodoPago === "mixto" &&
+    detalle !== null &&
+    Math.abs(pago.montoEfectivo + pago.montoBanco - totalConDescuento) > 0.01;
 
   async function cerrarYCobrar() {
     if (!ordenSeleccionadaId || pagoMixtoInvalido) return;
@@ -190,7 +176,11 @@ export function MigaoPage() {
     setError(null);
     setMensaje(null);
     try {
-      const resultado = await migaoApi.cerrarOrden(ordenSeleccionadaId, pago);
+      const resultado = await migaoApi.cerrarOrden(
+        ordenSeleccionadaId,
+        esAdministrativo ? { metodoPago: "administrativo" } : pago,
+        descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+      );
       setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}`);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
@@ -445,12 +435,36 @@ export function MigaoPage() {
                 </p>
               )}
 
-              <div className="flex items-center justify-between rounded-lg bg-brand-green-50 px-4 py-3 dark:bg-brand-green-700/20">
-                <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">Total</span>
-                <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                  {formatMoney(detalle.total)}
-                </span>
+              <div className="flex flex-col gap-2 rounded-lg bg-brand-green-50 px-4 py-3 dark:bg-brand-green-700/20">
+                {descuentoPorcentaje > 0 && (
+                  <div className="flex items-center justify-between text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                    <span>Sin descuento</span>
+                    <span className="line-through">{formatMoney(detalle.total)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">Total</span>
+                  <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+                    {formatMoney(totalConDescuento)}
+                  </span>
+                </div>
               </div>
+
+              {!dividirCuenta && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-brand-ink dark:text-brand-vanilla">Descuento %</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="1"
+                    value={descuentoPorcentaje || ""}
+                    onChange={(e) => setDescuentoPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))}
+                    placeholder="0"
+                    className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                  />
+                </div>
+              )}
 
               <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
                 <input
@@ -465,15 +479,35 @@ export function MigaoPage() {
 
               {!dividirCuenta ? (
                 <>
-                  <label className="-mb-2 block text-xs font-medium">Método de pago</label>
-                  <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={detalle.total} />
+                  {puedeAdministrativo && (
+                    <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+                      <input
+                        type="checkbox"
+                        checked={esAdministrativo}
+                        onChange={(e) => setEsAdministrativo(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      Pago administrativo (no cuenta en Caja General)
+                    </label>
+                  )}
 
-                  {pago.metodoPago !== "banco" && (
-                    <CalculadoraVuelta
-                      aPagar={montoEfectivoRequerido(pago, detalle.total)}
-                      recibido={montoRecibido}
-                      onChange={setMontoRecibido}
-                    />
+                  {esAdministrativo ? (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                      ⚠ Esta cuenta no generará ingreso en Caja General — solo queda en el historial administrativo.
+                    </p>
+                  ) : (
+                    <>
+                      <label className="-mb-2 block text-xs font-medium">Método de pago</label>
+                      <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalConDescuento} />
+
+                      {pago.metodoPago !== "banco" && (
+                        <CalculadoraVuelta
+                          aPagar={montoEfectivoRequerido(pago, totalConDescuento)}
+                          recibido={montoRecibido}
+                          onChange={setMontoRecibido}
+                        />
+                      )}
+                    </>
                   )}
 
                   <button

@@ -50,6 +50,13 @@ export async function listarHistorialPropioController(req: Request, res: Respons
   return ok(res, ordenes);
 }
 
+// Historial separado de cuentas pagadas "administrativo" (no generan ingreso
+// en Caja General) — exclusivo de Root/Super Root, ver migao.routes.ts.
+export async function listarHistorialAdministrativoController(_req: Request, res: Response) {
+  const ordenes = await service.listarHistorialAdministrativo();
+  return ok(res, ordenes);
+}
+
 export async function crearOrdenController(req: Request, res: Response) {
   const data = crearOrdenSchema.parse(req.body);
   const orden = await service.crearOrden(req.auth!.usuarioId, data);
@@ -121,7 +128,7 @@ export async function obtenerDetalleOrdenController(req: Request, res: Response)
 
 export async function cerrarOrdenController(req: Request, res: Response) {
   const data = cerrarOrdenSchema.parse(req.body);
-  const resultado = await service.cerrarOrden(req.params.id, data, req.auth!.usuarioId);
+  const resultado = await service.cerrarOrden(req.params.id, data, req.auth!.usuarioId, req.auth!.rolId);
   return ok(res, resultado);
 }
 

@@ -17,6 +17,15 @@ export const MODULES_META: ModuloMeta[] = [
   // Solo Root/Super Root: el Cajero cobra desde "Caja Migao" pero no audita el
   // historial ya cobrado/cancelado (ver el guard en MigaoHistorialPage.tsx).
   { slug: "migao", label: "Historial Migao", path: "/migao/historial", icon: "🧾", roles: ["Super Root", "Root"] },
+  // Cuentas con pago "administrativo" — no cuentan en Caja General, su propio
+  // historial aparte (ver el guard en HistorialAdministrativoPage.tsx).
+  {
+    slug: "migao",
+    label: "Historial Administrativo",
+    path: "/migao/historial-administrativo",
+    icon: "🗂️",
+    roles: ["Super Root", "Root"],
+  },
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
   { slug: "general", label: "Caja General", path: "/caja", icon: "💰", roles: ["Cajero"] },
   // Solo Root/Super Root: el Cajero opera desde "Caja General" pero no audita

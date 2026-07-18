@@ -1,5 +1,6 @@
 import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
+import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import * as repo from "./migao.repository";
@@ -58,6 +59,12 @@ export async function listarHistorialOrdenes(meseroId?: string) {
   return [...entradasOrdenes, ...entradasIngresos].sort(
     (a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime(),
   );
+}
+
+/** Historial de cuentas cerradas con pago "administrativo" — separado del
+ *  historial normal porque no representan dinero real en Caja General. */
+export async function listarHistorialAdministrativo() {
+  return repo.listOrdenesHistorialAdministrativo();
 }
 
 export async function listarProductos() {
@@ -367,12 +374,13 @@ export async function obtenerDetalleOrden(ordenId: string) {
 }
 
 /**
- * Cierra la mesa/orden y cobra. La ruta solo concede el permiso 'migao.ordenes.cerrar'
- * al rol Cajero (ver rbac.middleware) — ningún otro rol puede ejecutar esta acción.
+ * Cierra la mesa/orden y cobra. La ruta concede el permiso 'migao.ordenes.cerrar'
+ * a Cajero/Root/Super Root (ver rbac.middleware) — el método "administrativo"
+ * dentro de este mismo flujo se restringe aparte, solo a Root/Super Root.
  * Venta, pago, ingreso en Caja General y cierre de la orden ocurren en una sola
  * transacción: si algo falla (ej. no hay turno de caja abierto), todo se revierte.
  */
-export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usuarioId: string) {
+export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usuarioId: string, rolId: number) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -388,7 +396,19 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     // Los ítems cancelados no se cobran ni quedan registrados como vendidos.
     const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado");
     if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
-    const total = items.reduce((acc, i) => acc + i.subtotal, 0);
+    const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
+
+    // Descuento y "administrativo" solo existen en el cobro SIMPLE (no
+    // dividido) — ver comentario en migao.schema.ts::cerrarOrdenSchema.
+    const descuentoPorcentaje = !input.dividir ? (input.descuentoPorcentaje ?? 0) : 0;
+    const total = totalBruto * (1 - descuentoPorcentaje / 100);
+    const descuentoMonto = totalBruto - total;
+
+    if (!input.dividir && input.metodoPago === "administrativo") {
+      if (!(await tienePermiso(rolId, "migao.ordenes.pago_administrativo"))) {
+        throw Errors.forbidden("No tiene permiso para cerrar una cuenta como pago administrativo");
+      }
+    }
 
     if (input.dividir) {
       // Cada producto se reparte por UNIDADES, no por ítem completo: "2x
@@ -435,7 +455,9 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
       clienteId: orden.cliente_id,
       usuarioId,
       ordenId,
-      subtotal: total,
+      subtotal: totalBruto,
+      descuento: descuentoMonto,
+      descuentoPorcentaje,
       total,
     });
 
@@ -479,6 +501,18 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
           );
         }
       }
+    } else if (input.metodoPago === "administrativo") {
+      // Sin cajaService.registrarIngreso: esta cuenta NO genera ingreso real en
+      // Caja General — queda solo en el historial administrativo (ver
+      // listOrdenesHistorialAdministrativo).
+      await repo.crearPago(client, {
+        ordenId,
+        ventaId: venta.id,
+        metodoPago: "administrativo",
+        monto: total,
+        referencia: input.referencia,
+        usuarioId,
+      });
     } else {
       const lineas =
         input.metodoPago === "mixto"
@@ -495,6 +529,8 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
           usuarioId,
         });
 
+        // El % de descuento se pasa tal cual: registrarIngreso ya calcula el
+        // "monto sin descuento" proporcional a cada línea (efectivo/banco).
         await cajaService.registrarIngreso(
           {
             moduloOrigenSlug: "migao",
@@ -502,6 +538,7 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
             metodoPago: linea.metodoPago,
             referenciaEntidad: "ventas",
             referenciaId: venta.id,
+            descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
           },
           usuarioId,
           client,

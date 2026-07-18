@@ -200,7 +200,23 @@ export function MigaoHistorialPage() {
                     </td>
                     <td className="px-3 py-2">{h.metodo_pago ?? "—"}</td>
                     <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
-                    <td className="px-3 py-2">{formatMoney(h.total)}</td>
+                    <td className="px-3 py-2">
+                      {h.descuento_porcentaje > 0 ? (
+                        <>
+                          <div className="text-xs text-brand-ink/50 line-through dark:text-brand-vanilla/50">
+                            {formatMoney(h.total)}
+                          </div>
+                          <div>
+                            {formatMoney(h.total_cobrado)}{" "}
+                            <span className="text-xs text-amber-700 dark:text-amber-400">
+                              (-{h.descuento_porcentaje}%)
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        formatMoney(h.total)
+                      )}
+                    </td>
                     {puedeEditarPagos && (
                       <td className="px-3 py-2">
                         {h.estado === "cerrada" && h.movimiento_id != null && (
@@ -210,7 +226,7 @@ export function MigaoHistorialPage() {
                                 tipo: "orden",
                                 movimientoId: h.movimiento_id!,
                                 metodoPagoActual: h.metodo_pago!,
-                                monto: Number(h.total),
+                                monto: Number(h.total_cobrado),
                                 etiqueta: `Mesa ${h.mesa_numero ?? "—"}`,
                                 ordenId: h.id,
                                 mesaNumero: h.mesa_numero,

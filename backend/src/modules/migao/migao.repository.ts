@@ -54,7 +54,8 @@ export async function listOrdenesHistorial(meseroId?: string) {
     `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre, MAX(mc.movimiento_id) AS movimiento_id, MAX(mc.metodo_pago) AS metodo_pago,
-            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
+            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
+            MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -79,11 +80,44 @@ export async function listOrdenesHistorial(meseroId?: string) {
        ) mc ON true
       WHERE o.estado IN ('cerrada', 'cancelada')
         AND ($1::uuid IS NULL OR o.mesero_id = $1)
+        -- Las cuentas cerradas con pago administrativo no cuentan como "pago
+        -- diario": viven en su propio historial (ver listOrdenesHistorialAdministrativo).
+        AND NOT EXISTS (
+          SELECT 1 FROM pagos WHERE pagos.venta_id = v.id AND pagos.metodo_pago = 'administrativo'
+        )
       GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
                c.nombre, u.nombre
       ORDER BY o.closed_at DESC
       LIMIT 200`,
     [meseroId ?? null],
+  );
+  return result.rows;
+}
+
+/**
+ * Historial separado de cuentas cerradas con pago "administrativo": no
+ * generan ingreso en Caja General, así que no tiene sentido mezclarlas con
+ * `listOrdenesHistorial` (el pago diario real) — quedan aquí con su propia
+ * sumatoria. Exclusivo de Root/Super Root (ver migao.routes.ts).
+ */
+export async function listOrdenesHistorialAdministrativo() {
+  const result = await pool.query(
+    `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
+            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
+            MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
+            MAX(p.referencia) AS referencia,
+            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
+       FROM ordenes o
+       LEFT JOIN mesas m ON m.id = o.mesa_id
+       LEFT JOIN usuarios u ON u.id = o.mesero_id
+       LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
+       JOIN ventas v ON v.orden_id = o.id
+       JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
+      WHERE o.estado = 'cerrada'
+      GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
+               u.nombre
+      ORDER BY o.closed_at DESC
+      LIMIT 200`,
   );
   return result.rows;
 }
@@ -479,13 +513,29 @@ export async function cancelarOrdenEstado(client: PoolClient, ordenId: string) {
 
 export async function crearVenta(
   client: PoolClient,
-  params: { clienteId: string | null; usuarioId: string; ordenId: string; subtotal: number; total: number },
+  params: {
+    clienteId: string | null;
+    usuarioId: string;
+    ordenId: string;
+    subtotal: number;
+    descuento: number;
+    descuentoPorcentaje: number;
+    total: number;
+  },
 ) {
   const result = await client.query(
-    `INSERT INTO ventas (modulo_id, cliente_id, usuario_id, orden_id, subtotal, total)
-     VALUES ((SELECT id FROM modulos WHERE slug = 'migao'), $1, $2, $3, $4, $5)
+    `INSERT INTO ventas (modulo_id, cliente_id, usuario_id, orden_id, subtotal, descuento, descuento_porcentaje, total)
+     VALUES ((SELECT id FROM modulos WHERE slug = 'migao'), $1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [params.clienteId, params.usuarioId, params.ordenId, params.subtotal, params.total],
+    [
+      params.clienteId,
+      params.usuarioId,
+      params.ordenId,
+      params.subtotal,
+      params.descuento,
+      params.descuentoPorcentaje,
+      params.total,
+    ],
   );
   return result.rows[0];
 }

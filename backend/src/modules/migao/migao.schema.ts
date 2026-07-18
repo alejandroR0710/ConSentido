@@ -74,6 +74,12 @@ const unidadesSchema = z
   )
   .min(1, "Cada parte necesita al menos un producto");
 
+// Descuento (%) y método "administrativo" solo existen en el cobro SIMPLE (no
+// dividido): dividir ya reparte por unidades entre varias personas, y sumarle
+// descuento/administrativo por parte agrega demasiados casos borde para lo
+// que se pidió.
+const descuentoSchema = { descuentoPorcentaje: z.number().min(0).max(100).optional() };
+
 // Cobro normal (un solo método, o mixto efectivo+banco) o dividido (varias
 // partes, cada una con sus propias unidades de producto y su propio método
 // de pago, también simple o mixto) — ej. dos comensales que pidieron junto en
@@ -81,8 +87,12 @@ const unidadesSchema = z
 export const cerrarOrdenSchema = z.union([
   z.object({
     dividir: z.literal(false),
-    metodoPago: z.enum(["efectivo", "banco"]),
+    // "administrativo": exclusivo de Root/Super Root, validado en el service
+    // (esta ruta también la usa el Cajero para cobrar normal, ver
+    // migao.service.ts::cerrarOrden).
+    metodoPago: z.enum(["efectivo", "banco", "administrativo"]),
     referencia: z.string().max(100).optional(),
+    ...descuentoSchema,
   }),
   z
     .object({
@@ -91,6 +101,7 @@ export const cerrarOrdenSchema = z.union([
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),
       referencia: z.string().max(100).optional(),
+      ...descuentoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
   z.object({

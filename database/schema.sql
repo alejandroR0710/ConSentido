@@ -142,6 +142,11 @@ CREATE TABLE movimientos_caja (
   referencia_entidad VARCHAR(80), -- ej: 'ventas', 'pagos', 'pedido_abonos', 'actividad_cierres'
   referencia_id      VARCHAR(64),
   monto              NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  -- Si se aplicó descuento, estas dos quedan pobladas (si no, NULL): `monto`
+  -- ya es el valor real cobrado/sumado, estas son solo para mostrar el
+  -- detalle en los historiales de Caja (sin descuento + % aplicado).
+  monto_sin_descuento NUMERIC(12,2),
+  descuento_porcentaje NUMERIC(5,2),
   metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco')),
   motivo             VARCHAR(200),
   usuario_id         UUID NOT NULL REFERENCES usuarios(id), -- quien registra/retira
@@ -365,6 +370,9 @@ CREATE TABLE ventas (
   orden_id    UUID, -- FK diferida: se agrega tras crear la tabla ordenes (sección Migao)
   subtotal    NUMERIC(12,2) NOT NULL DEFAULT 0,
   descuento   NUMERIC(12,2) NOT NULL DEFAULT 0,
+  -- % de descuento aplicado (informativo, para mostrar en el historial junto
+  -- al monto ya calculado en `descuento`); `total` siempre es el valor real cobrado.
+  descuento_porcentaje NUMERIC(5,2) NOT NULL DEFAULT 0,
   impuestos   NUMERIC(12,2) NOT NULL DEFAULT 0,
   total       NUMERIC(12,2) NOT NULL DEFAULT 0,
   estado      VARCHAR(20) NOT NULL DEFAULT 'completada' CHECK (estado IN ('completada','anulada')),
@@ -473,7 +481,9 @@ CREATE TABLE pagos (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   orden_id    UUID REFERENCES ordenes(id),
   venta_id    UUID REFERENCES ventas(id),
-  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  -- 'administrativo': cuenta cerrada sin generar ingreso real en Caja General
+  -- (ver migao.service.ts::cerrarOrden) — se lleva en un historial aparte.
+  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco','administrativo')),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
   referencia  VARCHAR(100),
   usuario_id  UUID REFERENCES usuarios(id),

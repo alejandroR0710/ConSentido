@@ -299,12 +299,15 @@ export async function insertIngreso(
     referenciaEntidad?: string;
     referenciaId?: string;
     usuarioId: string;
+    montoSinDescuento?: number;
+    descuentoPorcentaje?: number;
   },
 ) {
   const result = await executor.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, modulo_origen_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id)
-     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8)
+       (turno_id, tipo, modulo_origen_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id,
+        monto_sin_descuento, descuento_porcentaje)
+     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       params.turnoId,
@@ -315,6 +318,8 @@ export async function insertIngreso(
       params.metodoPago,
       params.motivo ?? null,
       params.usuarioId,
+      params.montoSinDescuento ?? null,
+      params.descuentoPorcentaje ?? null,
     ],
   );
   return result.rows[0];

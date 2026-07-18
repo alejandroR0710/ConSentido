@@ -38,6 +38,10 @@ export interface MovimientoCaja {
   referencia_entidad: string | null;
   referencia_id: string | null;
   monto: string;
+  // Si hubo descuento, estas dos vienen pobladas (si no, null): `monto` ya es
+  // el valor real cobrado/sumado, estas son solo para mostrar el detalle.
+  monto_sin_descuento: string | null;
+  descuento_porcentaje: string | null;
   metodo_pago: MetodoPago;
   motivo: string | null;
   usuario_id: string | null;
@@ -95,8 +99,9 @@ export const cajaApi = {
       body: { montoFinalDeclaradoEfectivo },
     }),
   obtenerResumenTurno: (turnoId: string) => apiFetch<ResumenTurno>(`/caja/turnos/${turnoId}/resumen`),
-  registrarIngreso: (input: { moduloOrigenSlug: ModuloOrigenSlug; motivo?: string } & PagoInput) =>
-    apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
+  registrarIngreso: (
+    input: { moduloOrigenSlug: ModuloOrigenSlug; motivo?: string; descuentoPorcentaje?: number } & PagoInput,
+  ) => apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
   registrarEgreso: (input: { categoriaGastoId: number; motivo: string } & PagoInput) =>
     apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
   editarMetodoPagoMovimiento: (movimientoId: number | string, input: EditarPagoInput) =>

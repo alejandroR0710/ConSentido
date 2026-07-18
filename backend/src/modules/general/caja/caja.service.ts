@@ -91,8 +91,14 @@ export async function registrarIngreso(
 ) {
   const turno = await turnoAbiertoOrThrow(executor);
   const partes = descomponerPago(input);
+  const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
   const movimientos = [];
   for (const parte of partes) {
+    // Si hubo descuento, se guarda también cuánto habría sido esta línea sin
+    // descontar (proporcional: el % se aplicó de forma uniforme sobre el
+    // monto antes de repartir en efectivo/banco) — solo para mostrar el
+    // detalle en el historial de Caja, la suma sigue siendo `parte.monto`.
+    const montoSinDescuento = descuentoPorcentaje > 0 ? parte.monto / (1 - descuentoPorcentaje / 100) : undefined;
     movimientos.push(
       await repo.insertIngreso(executor, {
         turnoId: turno.id,
@@ -103,6 +109,8 @@ export async function registrarIngreso(
         referenciaEntidad: input.referenciaEntidad,
         referenciaId: input.referenciaId,
         usuarioId,
+        montoSinDescuento,
+        descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
       }),
     );
   }

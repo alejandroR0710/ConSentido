@@ -1,10 +1,16 @@
 import { pool } from "../../../shared/db/pool";
 
 /**
- * Todas las consultas filtran por to_char(...,'YYYY-MM-DD') en vez de ::date,
- * igual que el resto de "historial" de la app (ver caja.repository.ts) — evita
- * que un servidor no-UTC desplace el día al serializar a JSON.
+ * Todas las consultas filtran por to_char(columna AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')
+ * en vez de ::date, igual que el resto de "historial" de la app (ver
+ * caja.repository.ts) — evita que un servidor no-UTC desplace el día al
+ * serializar a JSON. El "AT TIME ZONE" explícito (no basta con la config de
+ * sesión del pool) es necesario porque si Supabase usa el connection pooler
+ * en modo transacción, cada consulta puede caer en una conexión física
+ * distinta y el "SET timezone" de sesión no aplica de forma confiable — esta
+ * conversión es correcta sin importar la sesión.
  */
+const BOGOTA = "AT TIME ZONE 'America/Bogota'";
 
 /** Una cuenta pagada "administrativo" no generó ingreso real en Caja General
  *  (ver migao.service.ts::cerrarOrden) — tampoco debe contar en analíticas de
@@ -23,7 +29,7 @@ export async function getResumenPedidos(desde: string, hasta: string) {
        COALESCE(SUM(numero_personas) FILTER (WHERE estado = 'cerrada'), 0) AS comensales,
        COUNT(DISTINCT cliente_id) FILTER (WHERE estado = 'cerrada' AND cliente_id IS NOT NULL) AS clientes_unicos
      FROM ordenes o
-     WHERE to_char(closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE to_char(closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
        AND (estado != 'cerrada' OR ${SIN_PAGO_ADMINISTRATIVO})`,
     [desde, hasta],
   );
@@ -43,7 +49,7 @@ export async function getGanancias(desde: string, hasta: string) {
        SELECT o.id
          FROM ordenes o
         WHERE o.estado = 'cerrada'
-          AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
           AND ${SIN_PAGO_ADMINISTRATIVO}
      )
      SELECT
@@ -72,7 +78,7 @@ export async function getIngresosPorMetodoPago(desde: string, hasta: string) {
      FROM movimientos_caja mc
      JOIN modulos m ON m.id = mc.modulo_origen_id
      WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
-       AND to_char(mc.created_at, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -91,7 +97,7 @@ export async function getResumenAdministrativo(desde: string, hasta: string) {
      JOIN ventas v ON v.orden_id = o.id
      JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
      WHERE o.estado = 'cerrada'
-       AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+       AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -104,7 +110,7 @@ export async function getParametrosMeseros(desde: string, hasta: string) {
               COALESCE(SUM(oi.cantidad * oi.precio_unitario) FILTER (WHERE oi.estado != 'cancelado'), 0) AS total
          FROM ordenes o
          LEFT JOIN orden_items oi ON oi.orden_id = o.id
-        WHERE o.estado = 'cerrada' AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        WHERE o.estado = 'cerrada' AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
         GROUP BY o.id, o.mesero_id, o.created_at, o.closed_at
      )
      SELECT u.id AS mesero_id, u.nombre AS mesero_nombre,
@@ -121,7 +127,7 @@ export async function getParametrosMeseros(desde: string, hasta: string) {
   const canceladas = await pool.query(
     `SELECT o.mesero_id, COUNT(*) AS canceladas
        FROM ordenes o
-      WHERE o.estado = 'cancelada' AND to_char(o.closed_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+      WHERE o.estado = 'cancelada' AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
       GROUP BY o.mesero_id`,
     [desde, hasta],
   );
@@ -144,7 +150,7 @@ export async function getParametrosCocina(desde: string, hasta: string) {
          JOIN orden_historial h2
            ON h2.orden_item_id = h1.orden_item_id AND h2.accion = 'item_listo' AND h2.created_at > h1.created_at
         WHERE h1.accion = 'item_preparando'
-          AND to_char(h1.created_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND to_char(h1.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
         GROUP BY h1.orden_item_id, h1.created_at
      )
      SELECT COUNT(*) AS items_preparados,
@@ -164,7 +170,7 @@ export async function getTiempoEntrega(desde: string, hasta: string) {
          FROM orden_historial h
          JOIN orden_items oi ON oi.id = h.orden_item_id
         WHERE h.accion = 'item_entregado'
-          AND to_char(h.created_at, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND to_char(h.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
      )
      SELECT COUNT(*) AS items_entregados,
             AVG(EXTRACT(EPOCH FROM (entregado - creado)) / 60) AS tiempo_promedio_min

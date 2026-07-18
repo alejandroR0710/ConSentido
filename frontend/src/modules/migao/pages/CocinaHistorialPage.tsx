@@ -5,6 +5,8 @@ import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
 import { formatCantidad } from "../format";
 
+const POLL_MS = 15000;
+
 function formatearFechaHora(fechaIso: string) {
   return new Date(fechaIso).toLocaleString("es", {
     day: "2-digit",
@@ -15,15 +17,16 @@ function formatearFechaHora(fechaIso: string) {
 }
 
 /** Historial de "despachados": pedidos que Cocina ya dejó listos, sin importar
- *  si el mesero ya los marcó entregados. Solo consulta, no cambia nada — por
- *  eso no hace polling ni sonidos, a diferencia de la cola activa. */
+ *  si el mesero ya los marcó entregados. Solo consulta, no cambia nada — pero
+ *  sí sondea en segundo plano para reflejar despachos nuevos sin recargar. */
 export function CocinaHistorialPage() {
   const [items, setItems] = useState<ItemCocina[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
+  // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
   async function cargar() {
-    setLoading(true);
     try {
       setItems(await migaoApi.listarHistorialDespachados());
       setError(null);
@@ -36,6 +39,8 @@ export function CocinaHistorialPage() {
 
   useEffect(() => {
     cargar();
+    const intervalo = setInterval(cargar, POLL_MS);
+    return () => clearInterval(intervalo);
   }, []);
 
   useRegistrarRefresco(cargar);

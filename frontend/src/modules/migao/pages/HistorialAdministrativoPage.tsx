@@ -7,6 +7,8 @@ import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type HistorialAdministrativoEntrada } from "../api";
 
+const POLL_MS = 15000;
+
 function formatearFechaHora(fechaIso: string | null) {
   if (!fechaIso) return "—";
   return new Date(fechaIso).toLocaleString("es", {
@@ -28,8 +30,9 @@ export function HistorialAdministrativoPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
+  // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
   async function cargar() {
-    setLoading(true);
     try {
       setHistorial(await migaoApi.listarHistorialAdministrativo());
       setError(null);
@@ -42,6 +45,8 @@ export function HistorialAdministrativoPage() {
 
   useEffect(() => {
     cargar();
+    const intervalo = setInterval(cargar, POLL_MS);
+    return () => clearInterval(intervalo);
   }, []);
 
   useRegistrarRefresco(cargar);

@@ -26,6 +26,7 @@ const MESES = [
   "Diciembre",
 ];
 const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
+const POLL_MS = 15000;
 
 function fechaISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -174,8 +175,10 @@ export function CajaHistorialPage() {
   const [turnoABorrar, setTurnoABorrar] = useState<TurnoCaja | null>(null);
   const [borrarDiaAbierto, setBorrarDiaAbierto] = useState(false);
 
+  // No pone loading=true en cada llamada (solo el estado inicial ya lo es):
+  // así el sondeo de fondo actualiza los datos sin ocultar la pantalla con
+  // "Cargando..." cada 15s — solo se ve ese mensaje en la carga inicial.
   async function cargarHistorial() {
-    setLoading(true);
     setError(null);
     try {
       setDias(await cajaApi.obtenerHistorialAnual(anio));
@@ -189,23 +192,10 @@ export function CajaHistorialPage() {
   useRegistrarRefresco(cargarHistorial);
 
   useEffect(() => {
-    let cancelado = false;
-    setLoading(true);
-    setError(null);
-    cajaApi
-      .obtenerHistorialAnual(anio)
-      .then((data) => {
-        if (!cancelado) setDias(data);
-      })
-      .catch((err) => {
-        if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial");
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false);
-      });
-    return () => {
-      cancelado = true;
-    };
+    cargarHistorial();
+    const intervalo = setInterval(cargarHistorial, POLL_MS);
+    return () => clearInterval(intervalo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anio]);
 
   function seleccionarDia(dia: DiaHistorialCaja) {
@@ -229,6 +219,27 @@ export function CajaHistorialPage() {
         });
     }
   }
+
+  // Mientras el modal de un día quede abierto, su detalle también se
+  // refresca solo — así se ve en vivo si sigue entrando/saliendo dinero ese
+  // mismo día, sin depender de cerrar el turno para "ver" el cambio.
+  useEffect(() => {
+    if (!diaSeleccionado) return;
+    const intervalo = setInterval(() => {
+      cajaApi
+        .listarMovimientosPorFecha(diaSeleccionado.fecha)
+        .then(setMovimientosDelDia)
+        .catch(() => {});
+      if (esSuperRoot) {
+        cajaApi
+          .listarTurnosPorFecha(diaSeleccionado.fecha)
+          .then(setTurnosDelDia)
+          .catch(() => {});
+      }
+    }, POLL_MS);
+    return () => clearInterval(intervalo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diaSeleccionado]);
 
   const porFecha = useMemo(() => {
     const map = new Map<string, DiaHistorialCaja>();

@@ -351,7 +351,7 @@ export async function insertEgreso(params: {
  *  getHistorialDiario, para que "ese día" signifique lo mismo en toda Caja). */
 export async function listTurnosPorFecha(fecha: string): Promise<TurnoCaja[]> {
   const result = await pool.query(
-    `SELECT * FROM turnos_caja WHERE to_char(abierto_en, 'YYYY-MM-DD') = $1 ORDER BY abierto_en ASC`,
+    `SELECT * FROM turnos_caja WHERE to_char(abierto_en AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1 ORDER BY abierto_en ASC`,
     [fecha],
   );
   return result.rows.map(mapTurno);
@@ -368,7 +368,7 @@ export async function listMovimientosDelDia(fecha: string) {
        FROM movimientos_caja mc
        LEFT JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
-      WHERE to_char(mc.created_at, 'YYYY-MM-DD') = $1
+      WHERE to_char(mc.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1
       ORDER BY mc.created_at ASC`,
     [fecha],
   );
@@ -379,9 +379,10 @@ export async function listMovimientosDelDia(fecha: string) {
  *  calendario. No toca turnos_caja: el turno en sí (con sus montos de apertura
  *  y cierre ya calculados) queda como registro, solo desaparece su detalle. */
 export async function borrarMovimientosDelDia(fecha: string) {
-  const result = await pool.query(`DELETE FROM movimientos_caja WHERE to_char(created_at, 'YYYY-MM-DD') = $1`, [
-    fecha,
-  ]);
+  const result = await pool.query(
+    `DELETE FROM movimientos_caja WHERE to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1`,
+    [fecha],
+  );
   return result.rowCount ?? 0;
 }
 
@@ -398,13 +399,18 @@ export async function getHistorialDiario(anio: number) {
   // to_char en vez de ::date: pg devuelve DATE como objeto Date (JS) parseado en
   // la zona horaria local del proceso, y al serializar a JSON puede desplazar el
   // día si el servidor no corre en UTC. Un texto "YYYY-MM-DD" es inequívoco.
+  // AT TIME ZONE 'America/Bogota' explícito (no basta con la config de sesión
+  // del pool): si Supabase usa el pooler en modo transacción, cada consulta
+  // puede caer en una conexión física distinta y el "SET timezone" de sesión
+  // no aplica de forma confiable — esta conversión es correcta sin importar
+  // la sesión.
   const result = await pool.query(
-    `SELECT to_char(created_at, 'YYYY-MM-DD') AS fecha,
+    `SELECT to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
             COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso'), 0) AS ingresos,
             COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'), 0) AS egresos,
             COUNT(*) AS movimientos
        FROM movimientos_caja
-      WHERE EXTRACT(YEAR FROM created_at) = $1
+      WHERE EXTRACT(YEAR FROM created_at AT TIME ZONE 'America/Bogota') = $1
       GROUP BY 1
       ORDER BY 1`,
     [anio],

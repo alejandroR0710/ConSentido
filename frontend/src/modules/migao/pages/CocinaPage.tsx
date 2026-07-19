@@ -6,7 +6,7 @@ import { reproducirAlerta, reproducirNotificacionSuave } from "../beep";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { formatCantidad } from "../format";
 
-const REFRESCO_MS = 8000;
+const REFRESCO_MS = 5000;
 const MINUTOS_ALERTA = 12;
 // Mientras una orden siga en espera (sin que Cocina la empiece a preparar), la
 // alerta se repite cada este número de minutos en vez de sonar una sola vez.
@@ -199,6 +199,11 @@ export function CocinaPage() {
                           className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-lg font-semibold text-brand-ink dark:bg-amber-950/30 dark:text-brand-vanilla"
                         >
                           {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                          {item.observaciones && (
+                            <span className="mt-1 block w-fit rounded bg-amber-400 px-1.5 py-0.5 text-xs font-bold text-brand-ink dark:bg-amber-600 dark:text-brand-vanilla">
+                              ⚠ {item.observaciones}
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -242,7 +247,7 @@ export function CocinaPage() {
                               {formatCantidad(item.cantidad)}× {item.producto_nombre}
                             </span>
                             {item.observaciones && (
-                              <span className="mt-1 block w-fit rounded-md bg-amber-400 px-2 py-1 text-base font-bold text-brand-ink dark:bg-amber-500 dark:text-brand-green-900">
+                              <span className="mt-1 block w-fit rounded bg-amber-400 px-1.5 py-0.5 text-xs font-bold text-brand-ink dark:bg-amber-600 dark:text-brand-vanilla">
                                 ⚠ {item.observaciones}
                               </span>
                             )}

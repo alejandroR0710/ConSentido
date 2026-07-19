@@ -241,13 +241,8 @@ export function CocinaPage() {
                             <span className="block text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                               {formatCantidad(item.cantidad)}× {item.producto_nombre}
                             </span>
-                            {item.producto_descripcion && (
-                              <span className="block text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-                                {item.producto_descripcion}
-                              </span>
-                            )}
                             {item.observaciones && (
-                              <span className="block text-sm font-semibold text-amber-700 dark:text-amber-400">
+                              <span className="mt-1 block w-fit rounded-md bg-amber-400 px-2 py-1 text-base font-bold text-brand-ink dark:bg-amber-500 dark:text-brand-green-900">
                                 ⚠ {item.observaciones}
                               </span>
                             )}

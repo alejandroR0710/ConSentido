@@ -216,8 +216,10 @@ export function MigaoHistorialPage() {
                           {formatearFechaLarga(grupo.fecha)}
                         </span>
                         <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                          Efectivo {formatMoney(resumen?.efectivo ?? 0)} · Banco {formatMoney(resumen?.banco ?? 0)} ·
-                          Total {formatMoney((resumen?.efectivo ?? 0) + (resumen?.banco ?? 0))}
+                          Efectivo {formatMoney(resumen?.efectivo ?? 0)} · Banco {formatMoney(resumen?.banco ?? 0)} ·{" "}
+                          <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            Ganancia {formatMoney((resumen?.efectivo ?? 0) + (resumen?.banco ?? 0))}
+                          </span>
                         </span>
                       </div>
                     </td>

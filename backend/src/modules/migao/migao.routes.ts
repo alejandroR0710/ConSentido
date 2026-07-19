@@ -31,6 +31,7 @@ import {
   marcarCheckItemController,
   marcarOrdenListaController,
   obtenerDetalleOrdenController,
+  obtenerResumenDiarioIngresosController,
   reiniciarTodoController,
   resetearOrdenesController,
   subirImagenProductoController,
@@ -101,6 +102,13 @@ migaoRouter.get(
   "/ordenes/historial-administrativo",
   requirePermission("migao.ordenes.pago_administrativo"),
   asyncHandler(listarHistorialAdministrativoController),
+);
+// Subtotal por día y método de pago (efectivo/banco), para agrupar el
+// historial de órdenes por día — mismo permiso que ver el historial.
+migaoRouter.get(
+  "/ordenes/historial-resumen-diario",
+  requirePermission("migao.ordenes.ver"),
+  asyncHandler(obtenerResumenDiarioIngresosController),
 );
 migaoRouter.get("/ordenes/:id", requirePermission("migao.ordenes.ver"), asyncHandler(obtenerDetalleOrdenController));
 // El mesero cambia la mesa de una orden abierta (ej. los comensales se

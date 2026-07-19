@@ -6,7 +6,12 @@ import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type HistorialOrdenEntrada, type MetodoPago } from "../api";
+import {
+  migaoApi,
+  type HistorialOrdenEntrada,
+  type MetodoPago,
+  type ResumenDiarioIngreso,
+} from "../api";
 import { DetalleCuentaMigao } from "../components/DetalleCuentaMigao";
 import { ResetearOrdenesModal } from "../components/ResetearOrdenesModal";
 
@@ -20,6 +25,59 @@ function formatearFechaHora(fechaIso: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Fecha calendario en hora Colombia de un timestamp ISO, en formato
+ *  'YYYY-MM-DD' — mismo criterio que el backend, para agrupar el historial
+ *  por el mismo día que ya usa el resumen de ingresos. */
+function fechaBogota(fechaIso: string) {
+  return new Date(fechaIso).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+}
+
+const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+/** `fecha` ya es 'YYYY-MM-DD' en hora Colombia (viene del backend) — se arma
+ *  con el constructor de 3 argumentos (año, mes, día) para que quede en hora
+ *  LOCAL del navegador sin pasar por UTC, y así no se corra un día. */
+function formatearFechaLarga(fecha: string) {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const d = new Date(anio, mes - 1, dia);
+  return `${DIAS_SEMANA[d.getDay()]} ${dia} de ${MESES[mes - 1]}`;
+}
+
+interface GrupoDiaHistorial {
+  fecha: string;
+  entradas: HistorialOrdenEntrada[];
+}
+
+/** El historial ya viene ordenado por fecha DESC, así que agrupar es un solo
+ *  recorrido: cuando cambia el día (hora Colombia) se abre un grupo nuevo. */
+function agruparPorDia(historial: HistorialOrdenEntrada[]): GrupoDiaHistorial[] {
+  const grupos: GrupoDiaHistorial[] = [];
+  for (const h of historial) {
+    const fecha = fechaBogota(h.closed_at ?? h.created_at);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.fecha === fecha) {
+      ultimo.entradas.push(h);
+    } else {
+      grupos.push({ fecha, entradas: [h] });
+    }
+  }
+  return grupos;
 }
 
 const FILA_HISTORIAL_POR_ESTADO: Record<string, string> = {
@@ -39,6 +97,7 @@ export function MigaoHistorialPage() {
   const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
 
   const [historial, setHistorial] = useState<HistorialOrdenEntrada[]>([]);
+  const [resumenDiario, setResumenDiario] = useState<ResumenDiarioIngreso[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,9 +131,13 @@ export function MigaoHistorialPage() {
   async function cargarHistorial() {
     const requestId = ++requestIdRef.current;
     try {
-      const historialData = await migaoApi.listarHistorialOrdenes();
+      const [historialData, resumenData] = await Promise.all([
+        migaoApi.listarHistorialOrdenes(),
+        migaoApi.obtenerResumenDiarioIngresos(),
+      ]);
       if (requestId !== requestIdRef.current) return;
       setHistorial(historialData);
+      setResumenDiario(resumenData);
       setError(null);
     } catch (err) {
       if (requestId === requestIdRef.current) {
@@ -98,6 +161,8 @@ export function MigaoHistorialPage() {
   if (!puedeEditarPagos) {
     return <Navigate to="/migao" replace />;
   }
+
+  const grupos = agruparPorDia(historial);
 
   return (
     <div className="flex flex-col gap-6">
@@ -138,12 +203,33 @@ export function MigaoHistorialPage() {
                 </td>
               </tr>
             ) : (
-              historial.map((h) =>
-                h.tipo === "ingreso_manual" ? (
+              grupos.flatMap((grupo) => {
+                const resumen = resumenDiario.find((d) => d.fecha === grupo.fecha);
+                const filaEncabezado = (
                   <tr
-                    key={`ingreso-${h.id}`}
-                    className="border-t border-l-4 border-brand-vanilla-dark border-l-brand-green-400 bg-brand-green-50/20 dark:border-brand-green-700 dark:bg-brand-green-700/10"
+                    key={`dia-${grupo.fecha}`}
+                    className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
                   >
+                    <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                        <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
+                          {formatearFechaLarga(grupo.fecha)}
+                        </span>
+                        <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                          Efectivo {formatMoney(resumen?.efectivo ?? 0)} · Banco {formatMoney(resumen?.banco ?? 0)} ·
+                          Total {formatMoney((resumen?.efectivo ?? 0) + (resumen?.banco ?? 0))}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+
+                const filasDelDia = grupo.entradas.map((h) =>
+                  h.tipo === "ingreso_manual" ? (
+                    <tr
+                      key={`ingreso-${h.id}`}
+                      className="border-t border-l-4 border-brand-vanilla-dark border-l-brand-green-400 bg-brand-green-50/20 dark:border-brand-green-700 dark:bg-brand-green-700/10"
+                    >
                     <td className="px-3 py-2 italic text-brand-ink/60 dark:text-brand-vanilla/60">
                       {h.motivo ?? "Sin mesa (ingreso manual)"}
                     </td>
@@ -244,8 +330,11 @@ export function MigaoHistorialPage() {
                       </td>
                     )}
                   </tr>
-                ),
-              )
+                  ),
+                );
+
+                return [filaEncabezado, ...filasDelDia];
+              })
             )}
           </tbody>
         </table>

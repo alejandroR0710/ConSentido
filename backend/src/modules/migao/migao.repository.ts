@@ -123,6 +123,31 @@ export async function listOrdenesHistorialAdministrativo() {
 }
 
 /**
+ * Cuánto entró de Migao por día y método de pago, tomado directamente de
+ * `movimientos_caja` (no de `ordenes`/`ventas`): así una cuenta dividida entre
+ * efectivo y banco queda repartida correctamente en cada bolsa (el historial
+ * de órdenes solo muestra un método "combinado" por fila, no sirve para
+ * sumar). Excluye "administrativo" solo porque esas cuentas nunca generan
+ * fila aquí. AT TIME ZONE explícito por el mismo motivo que el resto de
+ * consultas por día de la app (ver analytics.repository.ts).
+ */
+export async function getResumenDiarioIngresos(limiteDias = 60) {
+  const result = await pool.query(
+    `SELECT to_char(mc.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+       FROM movimientos_caja mc
+       JOIN modulos m ON m.id = mc.modulo_origen_id
+      WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
+      GROUP BY 1
+      ORDER BY 1 DESC
+      LIMIT $1`,
+    [limiteDias],
+  );
+  return result.rows;
+}
+
+/**
  * Ingresos registrados a mano desde Caja con origen "Migao (POS)" (ej. una venta
  * que no pasó por el flujo normal de crear/cerrar una orden). Se excluyen los que
  * ya tienen `referencia_entidad = 'ventas'` porque esos SÍ vienen de una orden

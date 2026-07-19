@@ -67,6 +67,17 @@ export async function listarHistorialAdministrativo() {
   return repo.listOrdenesHistorialAdministrativo();
 }
 
+/** Cuánto entró de Migao por día y método de pago (efectivo/banco) — para
+ *  agrupar el historial de órdenes por día con su propio subtotal. */
+export async function obtenerResumenDiarioIngresos() {
+  const dias = await repo.getResumenDiarioIngresos();
+  return dias.map((d) => ({
+    fecha: d.fecha,
+    efectivo: Number(d.efectivo),
+    banco: Number(d.banco),
+  }));
+}
+
 export async function listarProductos() {
   return repo.listProductosMigao();
 }

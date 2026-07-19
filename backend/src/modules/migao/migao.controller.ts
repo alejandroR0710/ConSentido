@@ -57,6 +57,11 @@ export async function listarHistorialAdministrativoController(_req: Request, res
   return ok(res, ordenes);
 }
 
+export async function obtenerResumenDiarioIngresosController(_req: Request, res: Response) {
+  const dias = await service.obtenerResumenDiarioIngresos();
+  return ok(res, dias);
+}
+
 export async function crearOrdenController(req: Request, res: Response) {
   const data = crearOrdenSchema.parse(req.body);
   const orden = await service.crearOrden(req.auth!.usuarioId, data);

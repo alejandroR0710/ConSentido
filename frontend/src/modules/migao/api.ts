@@ -43,6 +43,14 @@ export interface HistorialAdministrativoEntrada {
   total_cobrado: string;
 }
 
+/** Cuánto entró de Migao ese día en efectivo/banco, tomado de Caja General —
+ *  se usa para agrupar el historial de órdenes por día con su subtotal. */
+export interface ResumenDiarioIngreso {
+  fecha: string;
+  efectivo: number;
+  banco: number;
+}
+
 /** Ingreso registrado a mano desde Caja con origen "Migao (POS)" que no viene de
  *  cerrar una orden (si viniera de ahí, ya aparece como HistorialEntradaOrden). */
 export interface HistorialEntradaIngresoManual {
@@ -164,6 +172,8 @@ export const migaoApi = {
   // Cuentas cerradas con pago "administrativo" — exclusivo de Root/Super Root.
   listarHistorialAdministrativo: () =>
     apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
+  obtenerResumenDiarioIngresos: () =>
+    apiFetch<ResumenDiarioIngreso[]>("/migao/ordenes/historial-resumen-diario"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),
   cerrarOrden: (ordenId: string, pago: PagoInput, descuentoPorcentaje?: number) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {

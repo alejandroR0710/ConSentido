@@ -151,17 +151,25 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsMigao |
   );
 }
 
-/** Analíticas de Migao (módulo priorizado): tres bloques fijos y simultáneos
- *  — Día, Semana y Mes — cada uno en tiempo real (sondeo cada 15s), sin
- *  necesidad de alternar entre ellos. Los tiempos de Cocina y de entrega solo
- *  tienen datos desde que se agregó el registro de esas transiciones —
- *  pedidos anteriores a eso no aparecen ahí, aunque sí cuentan en
- *  pedidos/ganancias. */
+const RANGOS: { valor: Rango; etiqueta: string }[] = [
+  { valor: "hoy", etiqueta: "Día" },
+  { valor: "semana", etiqueta: "Semana" },
+  { valor: "mes", etiqueta: "Mes" },
+];
+
+/** Analíticas de Migao (módulo priorizado): las tres ventanas (Día, Semana,
+ *  Mes) se cargan siempre en paralelo en tiempo real (sondeo cada 15s), pero
+ *  solo se muestra una a la vez — el switch de arriba a la derecha solo
+ *  cambia cuál se renderiza, no dispara una nueva carga. Los tiempos de
+ *  Cocina y de entrega solo tienen datos desde que se agregó el registro de
+ *  esas transiciones — pedidos anteriores a eso no aparecen ahí, aunque sí
+ *  cuentan en pedidos/ganancias. */
 export function MigaoAnalyticsSection() {
   const [datosHoy, setDatosHoy] = useState<AnalyticsMigao | null>(null);
   const [datosSemana, setDatosSemana] = useState<AnalyticsMigao | null>(null);
   const [datosMes, setDatosMes] = useState<AnalyticsMigao | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rango, setRango] = useState<Rango>("hoy");
 
   async function cargar() {
     setError(null);
@@ -190,15 +198,42 @@ export function MigaoAnalyticsSection() {
 
   useRegistrarRefresco(cargar);
 
+  const datosPorRango: Record<Rango, AnalyticsMigao | null> = {
+    hoy: datosHoy,
+    semana: datosSemana,
+    mes: datosMes,
+  };
+  const tituloPorRango: Record<Rango, string> = {
+    hoy: "Hoy",
+    semana: "Esta semana",
+    mes: "Este mes",
+  };
+
   return (
     <div className="flex flex-col gap-8">
-      <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Migao</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Migao</h2>
+
+        <div className="flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
+          {RANGOS.map((r) => (
+            <button
+              key={r.valor}
+              onClick={() => setRango(r.valor)}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                rango === r.valor
+                  ? "bg-brand-green-600 text-white"
+                  : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+              }`}
+            >
+              {r.etiqueta}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <RangoBlock titulo="Hoy" datos={datosHoy} />
-      <RangoBlock titulo="Esta semana" datos={datosSemana} />
-      <RangoBlock titulo="Este mes" datos={datosMes} />
+      <RangoBlock titulo={tituloPorRango[rango]} datos={datosPorRango[rango]} />
     </div>
   );
 }

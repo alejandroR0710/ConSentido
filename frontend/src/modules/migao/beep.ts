@@ -85,6 +85,34 @@ export function reproducirNotificacionSuave() {
   }
 }
 
+/** Aviso de que llegó un pedido nuevo a la cola de Cocina: dos tonos cortos
+ *  ascendentes — distinto del tick genérico (`reproducirNotificacionSuave`,
+ *  usado para "orden lista" en Mesero) y de la alerta urgente por demora. */
+export function reproducirPedidoNuevo() {
+  const ctx = obtenerContexto();
+  if (!ctx) return;
+  try {
+    [
+      { frecuencia: 660, offset: 0 },
+      { frecuencia: 990, offset: 0.15 },
+    ].forEach(({ frecuencia, offset }) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frecuencia;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.2);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(ctx.currentTime + offset);
+      oscillator.stop(ctx.currentTime + offset + 0.2);
+    });
+  } catch {
+    /* se omite el sonido, no es crítico */
+  }
+}
+
 /** Alerta más urgente que el beep normal (3 tonos cortos y graves seguidos) para
  *  pedidos que llevan demasiado tiempo esperando en Cocina. */
 export function reproducirAlerta() {

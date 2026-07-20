@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
-import { reproducirAlerta, reproducirNotificacionSuave } from "../beep";
+import { reproducirAlerta, reproducirPedidoNuevo } from "../beep";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { formatCantidad } from "../format";
 
@@ -35,7 +35,7 @@ export function CocinaPage() {
 
       if (idsConocidosRef.current) {
         const hayPedidoNuevo = cola.some((item) => !idsConocidosRef.current!.has(item.id));
-        if (hayPedidoNuevo) reproducirNotificacionSuave();
+        if (hayPedidoNuevo) reproducirPedidoNuevo();
       }
       idsConocidosRef.current = new Set(cola.map((item) => item.id));
 

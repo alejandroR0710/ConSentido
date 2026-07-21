@@ -41,10 +41,10 @@ Esto crea las tablas, los roles/permisos, y los usuarios de prueba (ver tabla en
 2. **Root Directory**: `frontend`
 3. Framework: Vercel detecta Vite solo.
 4. Variables de entorno:
-   - `VITE_API_URL` → `https://consentido-backend.onrender.com/api/v1` (la URL de Render del paso 2, con `/api/v1` al final)
+   - `VITE_API_URL` → `/api/v1` (ruta **relativa**, no la URL completa de Render — ver nota abajo)
 5. Deploy. Copia la URL pública (algo como `https://consentido.vercel.app`).
 
-`frontend/vercel.json` ya tiene las reglas de rewrite necesarias para que las rutas de React Router (`/mesero`, `/cocina`, etc.) no den 404 al refrescar la página.
+`frontend/vercel.json` ya tiene las reglas de rewrite necesarias para que las rutas de React Router (`/mesero`, `/cocina`, etc.) no den 404 al refrescar la página, **y también** un rewrite de `/api/*` y `/uploads/*` hacia el backend de Render — por eso `VITE_API_URL` debe ser una ruta relativa (`/api/v1`), no la URL completa de Render: así todas las peticiones del navegador van al mismo dominio de Vercel (que las reenvía por dentro a Render), en vez de ser "cross-site". Esto es necesario para que la sesión (cookie de refresh) sobreviva en Safari/iOS — WebKit borra agresivamente las cookies `SameSite=None` de dominios distintos, sobre todo en una PWA agregada a la pantalla de inicio; con la petición viendose del mismo origen, ese problema desaparece.
 
 ## 4. Cerrar el círculo: CORS
 
@@ -52,7 +52,7 @@ Vuelve a Render, edita la variable `CORS_ORIGIN` del backend y ponle la URL real
 ```
 CORS_ORIGIN=https://consentido.vercel.app
 ```
-Redeploy del backend. (El frontend en producción ya no depende de la detección automática por IP que usa en la red local — `VITE_API_URL` explícita manda siempre sobre el modo "auto".)
+Redeploy del backend. (El frontend en producción ya no depende de la detección automática por IP que usa en la red local — `VITE_API_URL` explícita manda siempre sobre el modo "auto". `CORS_ORIGIN` sigue haciendo falta como defensa adicional, aunque con el rewrite del paso 3 casi todo el tráfico real ya llega a Render como si fuera del propio servidor de Vercel, no del navegador directamente.)
 
 ## 5. Llevar tus usuarios y tu menú reales
 

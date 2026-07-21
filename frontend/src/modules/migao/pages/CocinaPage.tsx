@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
-import { reproducirAlerta, reproducirPedidoNuevo } from "../beep";
+import { audioDesbloqueado, desbloquearAudio, reproducirAlerta, reproducirPedidoNuevo } from "../beep";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { formatCantidad } from "../format";
 
@@ -21,6 +21,10 @@ export function CocinaPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
+  // Si nadie tocó la pantalla en toda la sesión (tablet que solo se mira),
+  // el AudioContext nunca se desbloquea con el toque global de AppShell — se
+  // ofrece este botón explícito para no depender de eso.
+  const [audioActivo, setAudioActivo] = useState(false);
 
   // null = todavía no hubo ninguna carga; evita el falso "pedido nuevo" del primer render.
   const idsConocidosRef = useRef<Set<number> | null>(null);
@@ -30,6 +34,7 @@ export function CocinaPage() {
   const ultimaAlertaRef = useRef<Map<string, number>>(new Map());
 
   async function cargar() {
+    setAudioActivo(audioDesbloqueado());
     try {
       const cola = await migaoApi.listarColaCocina();
 
@@ -141,6 +146,19 @@ export function CocinaPage() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {!audioActivo && (
+        <button
+          onClick={() => {
+            desbloquearAudio();
+            reproducirPedidoNuevo();
+            setAudioActivo(true);
+          }}
+          className="w-full rounded-lg border-2 border-dashed border-amber-500 bg-amber-50 px-4 py-3 text-left font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:bg-amber-950/20 dark:text-amber-400"
+        >
+          🔇 Toca aquí para activar el sonido de avisos de esta pantalla
+        </button>
+      )}
 
       {loading ? (
         <p className="text-brand-ink/60">Cargando...</p>

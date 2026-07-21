@@ -41,6 +41,14 @@ export function desbloquearAudio() {
   }
 }
 
+/** Si nadie tocó la pantalla en toda la sesión (ej. una tablet de Cocina que
+ *  solo se mira, nunca se toca), el AudioContext nunca llega a desbloquearse
+ *  vía `desbloquearAudio` — hace falta un botón explícito que el usuario
+ *  toque a propósito. Esto permite mostrarlo solo cuando de verdad hace falta. */
+export function audioDesbloqueado() {
+  return contextoCompartido !== null && contextoCompartido.state === "running";
+}
+
 /** Beep corto generado con Web Audio API: no requiere ningún archivo de sonido. */
 export function reproducirBeep() {
   const ctx = obtenerContexto();

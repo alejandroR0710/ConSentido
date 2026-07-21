@@ -44,6 +44,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
     const observacionFinal = conObservacion ? observacion.trim() : "";
     onSeleccionar(producto, cantidad, observacionFinal || undefined);
     setEligiendo(null);
+    setBusqueda("");
     // Confirmación visual inmediata ("✓ Agregado") aunque el guardado real (API
     // o borrador local) siga su curso aparte — el mesero necesita saber YA que
     // el toque registró, sin esperar la respuesta del servidor.

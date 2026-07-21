@@ -88,8 +88,9 @@ export function RegistrarMovimientoInventarioModal({
             type="number"
             min={1}
             step="1"
-            value={paquetes}
-            onChange={(e) => setPaquetes(Math.max(1, Number(e.target.value)))}
+            value={paquetes || ""}
+            onChange={(e) => setPaquetes(Number(e.target.value))}
+            onBlur={() => setPaquetes((actual) => Math.max(1, actual || 1))}
             className="mb-1 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
           <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">

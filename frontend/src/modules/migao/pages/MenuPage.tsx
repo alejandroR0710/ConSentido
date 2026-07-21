@@ -31,6 +31,7 @@ export function MenuPage() {
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<ProductoAdmin | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [cambiandoParaLlevarId, setCambiandoParaLlevarId] = useState<string | null>(null);
 
   async function cargar() {
     setLoading(true);
@@ -57,6 +58,19 @@ export function MenuPage() {
 
   function agregarCategoria(categoria: CategoriaProducto) {
     setCategorias((actual) => [...actual, categoria].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+  }
+
+  async function toggleParaLlevar(producto: ProductoAdmin) {
+    setCambiandoParaLlevarId(producto.id);
+    setError(null);
+    try {
+      await migaoApi.editarProducto(producto.id, { esParaLlevar: !producto.es_para_llevar });
+      await cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo actualizar el producto");
+    } finally {
+      setCambiandoParaLlevarId(null);
+    }
   }
 
   const productosFiltrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
@@ -164,13 +178,27 @@ export function MenuPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <button
-                            onClick={() => setProductoEditando(p)}
-                            aria-label="Editar producto"
-                            className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
-                          >
-                            Editar
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => toggleParaLlevar(p)}
+                              disabled={cambiandoParaLlevarId === p.id}
+                              title={p.es_para_llevar ? "Quitar de para llevar" : "Marcar como para llevar"}
+                              className={`rounded-md border px-3 py-1 text-xs disabled:opacity-60 ${
+                                p.es_para_llevar
+                                  ? "border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                                  : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                              }`}
+                            >
+                              🥡
+                            </button>
+                            <button
+                              onClick={() => setProductoEditando(p)}
+                              aria-label="Editar producto"
+                              className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
+                            >
+                              Editar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

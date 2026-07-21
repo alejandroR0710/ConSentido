@@ -29,7 +29,6 @@ export function EditarProductoModal({
   const [precio, setPrecio] = useState(Number(producto.precio));
   const [categoriaId, setCategoriaId] = useState<number | "">(producto.categoria_id ?? "");
   const [descripcion, setDescripcion] = useState(producto.descripcion ?? "");
-  const [esParaLlevar, setEsParaLlevar] = useState(producto.es_para_llevar);
   const [imagenUrl, setImagenUrl] = useState(producto.imagen_url);
   const [guardando, setGuardando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -82,7 +81,6 @@ export function EditarProductoModal({
         precio,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
-        esParaLlevar,
       });
       await migaoApi.guardarIngredientesProducto(producto.id, ingredientes);
       await onGuardado();
@@ -174,16 +172,6 @@ export function EditarProductoModal({
         placeholder="Ej. Jarra personal de chocolate caliente, queso, almojábana..."
         className="mb-4 w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
-
-      <label className="mb-4 flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
-        <input
-          type="checkbox"
-          checked={esParaLlevar}
-          onChange={(e) => setEsParaLlevar(e.target.checked)}
-          className="h-4 w-4"
-        />
-        Es para llevar (envase / cargo adicional)
-      </label>
 
       <SelectorIngredientes inventario={inventario} value={ingredientes} onChange={setIngredientes} />
 

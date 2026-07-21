@@ -86,8 +86,9 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
             type="number"
             min={1}
             step="1"
-            value={unidadesPorPaquete}
-            onChange={(e) => setUnidadesPorPaquete(Math.max(1, Number(e.target.value)))}
+            value={unidadesPorPaquete || ""}
+            onChange={(e) => setUnidadesPorPaquete(Number(e.target.value))}
+            onBlur={() => setUnidadesPorPaquete((actual) => Math.max(1, actual || 1))}
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>
@@ -117,7 +118,8 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
             min={0}
             step="1"
             value={stockMinimoUnidades || ""}
-            onChange={(e) => setStockMinimoUnidades(Math.max(0, Number(e.target.value)))}
+            onChange={(e) => setStockMinimoUnidades(Number(e.target.value))}
+            onBlur={() => setStockMinimoUnidades((actual) => Math.max(0, actual || 0))}
             placeholder="0"
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />

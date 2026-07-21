@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { migaoApi, type CategoriaProducto } from "../api";
+import { migaoApi, type CategoriaProducto, type InventarioProducto } from "../api";
+import { SelectorIngredientes, type FilaIngrediente } from "./SelectorIngredientes";
 
 interface NuevoProductoModalProps {
   categorias: CategoriaProducto[];
@@ -27,6 +28,15 @@ export function NuevoProductoModal({
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [creandoCategoria, setCreandoCategoria] = useState(false);
 
+  const [inventario, setInventario] = useState<InventarioProducto[]>([]);
+  const [ingredientes, setIngredientes] = useState<FilaIngrediente[]>([]);
+
+  useEffect(() => {
+    migaoApi.listarInventario().then(setInventario).catch(() => {
+      /* el selector de ingredientes simplemente queda vacío */
+    });
+  }, []);
+
   async function crearCategoria() {
     if (!nuevaCategoria.trim()) return;
     setCreandoCategoria(true);
@@ -48,12 +58,15 @@ export function NuevoProductoModal({
     setSubmitting(true);
     setError(null);
     try {
-      await migaoApi.crearProducto({
+      const producto = await migaoApi.crearProducto({
         nombre: nombre.trim(),
         precio,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
       });
+      if (ingredientes.length > 0) {
+        await migaoApi.guardarIngredientesProducto(producto.id, ingredientes);
+      }
       await onCreado();
       onCerrar();
     } catch (err) {
@@ -120,6 +133,8 @@ export function NuevoProductoModal({
         placeholder="Ej. Jarra personal de chocolate caliente, queso, almojábana..."
         className="mb-4 w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <SelectorIngredientes inventario={inventario} value={ingredientes} onChange={setIngredientes} />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

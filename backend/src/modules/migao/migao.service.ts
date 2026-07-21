@@ -4,6 +4,7 @@ import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import * as notificacionesService from "../general/notificaciones/notificaciones.service";
+import * as inventarioService from "./inventario.service";
 import * as repo from "./migao.repository";
 import {
   AgregarItemInput,
@@ -118,6 +119,7 @@ export async function actualizarImagenProducto(id: string, imagenUrl: string) {
 export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
   const client = await pool.connect();
+  const alertasInventario: string[] = [];
   try {
     await client.query("BEGIN");
 
@@ -139,6 +141,12 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
         detalle: { cantidad: item.cantidad, precioUnitario: item.precioUnitario },
         usuarioId: meseroId,
       });
+      // Descuenta del inventario los ingredientes que ese producto consume
+      // (si no tiene receta asociada, no hace nada) — nunca bloquea, solo
+      // devuelve un aviso si el stock queda en negativo.
+      alertasInventario.push(
+        ...(await inventarioService.aplicarConsumoPorProducto(client, item.productoId, item.cantidad, meseroId, nuevoItem.id)),
+      );
     }
 
     await client.query("COMMIT");
@@ -147,7 +155,7 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
     notificacionesService
       .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: `Mesa ${mesa.numero}`, url: "/cocina" })
       .catch(() => {});
-    return orden;
+    return { ...orden, alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -162,18 +170,39 @@ export async function agregarItem(ordenId: string, input: AgregarItemInput, usua
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se pueden agregar productos a una orden cerrada o cancelada");
   }
-  const item = await repo.agregarItem(ordenId, input.productoId, input.cantidad, input.precioUnitario, input.observaciones);
-  await repo.insertHistorial(pool, {
-    ordenId,
-    ordenItemId: item.id,
-    accion: "item_agregado",
-    detalle: { cantidad: input.cantidad, precioUnitario: input.precioUnitario },
-    usuarioId,
-  });
+
+  const client = await pool.connect();
+  let item;
+  let alertasInventario: string[];
+  try {
+    await client.query("BEGIN");
+    item = await repo.agregarItem(ordenId, input.productoId, input.cantidad, input.precioUnitario, input.observaciones, client);
+    await repo.insertHistorial(client, {
+      ordenId,
+      ordenItemId: item.id,
+      accion: "item_agregado",
+      detalle: { cantidad: input.cantidad, precioUnitario: input.precioUnitario },
+      usuarioId,
+    });
+    alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+      client,
+      input.productoId,
+      input.cantidad,
+      usuarioId,
+      item.id,
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
   notificacionesService
     .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: "Se agregó un producto a una orden", url: "/cocina" })
     .catch(() => {});
-  return item;
+  return { ...item, alertasInventario };
 }
 
 /**
@@ -208,27 +237,59 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
     throw Errors.conflict("No se puede editar un ítem de una orden cerrada o cancelada");
   }
 
-  if (input.cancelar) {
-    const actualizado = await repo.updateItemEstado(itemId, "cancelado");
-    await repo.insertHistorial(pool, {
-      ordenId: item.orden_id,
-      ordenItemId: Number(itemId),
-      accion: "item_cancelado",
-      detalle: { cantidadAnterior: item.cantidad },
-      usuarioId,
-    });
-    return actualizado;
+  const client = await pool.connect();
+  let actualizado;
+  let alertasInventario: string[];
+  try {
+    await client.query("BEGIN");
+
+    if (input.cancelar) {
+      actualizado = await repo.updateItemEstado(itemId, "cancelado", client);
+      await repo.insertHistorial(client, {
+        ordenId: item.orden_id,
+        ordenItemId: Number(itemId),
+        accion: "item_cancelado",
+        detalle: { cantidadAnterior: item.cantidad },
+        usuarioId,
+      });
+      // Se devuelve TODO lo que ese ítem había consumido (delta negativo = el
+      // stock sube).
+      alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+        client,
+        item.producto_id,
+        -Number(item.cantidad),
+        usuarioId,
+        Number(itemId),
+      );
+    } else {
+      actualizado = await repo.updateItemCantidad(itemId, input.cantidad!, client);
+      await repo.insertHistorial(client, {
+        ordenId: item.orden_id,
+        ordenItemId: Number(itemId),
+        accion: "item_editado",
+        detalle: { cantidadAnterior: item.cantidad, cantidadNueva: input.cantidad, estadoAnterior: item.estado },
+        usuarioId,
+      });
+      // Solo el DELTA entre la cantidad vieja y la nueva — si aumentó,
+      // consume más; si bajó, se devuelve la diferencia.
+      alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+        client,
+        item.producto_id,
+        input.cantidad! - Number(item.cantidad),
+        usuarioId,
+        Number(itemId),
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 
-  const actualizado = await repo.updateItemCantidad(itemId, input.cantidad!);
-  await repo.insertHistorial(pool, {
-    ordenId: item.orden_id,
-    ordenItemId: Number(itemId),
-    accion: "item_editado",
-    detalle: { cantidadAnterior: item.cantidad, cantidadNueva: input.cantidad, estadoAnterior: item.estado },
-    usuarioId,
-  });
-  return actualizado;
+  return { ...actualizado, alertasInventario };
 }
 
 /** El mesero cambia la mesa de una orden ya abierta (ej. los comensales se

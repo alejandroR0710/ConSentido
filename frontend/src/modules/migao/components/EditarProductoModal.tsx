@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SubidaImagen } from "../../../shared/components/SubidaImagen";
-import { migaoApi, type CategoriaProducto, type ProductoAdmin } from "../api";
+import { migaoApi, type CategoriaProducto, type InventarioProducto, type ProductoAdmin } from "../api";
+import { SelectorIngredientes, type FilaIngrediente } from "./SelectorIngredientes";
 
 interface EditarProductoModalProps {
   producto: ProductoAdmin;
@@ -37,6 +38,24 @@ export function EditarProductoModal({
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [creandoCategoria, setCreandoCategoria] = useState(false);
 
+  const [inventario, setInventario] = useState<InventarioProducto[]>([]);
+  const [ingredientes, setIngredientes] = useState<FilaIngrediente[]>([]);
+
+  useEffect(() => {
+    migaoApi.listarInventario().then(setInventario).catch(() => {});
+    migaoApi
+      .obtenerIngredientesProducto(producto.id)
+      .then((lista) =>
+        setIngredientes(
+          lista.map((i) => ({ inventarioProductoId: i.inventarioProductoId, cantidadPorUnidad: Number(i.cantidadPorUnidad) })),
+        ),
+      )
+      .catch(() => {
+        /* la receta simplemente queda vacía si no se pudo cargar */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [producto.id]);
+
   async function crearCategoria() {
     if (!nuevaCategoria.trim()) return;
     setCreandoCategoria(true);
@@ -65,6 +84,7 @@ export function EditarProductoModal({
         descripcion: descripcion.trim() || undefined,
         esParaLlevar,
       });
+      await migaoApi.guardarIngredientesProducto(producto.id, ingredientes);
       await onGuardado();
       onCerrar();
     } catch (err) {
@@ -164,6 +184,8 @@ export function EditarProductoModal({
         />
         Es para llevar (envase / cargo adicional)
       </label>
+
+      <SelectorIngredientes inventario={inventario} value={ingredientes} onChange={setIngredientes} />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

@@ -35,7 +35,9 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'actualizar_estado', 'migao.cocina.actualizar_estado'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_productos',   'migao.productos.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear_producto',  'migao.productos.crear'),
-  ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_producto', 'migao.productos.editar');
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_producto', 'migao.productos.editar'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_inventario',         'migao.inventario.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES
@@ -87,7 +89,9 @@ SELECT (SELECT id FROM roles WHERE nombre = 'Cocina'), p.id
 FROM permisos p
 WHERE p.codigo IN (
   'migao.cocina.ver',
-  'migao.cocina.actualizar_estado'
+  'migao.cocina.actualizar_estado',
+  'migao.inventario.ver',
+  'migao.inventario.administrar'
 );
 
 -- Mesero: crea, ve, agrega y edita/cancela ítems de órdenes. NO puede cerrar/cobrar

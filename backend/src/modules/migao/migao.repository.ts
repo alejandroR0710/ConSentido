@@ -430,8 +430,8 @@ export async function updateItemEstado(itemId: string, estado: string, executor:
  * prepararlo y marcarlo de nuevo, y el mesero recibe notificación cuando cocina
  * lo procese otra vez.
  */
-export async function updateItemCantidad(itemId: string, cantidad: number) {
-  const result = await pool.query(
+export async function updateItemCantidad(itemId: string, cantidad: number, executor: Executor = pool) {
+  const result = await executor.query(
     `UPDATE orden_items SET cantidad = $2, estado = 'pendiente', listo_cocina = false WHERE id = $1 RETURNING *`,
     [itemId, cantidad],
   );

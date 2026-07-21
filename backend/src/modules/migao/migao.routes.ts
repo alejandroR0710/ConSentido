@@ -4,6 +4,15 @@ import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { crearUploaderImagen } from "../../shared/middlewares/upload.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
+  crearInventarioProductoController,
+  editarInventarioProductoController,
+  guardarIngredientesProductoController,
+  listarInventarioController,
+  listarMovimientosInventarioController,
+  obtenerIngredientesProductoController,
+  registrarMovimientoInventarioController,
+} from "./inventario.controller";
+import {
   agregarCargoParaLlevarController,
   agregarItemController,
   cambiarMesaController,
@@ -78,6 +87,18 @@ migaoRouter.post(
   requirePermission("migao.productos.editar"),
   subirImagenProducto.single("imagen"),
   asyncHandler(subirImagenProductoController),
+);
+// Receta del producto (qué ingredientes de migao_inventario_productos
+// consume por cada unidad vendida) — mismos permisos que el producto en sí.
+migaoRouter.get(
+  "/productos/:id/ingredientes",
+  requirePermission("migao.productos.ver"),
+  asyncHandler(obtenerIngredientesProductoController),
+);
+migaoRouter.put(
+  "/productos/:id/ingredientes",
+  requirePermission("migao.productos.editar"),
+  asyncHandler(guardarIngredientesProductoController),
 );
 migaoRouter.get("/ordenes", requirePermission("migao.ordenes.ver"), asyncHandler(listarOrdenesAbiertasController));
 migaoRouter.post("/ordenes", requirePermission("migao.ordenes.crear"), asyncHandler(crearOrdenController));
@@ -202,4 +223,35 @@ migaoRouter.post(
   "/ordenes/:id/marcar-listo",
   requirePermission("migao.cocina.actualizar_estado"),
   asyncHandler(marcarOrdenListaController),
+);
+
+// Inventario de Migao: catálogo de insumos "tal como los entrega el
+// proveedor" + stock, ver inventario.service.ts. Administrar (crear/editar
+// productos, registrar entradas/ajustes) es de Root/Super Root/Cocina; ver
+// también lo tiene Administrador (para elegir ingredientes al armar un
+// producto del menú).
+migaoRouter.get(
+  "/inventario/productos",
+  requirePermission("migao.inventario.ver"),
+  asyncHandler(listarInventarioController),
+);
+migaoRouter.post(
+  "/inventario/productos",
+  requirePermission("migao.inventario.administrar"),
+  asyncHandler(crearInventarioProductoController),
+);
+migaoRouter.patch(
+  "/inventario/productos/:id",
+  requirePermission("migao.inventario.administrar"),
+  asyncHandler(editarInventarioProductoController),
+);
+migaoRouter.get(
+  "/inventario/productos/:id/movimientos",
+  requirePermission("migao.inventario.ver"),
+  asyncHandler(listarMovimientosInventarioController),
+);
+migaoRouter.post(
+  "/inventario/movimientos",
+  requirePermission("migao.inventario.administrar"),
+  asyncHandler(registrarMovimientoInventarioController),
 );

@@ -165,6 +165,41 @@ export interface CategoriaProducto {
   nombre: string;
 }
 
+export interface InventarioProducto {
+  id: string;
+  nombre: string;
+  unidad_medida: string;
+  unidades_por_paquete: string;
+  tamano_unidad: string | null;
+  costo_paquete: string | null;
+  stock_unidades: string;
+  stock_minimo_unidades: string | null;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface InventarioMovimiento {
+  id: number;
+  producto_id: string;
+  tipo: "entrada" | "ajuste" | "consumo";
+  cantidad_unidades: string;
+  motivo: string | null;
+  referencia_entidad: string | null;
+  referencia_id: string | null;
+  usuario_id: string;
+  usuario_nombre: string | null;
+  created_at: string;
+}
+
+export interface IngredienteProducto {
+  id: number;
+  productoId: string;
+  inventarioProductoId: string;
+  cantidadPorUnidad: string;
+  nombre: string;
+  unidadMedida: string;
+}
+
 export const migaoApi = {
   listarOrdenesAbiertas: () => apiFetch<OrdenResumen[]>("/migao/ordenes"),
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
@@ -264,7 +299,7 @@ export const migaoApi = {
     precioUnitario: number,
     observaciones?: string,
   ) =>
-    apiFetch<OrdenItem>(`/migao/ordenes/${ordenId}/items/para-llevar`, {
+    apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/ordenes/${ordenId}/items/para-llevar`, {
       method: "POST",
       body: { productoId, cantidad, precioUnitario, observaciones },
     }),
@@ -279,7 +314,7 @@ export const migaoApi = {
     numeroPersonas?: number,
     piso?: number,
   ) =>
-    apiFetch<{ id: string; comensal_numero: number }>("/migao/ordenes", {
+    apiFetch<{ id: string; comensal_numero: number; alertasInventario: string[] }>("/migao/ordenes", {
       method: "POST",
       body: { mesaNumero, items, numeroPersonas, piso },
     }),
@@ -290,14 +325,67 @@ export const migaoApi = {
     precioUnitario: number,
     observaciones?: string,
   ) =>
-    apiFetch<OrdenItem>(`/migao/ordenes/${ordenId}/items`, {
+    apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/ordenes/${ordenId}/items`, {
       method: "POST",
       body: { productoId, cantidad, precioUnitario, observaciones },
     }),
   editarCantidadItem: (itemId: number, cantidad: number) =>
-    apiFetch<OrdenItem>(`/migao/items/${itemId}`, { method: "PATCH", body: { cantidad } }),
+    apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {
+      method: "PATCH",
+      body: { cantidad },
+    }),
   cancelarItem: (itemId: number) =>
-    apiFetch<OrdenItem>(`/migao/items/${itemId}`, { method: "PATCH", body: { cancelar: true } }),
+    apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {
+      method: "PATCH",
+      body: { cancelar: true },
+    }),
   entregarItem: (itemId: number) =>
     apiFetch<OrdenItem>(`/migao/items/${itemId}/entregar`, { method: "PATCH" }),
+
+  // Receta de un producto del menú: qué ingredientes de inventario consume.
+  obtenerIngredientesProducto: (productoId: string) =>
+    apiFetch<IngredienteProducto[]>(`/migao/productos/${productoId}/ingredientes`),
+  guardarIngredientesProducto: (
+    productoId: string,
+    ingredientes: { inventarioProductoId: string; cantidadPorUnidad: number }[],
+  ) =>
+    apiFetch<{ guardado: boolean }>(`/migao/productos/${productoId}/ingredientes`, {
+      method: "PUT",
+      body: { ingredientes },
+    }),
+
+  // Inventario de Migao: catálogo de insumos "tal como los entrega el
+  // proveedor" + stock, consumido automáticamente al vender productos con receta.
+  listarInventario: () => apiFetch<InventarioProducto[]>("/migao/inventario/productos"),
+  crearInventarioProducto: (input: {
+    nombre: string;
+    unidadMedida: string;
+    unidadesPorPaquete: number;
+    tamanoUnidad?: string;
+    costoPaquete?: number;
+    stockMinimoUnidades?: number;
+  }) => apiFetch<InventarioProducto>("/migao/inventario/productos", { method: "POST", body: input }),
+  editarInventarioProducto: (
+    id: string,
+    input: {
+      nombre?: string;
+      unidadMedida?: string;
+      unidadesPorPaquete?: number;
+      tamanoUnidad?: string;
+      costoPaquete?: number;
+      stockMinimoUnidades?: number;
+      activo?: boolean;
+    },
+  ) => apiFetch<InventarioProducto>(`/migao/inventario/productos/${id}`, { method: "PATCH", body: input }),
+  registrarMovimientoInventario: (
+    input:
+      | { tipo: "entrada"; productoId: string; paquetes: number; motivo?: string }
+      | { tipo: "ajuste"; productoId: string; unidades: number; motivo: string },
+  ) =>
+    apiFetch<{ producto: InventarioProducto; movimiento: InventarioMovimiento }>("/migao/inventario/movimientos", {
+      method: "POST",
+      body: input,
+    }),
+  listarMovimientosInventario: (productoId: string) =>
+    apiFetch<InventarioMovimiento[]>(`/migao/inventario/productos/${productoId}/movimientos`),
 };

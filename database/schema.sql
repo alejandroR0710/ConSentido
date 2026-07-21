@@ -383,6 +383,59 @@ CREATE TABLE inventario_productos (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ============================================================================
+-- Inventario de Migao: catálogo de insumos "tal como los entrega el
+-- proveedor" (ej. una torta de chocolate = 12 porciones, una paca de leche =
+-- 6 unidades) + receta de qué consume cada producto vendible del menú. El
+-- stock se guarda SIEMPRE en unidades sueltas (no en paquetes): el consumo
+-- por venta es por unidad ("1 porción de torta"); unidades_por_paquete solo
+-- sirve para convertir "llegaron 3 pacas" a unidades al registrar una
+-- entrada, y para mostrar "~N paquetes" en pantalla. Prefijo `migao_` para no
+-- confundir con `insumos`/`inventario_insumos` (multi-almacén, sin receta) ni
+-- con `inventario_productos` de arriba (1:1 con un producto vendible, sin usar).
+-- ============================================================================
+
+CREATE TABLE migao_inventario_productos (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre                VARCHAR(120) NOT NULL,
+  unidad_medida         VARCHAR(30) NOT NULL,
+  unidades_por_paquete  NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (unidades_por_paquete > 0),
+  tamano_unidad         VARCHAR(30),
+  costo_paquete         NUMERIC(12,2),
+  stock_unidades        NUMERIC(12,3) NOT NULL DEFAULT 0,
+  stock_minimo_unidades NUMERIC(12,3),
+  activo                BOOLEAN NOT NULL DEFAULT true,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ledger firmado: cantidad_unidades positivo = entró stock, negativo = salió.
+-- 'entrada'/'ajuste' se registran a mano (Root/Super Root/Cocina); 'consumo'
+-- lo escribe el propio flujo de órdenes de Migao, nunca un formulario.
+CREATE TABLE migao_inventario_movimientos (
+  id                 BIGSERIAL PRIMARY KEY,
+  producto_id        UUID NOT NULL REFERENCES migao_inventario_productos(id),
+  tipo               VARCHAR(20) NOT NULL CHECK (tipo IN ('entrada','ajuste','consumo')),
+  cantidad_unidades  NUMERIC(12,3) NOT NULL,
+  motivo             VARCHAR(200),
+  referencia_entidad VARCHAR(40),
+  referencia_id      VARCHAR(64),
+  usuario_id         UUID NOT NULL REFERENCES usuarios(id),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_migao_inv_mov_producto ON migao_inventario_movimientos(producto_id, created_at);
+
+-- Receta: qué ingredientes (y cuántas unidades de cada uno) consume UNA
+-- unidad vendida de un producto del menú (`productos`, no de este catálogo
+-- nuevo). Un producto del menú sin filas acá simplemente no toca inventario
+-- al venderse.
+CREATE TABLE migao_producto_ingredientes (
+  id                     BIGSERIAL PRIMARY KEY,
+  producto_id            UUID NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+  inventario_producto_id UUID NOT NULL REFERENCES migao_inventario_productos(id),
+  cantidad_por_unidad    NUMERIC(10,3) NOT NULL CHECK (cantidad_por_unidad > 0),
+  UNIQUE (producto_id, inventario_producto_id)
+);
+
 CREATE TABLE promociones (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   producto_id  UUID NOT NULL REFERENCES productos(id) ON DELETE CASCADE,

@@ -55,6 +55,9 @@ export function MeseroPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  // Aviso NO bloqueante de stock bajo/negativo al vender un producto con
+  // receta de inventario asociada — el ítem igual se agrega, esto solo avisa.
+  const [alertaInventario, setAlertaInventario] = useState<string | null>(null);
   const [notificaciones, setNotificaciones] = useState<{ id: number; texto: string }[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
 
@@ -203,6 +206,7 @@ export function MeseroPage() {
         borradorPiso,
       );
       setMensaje(`Orden creada — Mesa ${borradorMesaNumero} (piso ${borradorPiso}) · Comensal ${orden.comensal_numero}`);
+      setAlertaInventario(orden.alertasInventario.length > 0 ? orden.alertasInventario.join(" ") : null);
       setBorradorMesaNumero("");
       setBorradorPersonas("");
       setBorradorPiso(1);
@@ -252,7 +256,14 @@ export function MeseroPage() {
     setAgregandoId(producto.id);
     setError(null);
     try {
-      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio), observaciones);
+      const item = await migaoApi.agregarItem(
+        ordenSeleccionadaId,
+        producto.id,
+        cantidad,
+        Number(producto.precio),
+        observaciones,
+      );
+      setAlertaInventario(item.alertasInventario.length > 0 ? item.alertasInventario.join(" ") : null);
       await cargarDetalle(ordenSeleccionadaId);
       await cargarOrdenes();
     } catch (err) {
@@ -349,6 +360,11 @@ export function MeseroPage() {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
+      {alertaInventario && (
+        <p className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-600 dark:bg-amber-950/20 dark:text-amber-400">
+          {alertaInventario}
+        </p>
+      )}
 
       {vista === "lista" && (
         <div className="flex flex-col gap-2">

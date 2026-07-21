@@ -37,6 +37,9 @@ export const MODULES_META: ModuloMeta[] = [
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
   { slug: "migao", label: "Menú", path: "/menu", icon: "🗂️", roles: ["Administrador"] },
+  // Administra stock (Root/Super Root/Cocina) — el Administrador no lo ve acá,
+  // solo consulta el catálogo desde dentro del modal de producto del Menú.
+  { slug: "migao", label: "Inventario", path: "/migao/inventario", icon: "📦", roles: ["Cocina"] },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
 ];
 
@@ -80,7 +83,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "migao-grupo",
     label: "Migao",
     icon: "🍽️",
-    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/historial-administrativo"],
+    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/inventario", "/migao/historial-administrativo"],
   },
   {
     slug: "con-sentido-grupo",

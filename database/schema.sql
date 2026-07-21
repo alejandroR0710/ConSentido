@@ -156,6 +156,24 @@ CREATE TABLE movimientos_caja (
 CREATE INDEX idx_movimientos_caja_turno ON movimientos_caja(turno_id, created_at);
 CREATE INDEX idx_movimientos_caja_referencia ON movimientos_caja(referencia_entidad, referencia_id);
 
+-- Auditoría de correcciones hechas a un día YA cerrado del historial de Caja
+-- (agregar un movimiento olvidado, o corregir monto/método/motivo de uno
+-- existente) — a diferencia de las ediciones normales del turno abierto, esto
+-- reabre contabilidad ya contada físicamente, así que cada acción queda
+-- registrada con el antes/después. Mismo espíritu que orden_historial.
+CREATE TABLE movimientos_caja_ediciones (
+  id            BIGSERIAL PRIMARY KEY,
+  movimiento_id BIGINT REFERENCES movimientos_caja(id) ON DELETE SET NULL,
+  fecha         VARCHAR(10) NOT NULL, -- día calendario (Bogotá) afectado, 'YYYY-MM-DD'
+  accion        VARCHAR(20) NOT NULL CHECK (accion IN ('creado', 'editado')),
+  datos_antes   JSONB, -- null si accion = 'creado'
+  datos_despues JSONB NOT NULL,
+  nota          VARCHAR(300) NOT NULL,
+  usuario_id    UUID NOT NULL REFERENCES usuarios(id),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_movimientos_caja_ediciones_fecha ON movimientos_caja_ediciones(fecha, created_at);
+
 -- ============================================================================
 -- 2. CLIENTES (entidad compartida entre Con Sentido, Migao, Talleres, Pedidos)
 -- ============================================================================

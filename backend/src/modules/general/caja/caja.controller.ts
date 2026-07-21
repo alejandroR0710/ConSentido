@@ -2,11 +2,14 @@ import { Request, Response } from "express";
 import { created, ok } from "../../../shared/utils/response";
 import {
   abrirTurnoSchema,
+  agregarMovimientoHistoricoSchema,
   borrarHistorialDiaSchema,
   borrarTurnoSchema,
   cerrarTurnoSchema,
   crearCategoriaGastoSchema,
   editarMetodoPagoMovimientoSchema,
+  editarMovimientoHistoricoSchema,
+  fechaParamSchema,
   historialCajaSchema,
   registrarEgresoSchema,
   registrarIngresoSchema,
@@ -100,4 +103,23 @@ export async function borrarTurnoController(req: Request, res: Response) {
   borrarTurnoSchema.parse(req.body);
   const resultado = await service.borrarTurno(req.params.id);
   return ok(res, resultado);
+}
+
+export async function agregarMovimientoHistoricoController(req: Request, res: Response) {
+  const { fecha } = fechaParamSchema.parse(req.params);
+  const data = agregarMovimientoHistoricoSchema.parse(req.body);
+  const movimiento = await service.agregarMovimientoHistorico(fecha, data, req.auth!.usuarioId);
+  return created(res, movimiento);
+}
+
+export async function editarMovimientoHistoricoController(req: Request, res: Response) {
+  const data = editarMovimientoHistoricoSchema.parse(req.body);
+  const movimiento = await service.editarMovimientoHistorico(Number(req.params.id), data, req.auth!.usuarioId);
+  return ok(res, movimiento);
+}
+
+export async function listarEdicionesDelDiaController(req: Request, res: Response) {
+  const { fecha } = fechaParamSchema.parse(req.params);
+  const ediciones = await service.listarEdicionesDelDia(fecha);
+  return ok(res, ediciones);
 }

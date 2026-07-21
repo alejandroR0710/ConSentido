@@ -6,9 +6,18 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { Modal } from "../../../shared/components/Modal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { cajaApi, type DiaHistorialCaja, type MovimientoCaja, type TurnoCaja } from "../api";
+import {
+  cajaApi,
+  type CategoriaGasto,
+  type DiaHistorialCaja,
+  type EdicionHistorialCaja,
+  type MovimientoCaja,
+  type TurnoCaja,
+} from "../api";
+import { AgregarMovimientoHistoricoModal } from "../components/AgregarMovimientoHistoricoModal";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
+import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
@@ -174,6 +183,10 @@ export function CajaHistorialPage() {
   const [turnosDelDia, setTurnosDelDia] = useState<TurnoCaja[]>([]);
   const [turnoABorrar, setTurnoABorrar] = useState<TurnoCaja | null>(null);
   const [borrarDiaAbierto, setBorrarDiaAbierto] = useState(false);
+  const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
+  const [edicionesDelDia, setEdicionesDelDia] = useState<EdicionHistorialCaja[]>([]);
+  const [agregarAbierto, setAgregarAbierto] = useState(false);
+  const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoCaja | null>(null);
 
   // No pone loading=true en cada llamada (solo el estado inicial ya lo es):
   // así el sondeo de fondo actualiza los datos sin ocultar la pantalla con
@@ -198,10 +211,24 @@ export function CajaHistorialPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anio]);
 
+  useEffect(() => {
+    cajaApi.listarCategoriasGasto().then(setCategorias).catch(() => {});
+  }, []);
+
+  function cargarEdicionesDelDia(fecha: string) {
+    cajaApi
+      .listarEdicionesDelDia(fecha)
+      .then(setEdicionesDelDia)
+      .catch(() => {
+        /* el historial de cambios simplemente queda vacío */
+      });
+  }
+
   function seleccionarDia(dia: DiaHistorialCaja) {
     setDiaSeleccionado(dia);
     setTurnosDelDia([]);
     setMovimientosDelDia([]);
+    setEdicionesDelDia([]);
     setCargandoMovimientos(true);
     cajaApi
       .listarMovimientosPorFecha(dia.fecha)
@@ -210,6 +237,7 @@ export function CajaHistorialPage() {
         /* el detalle simplemente queda vacío; el resumen ya cargado se ve igual */
       })
       .finally(() => setCargandoMovimientos(false));
+    cargarEdicionesDelDia(dia.fecha);
     if (esSuperRoot) {
       cajaApi
         .listarTurnosPorFecha(dia.fecha)
@@ -230,6 +258,7 @@ export function CajaHistorialPage() {
         .listarMovimientosPorFecha(diaSeleccionado.fecha)
         .then(setMovimientosDelDia)
         .catch(() => {});
+      cargarEdicionesDelDia(diaSeleccionado.fecha);
       if (esSuperRoot) {
         cajaApi
           .listarTurnosPorFecha(diaSeleccionado.fecha)
@@ -240,6 +269,18 @@ export function CajaHistorialPage() {
     return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaSeleccionado]);
+
+  // Tras agregar/editar un movimiento retroactivo, se refresca todo lo que
+  // pudo cambiar: el detalle del día, su historial de cambios, y el grid
+  // mensual (el neto del día pudo variar).
+  async function refrescarTrasAjuste() {
+    if (!diaSeleccionado) return;
+    await Promise.all([
+      cajaApi.listarMovimientosPorFecha(diaSeleccionado.fecha).then(setMovimientosDelDia),
+      cargarHistorial(),
+    ]);
+    cargarEdicionesDelDia(diaSeleccionado.fecha);
+  }
 
   const porFecha = useMemo(() => {
     const map = new Map<string, DiaHistorialCaja>();
@@ -382,47 +423,107 @@ export function CajaHistorialPage() {
                       Detalle de movimientos
                     </span>
                     <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
-                      {movimientosDelDia.map((m) => (
-                        <div
-                          key={m.id}
-                          className={`flex items-center justify-between gap-2 rounded-md border-l-4 bg-brand-vanilla-dark/20 px-2 py-1.5 text-xs dark:bg-brand-green-700/10 ${
-                            m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-brand-ink dark:text-brand-vanilla">
-                              {m.tipo === "ingreso"
-                                ? (m.modulo_origen_slug
-                                    ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug)
-                                    : "Otro")
-                                : (m.categoria_gasto_nombre ?? "Otro")}
-                              {m.motivo && <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> · {m.motivo}</span>}
-                            </div>
-                            <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
-                              {formatearHora(m.created_at)} · {m.metodo_pago}
-                            </div>
-                            {m.descuento_porcentaje != null && (
-                              <div className="text-amber-700 dark:text-amber-400">
-                                Sin descuento: {formatMoney(m.monto_sin_descuento!)} · -
-                                {Number(m.descuento_porcentaje)}%
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={`shrink-0 font-semibold ${
-                              m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                      {movimientosDelDia.map((m) => {
+                        const puedeEditar = m.tipo === "egreso" || !m.referencia_entidad;
+                        return (
+                          <div
+                            key={m.id}
+                            className={`flex items-center justify-between gap-2 rounded-md border-l-4 bg-brand-vanilla-dark/20 px-2 py-1.5 text-xs dark:bg-brand-green-700/10 ${
+                              m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
                             }`}
                           >
-                            {m.tipo === "egreso" ? "-" : "+"}
-                            {formatMoney(m.monto)}
-                          </span>
-                        </div>
-                      ))}
+                            <div className="min-w-0">
+                              <div className="truncate text-brand-ink dark:text-brand-vanilla">
+                                {m.tipo === "ingreso"
+                                  ? (m.modulo_origen_slug
+                                      ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug)
+                                      : "Otro")
+                                  : (m.categoria_gasto_nombre ?? "Otro")}
+                                {m.motivo && <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> · {m.motivo}</span>}
+                              </div>
+                              <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
+                                {formatearHora(m.created_at)} · {m.metodo_pago}
+                              </div>
+                              {m.descuento_porcentaje != null && (
+                                <div className="text-amber-700 dark:text-amber-400">
+                                  Sin descuento: {formatMoney(m.monto_sin_descuento!)} · -
+                                  {Number(m.descuento_porcentaje)}%
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span
+                                className={`font-semibold ${
+                                  m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                                }`}
+                              >
+                                {m.tipo === "egreso" ? "-" : "+"}
+                                {formatMoney(m.monto)}
+                              </span>
+                              {puedeEditar && (
+                                <button
+                                  onClick={() => setMovimientoAEditar(m)}
+                                  className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                >
+                                  Editar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </>
               )
             )}
+
+            <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-300 p-3 dark:border-amber-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Ajustar historial de este día
+                </span>
+                <button
+                  onClick={() => setAgregarAbierto(true)}
+                  className="rounded-md border border-amber-500 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                >
+                  + Agregar movimiento
+                </button>
+              </div>
+
+              {edicionesDelDia.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+                    Historial de cambios de este día
+                  </span>
+                  <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-1">
+                    {edicionesDelDia.map((e) => (
+                      <div
+                        key={e.id}
+                        className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla-dark/10 px-2 py-1.5 text-[11px] dark:border-brand-green-700"
+                      >
+                        <div className="flex justify-between text-brand-ink dark:text-brand-vanilla">
+                          <span className="font-medium">
+                            {e.accion === "creado" ? "Movimiento agregado" : "Movimiento editado"}
+                          </span>
+                          <span className="text-brand-ink/50 dark:text-brand-vanilla/50">
+                            {formatearHora(e.createdAt)} · {e.usuarioNombre ?? "—"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-brand-ink/70 dark:text-brand-vanilla/70">"{e.nota}"</div>
+                        {e.accion === "editado" && e.datosAntes && (
+                          <div className="mt-0.5 text-brand-ink/50 dark:text-brand-vanilla/50">
+                            Antes: {formatMoney(Number(e.datosAntes.monto))} · {String(e.datosAntes.metodo_pago)} →
+                            Después: {formatMoney(Number(e.datosDespues.monto))} ·{" "}
+                            {String(e.datosDespues.metodo_pago)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {esSuperRoot && (
               <div className="mt-3 flex flex-col gap-3 rounded-lg border-2 border-dashed border-red-300 p-3 dark:border-red-800">
@@ -466,6 +567,24 @@ export function CajaHistorialPage() {
             )}
           </div>
         </Modal>
+      )}
+
+      {agregarAbierto && diaSeleccionado && (
+        <AgregarMovimientoHistoricoModal
+          fecha={diaSeleccionado.fecha}
+          categorias={categorias}
+          onCerrar={() => setAgregarAbierto(false)}
+          onAgregado={refrescarTrasAjuste}
+        />
+      )}
+
+      {movimientoAEditar && (
+        <EditarMovimientoHistoricoModal
+          movimiento={movimientoAEditar}
+          categorias={categorias}
+          onCerrar={() => setMovimientoAEditar(null)}
+          onGuardado={refrescarTrasAjuste}
+        />
       )}
 
       {borrarDiaAbierto && diaSeleccionado && (

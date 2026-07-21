@@ -110,3 +110,52 @@ export const borrarTurnoSchema = z.object({
   confirmacion: z.literal("BORRAR TURNO"),
 });
 export type BorrarTurnoInput = z.infer<typeof borrarTurnoSchema>;
+
+// Ajustar el historial de un día YA cerrado (agregar un movimiento olvidado,
+// o corregir uno existente) reabre contabilidad ya contada físicamente —
+// misma frase de confirmación escrita que el resto de acciones sensibles de
+// Caja, más una nota obligatoria explicando el porqué (queda en la auditoría).
+const camposAjusteHistorico = {
+  nota: z.string().trim().min(3).max(300),
+  confirmacion: z.literal("AJUSTAR HISTORIAL"),
+};
+
+export const agregarMovimientoHistoricoSchema = z.union([
+  z.object({
+    ...camposAjusteHistorico,
+    tipo: z.literal("ingreso"),
+    moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]),
+    monto: z.number().positive(),
+    metodoPago: z.enum(METODOS_PAGO),
+    motivo: z.string().max(200).optional(),
+  }),
+  z.object({
+    ...camposAjusteHistorico,
+    tipo: z.literal("egreso"),
+    categoriaGastoId: z.number().int().positive(),
+    monto: z.number().positive(),
+    metodoPago: z.enum(METODOS_PAGO),
+    motivo: z.string().max(200),
+  }),
+]);
+export type AgregarMovimientoHistoricoInput = z.infer<typeof agregarMovimientoHistoricoSchema>;
+
+export const editarMovimientoHistoricoSchema = z
+  .object({
+    ...camposAjusteHistorico,
+    monto: z.number().positive().optional(),
+    metodoPago: z.enum(METODOS_PAGO).optional(),
+    motivo: z.string().max(200).optional(),
+    moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]).optional(),
+    categoriaGastoId: z.number().int().positive().optional(),
+  })
+  .refine((d) => d.monto !== undefined || d.metodoPago !== undefined || d.motivo !== undefined
+    || d.moduloOrigenSlug !== undefined || d.categoriaGastoId !== undefined, {
+    message: "Debes cambiar al menos un campo",
+  });
+export type EditarMovimientoHistoricoInput = z.infer<typeof editarMovimientoHistoricoSchema>;
+
+export const fechaParamSchema = z.object({
+  fecha: z.string().regex(FECHA_REGEX, "Formato de fecha inválido (YYYY-MM-DD)"),
+});
+export type FechaParamInput = z.infer<typeof fechaParamSchema>;

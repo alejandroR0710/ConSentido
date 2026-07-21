@@ -4,12 +4,15 @@ import { requirePermission } from "../../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../../shared/utils/async-handler";
 import {
   abrirTurnoController,
+  agregarMovimientoHistoricoController,
   borrarHistorialDiaController,
   borrarTurnoController,
   cerrarTurnoController,
   crearCategoriaGastoController,
   editarMetodoPagoMovimientoController,
+  editarMovimientoHistoricoController,
   listarCategoriasGastoController,
+  listarEdicionesDelDiaController,
   obtenerHistorialCajaController,
   obtenerMovimientosDelDiaController,
   obtenerResumenTurnoController,
@@ -91,3 +94,22 @@ cajaRouter.patch(
 // Reset exclusivo de Super Root: no borra historial, fuerza el cierre del
 // turno abierto sin conteo físico y borra sus egresos (ver caja.service.ts).
 cajaRouter.post("/reset", requirePermission("general.caja.resetear"), asyncHandler(resetearCajaController));
+
+// Ajustar el historial de un día ya cerrado (Root/Super Root, ver
+// caja.service.ts): agregar un movimiento retroactivo, o corregir uno
+// existente — ambos quedan auditados en movimientos_caja_ediciones.
+cajaRouter.post(
+  "/historial/:fecha/movimientos",
+  requirePermission("general.caja.editar_movimiento"),
+  asyncHandler(agregarMovimientoHistoricoController),
+);
+cajaRouter.patch(
+  "/movimientos/:id/historico",
+  requirePermission("general.caja.editar_movimiento"),
+  asyncHandler(editarMovimientoHistoricoController),
+);
+cajaRouter.get(
+  "/historial/:fecha/ediciones",
+  requirePermission("general.caja.ver"),
+  asyncHandler(listarEdicionesDelDiaController),
+);

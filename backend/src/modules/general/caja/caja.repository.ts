@@ -343,6 +343,137 @@ export async function insertEgreso(params: {
   return result.rows[0];
 }
 
+/** Alta retroactiva de un ingreso/egreso en un día ya cerrado — a diferencia
+ *  de insertIngreso/insertEgreso, fija `created_at` explícito (mediodía Bogotá
+ *  de ese día) en vez de `now()`, para que caiga en el día correcto en todas
+ *  las consultas AT TIME ZONE ya existentes. */
+export async function insertMovimientoHistorico(params: {
+  turnoId: string;
+  tipo: "ingreso" | "egreso";
+  moduloOrigenSlug?: string;
+  categoriaGastoId?: number;
+  monto: number;
+  metodoPago: string;
+  motivo?: string;
+  usuarioId: string;
+  createdAt: Date;
+}) {
+  const result = await pool.query(
+    `INSERT INTO movimientos_caja
+       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, created_at)
+     VALUES ($1, $2, (SELECT id FROM modulos WHERE slug = $3), $4, $5, $6, $7, $8, $9)
+     RETURNING *`,
+    [
+      params.turnoId,
+      params.tipo,
+      params.moduloOrigenSlug ?? null,
+      params.categoriaGastoId ?? null,
+      params.monto,
+      params.metodoPago,
+      params.motivo ?? null,
+      params.usuarioId,
+      params.createdAt,
+    ],
+  );
+  return result.rows[0];
+}
+
+/** Corrige monto/método/motivo/módulo-o-categoría de un movimiento ya
+ *  registrado (a diferencia de actualizarMetodoPagoMovimiento, que solo toca
+ *  el método y exige turno abierto) — pensado para movimientos de un turno
+ *  YA cerrado. COALESCE: solo cambia los campos que vienen definidos. */
+export async function actualizarMovimientoHistorico(
+  movimientoId: number,
+  cambios: {
+    monto?: number;
+    metodoPago?: string;
+    motivo?: string;
+    moduloOrigenSlug?: string;
+    categoriaGastoId?: number;
+  },
+) {
+  const result = await pool.query(
+    `UPDATE movimientos_caja
+        SET monto = COALESCE($2, monto),
+            metodo_pago = COALESCE($3, metodo_pago),
+            motivo = COALESCE($4, motivo),
+            modulo_origen_id = COALESCE((SELECT id FROM modulos WHERE slug = $5), modulo_origen_id),
+            categoria_gasto_id = COALESCE($6, categoria_gasto_id)
+      WHERE id = $1
+      RETURNING *`,
+    [
+      movimientoId,
+      cambios.monto ?? null,
+      cambios.metodoPago ?? null,
+      cambios.motivo ?? null,
+      cambios.moduloOrigenSlug ?? null,
+      cambios.categoriaGastoId ?? null,
+    ],
+  );
+  return result.rows[0];
+}
+
+export interface EdicionHistorialCaja {
+  id: number;
+  movimientoId: number | null;
+  fecha: string;
+  accion: "creado" | "editado";
+  datosAntes: unknown;
+  datosDespues: unknown;
+  nota: string;
+  usuarioId: string;
+  usuarioNombre: string | null;
+  createdAt: string;
+}
+
+export async function insertEdicionHistorial(params: {
+  movimientoId: number;
+  fecha: string;
+  accion: "creado" | "editado";
+  datosAntes: unknown;
+  datosDespues: unknown;
+  nota: string;
+  usuarioId: string;
+}) {
+  await pool.query(
+    `INSERT INTO movimientos_caja_ediciones
+       (movimiento_id, fecha, accion, datos_antes, datos_despues, nota, usuario_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      params.movimientoId,
+      params.fecha,
+      params.accion,
+      params.datosAntes === null ? null : JSON.stringify(params.datosAntes),
+      JSON.stringify(params.datosDespues),
+      params.nota,
+      params.usuarioId,
+    ],
+  );
+}
+
+export async function listEdicionesDelDia(fecha: string): Promise<EdicionHistorialCaja[]> {
+  const result = await pool.query(
+    `SELECT e.*, u.nombre AS usuario_nombre
+       FROM movimientos_caja_ediciones e
+       LEFT JOIN usuarios u ON u.id = e.usuario_id
+      WHERE e.fecha = $1
+      ORDER BY e.created_at ASC`,
+    [fecha],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    movimientoId: row.movimiento_id,
+    fecha: row.fecha,
+    accion: row.accion,
+    datosAntes: row.datos_antes,
+    datosDespues: row.datos_despues,
+    nota: row.nota,
+    usuarioId: row.usuario_id,
+    usuarioNombre: row.usuario_nombre,
+    createdAt: row.created_at,
+  }));
+}
+
 /** Un renglón por día con movimientos en el año dado — base para el resumen
  *  día/semana/mes y la grilla tipo calendario del historial de Caja. Se agrupa
  *  por la fecha del movimiento, no por turno (un turno puede quedar abierto de
@@ -355,6 +486,37 @@ export async function listTurnosPorFecha(fecha: string): Promise<TurnoCaja[]> {
     [fecha],
   );
   return result.rows.map(mapTurno);
+}
+
+/** El único turno cerrado que arrancó ese día calendario — o null si hay 0 o
+ *  más de uno (ambos casos son ambiguos para saber a qué turno atribuir un
+ *  ajuste retroactivo, así que el service los rechaza con un mensaje claro
+ *  en vez de adivinar). */
+export async function getTurnoCerradoUnicoDelDia(fecha: string): Promise<TurnoCaja | null> {
+  const turnos = await listTurnosPorFecha(fecha);
+  if (turnos.length !== 1 || turnos[0].estado !== "cerrado") return null;
+  return turnos[0];
+}
+
+/** Recalcula el cierre de un turno YA cerrado (tras agregar/editar un
+ *  movimiento retroactivo) sin tocar estado/cerrado_en/declarado — misma
+ *  fórmula que el cierre normal (ver caja.service.ts::cerrarTurno). */
+export async function actualizarCierreCalculado(
+  turnoId: string,
+  montoFinalCalculadoEfectivo: number,
+  montoFinalCalculadoBanco: number,
+  diferenciaEfectivo: number,
+): Promise<TurnoCaja> {
+  const result = await pool.query(
+    `UPDATE turnos_caja
+        SET monto_final_calculado_efectivo = $2,
+            monto_final_calculado_banco = $3,
+            diferencia_efectivo = $4
+      WHERE id = $1
+      RETURNING *`,
+    [turnoId, montoFinalCalculadoEfectivo, montoFinalCalculadoBanco, diferenciaEfectivo],
+  );
+  return mapTurno(result.rows[0]);
 }
 
 /** Detalle completo (no solo la suma) de los movimientos de un día calendario

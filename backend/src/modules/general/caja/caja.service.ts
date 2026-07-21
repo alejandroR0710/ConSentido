@@ -5,8 +5,10 @@ import { descomponerPago } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
+  AgregarMovimientoHistoricoInput,
   CerrarTurnoInput,
   EditarMetodoPagoMovimientoInput,
+  EditarMovimientoHistoricoInput,
   RegistrarEgresoInput,
   RegistrarIngresoInput,
 } from "./caja.schema";
@@ -306,4 +308,135 @@ export async function obtenerHistorialAnual(anio: number) {
     neto: Number(d.ingresos) - Number(d.egresos),
     movimientos: Number(d.movimientos),
   }));
+}
+
+/** Recalcula monto_final_calculado_efectivo/banco y diferencia_efectivo de un
+ *  turno YA cerrado tras un ajuste retroactivo — misma fórmula que el cierre
+ *  normal, sin tocar estado/cerrado_en/declarado (ese sí fue un conteo físico
+ *  real y no debe cambiar solo porque se corrigió un registro). */
+async function recalcularCierreTurno(turnoId: string) {
+  const turno = await repo.getTurnoById(turnoId);
+  if (!turno) return;
+  const { ingresosEfectivo, egresosEfectivo, ingresosBanco, egresosBanco } =
+    await repo.sumMovimientosPorTurno(turnoId);
+  const calculadoEfectivo = Number(turno.montoInicialEfectivo) + ingresosEfectivo - egresosEfectivo;
+  const calculadoBanco = Number(turno.montoInicialBanco) + ingresosBanco - egresosBanco;
+  const declarado =
+    turno.montoFinalDeclaradoEfectivo !== null ? Number(turno.montoFinalDeclaradoEfectivo) : calculadoEfectivo;
+  await repo.actualizarCierreCalculado(turnoId, calculadoEfectivo, calculadoBanco, declarado - calculadoEfectivo);
+}
+
+/**
+ * Agrega un ingreso/egreso a un día YA cerrado (ej. se olvidó registrar un
+ * gasto ese día). Exclusivo de Root/Super Root (general.caja.editar_movimiento).
+ * Solo funciona si ese día calendario tiene exactamente un turno y ya está
+ * cerrado — si no, no hay forma segura de saber a qué turno atribuirlo.
+ */
+export async function agregarMovimientoHistorico(
+  fecha: string,
+  input: AgregarMovimientoHistoricoInput,
+  usuarioId: string,
+) {
+  const turno = await repo.getTurnoCerradoUnicoDelDia(fecha);
+  if (!turno) {
+    throw Errors.conflict(
+      "Solo se puede ajustar un día con exactamente un turno, ya cerrado. Si es el turno de hoy, usa Registrar ingreso/egreso normal.",
+    );
+  }
+
+  // Mediodía en hora Bogotá (offset fijo -05:00, Colombia no tiene horario de
+  // verano): cae de sobra dentro del mismo día calendario en cualquier
+  // consulta AT TIME ZONE 'America/Bogota' ya existente.
+  const createdAt = new Date(`${fecha}T12:00:00-05:00`);
+
+  const movimiento = await repo.insertMovimientoHistorico({
+    turnoId: turno.id,
+    tipo: input.tipo,
+    moduloOrigenSlug: input.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
+    categoriaGastoId: input.tipo === "egreso" ? input.categoriaGastoId : undefined,
+    monto: input.monto,
+    metodoPago: input.metodoPago,
+    motivo: input.motivo,
+    usuarioId,
+    createdAt,
+  });
+
+  await repo.insertEdicionHistorial({
+    movimientoId: movimiento.id,
+    fecha,
+    accion: "creado",
+    datosAntes: null,
+    datosDespues: movimiento,
+    nota: input.nota,
+    usuarioId,
+  });
+
+  await recalcularCierreTurno(turno.id);
+
+  return movimiento;
+}
+
+/**
+ * Corrige monto/método/motivo/módulo-o-categoría de un movimiento de un turno
+ * YA cerrado. Los ingresos ligados a una venta de Migao (referencia_entidad
+ * = 'ventas') no se pueden tocar aquí — se desincronizarían con `pagos`; para
+ * esos ya existe "Corregir método de pago" (solo con turno abierto).
+ */
+export async function editarMovimientoHistorico(
+  movimientoId: number,
+  input: EditarMovimientoHistoricoInput,
+  usuarioId: string,
+) {
+  const movimiento = await repo.getMovimientoById(movimientoId);
+  if (!movimiento) throw Errors.notFound("Movimiento no encontrado");
+
+  if (movimiento.tipo === "ingreso" && movimiento.referenciaEntidad) {
+    throw Errors.conflict(
+      "Este ingreso viene de una venta/orden — no se puede editar aquí. Usa la corrección de método de pago.",
+    );
+  }
+
+  const turno = await repo.getTurnoById(movimiento.turnoId);
+  if (!turno || turno.estado !== "cerrado") {
+    throw Errors.conflict("Este ajuste es solo para movimientos de un turno ya cerrado.");
+  }
+
+  // Snapshot en snake_case (mismas llaves que `actualizado`, que viene crudo
+  // de la fila de la base vía RETURNING *) para que el historial de cambios
+  // pueda comparar antes/después con el mismo nombre de campo.
+  const datosAntes = {
+    id: movimiento.id,
+    tipo: movimiento.tipo,
+    monto: movimiento.monto,
+    metodo_pago: movimiento.metodoPago,
+    motivo: movimiento.motivo,
+    modulo_origen_id: movimiento.moduloOrigenId,
+    categoria_gasto_id: movimiento.categoriaGastoId,
+  };
+  const actualizado = await repo.actualizarMovimientoHistorico(movimientoId, {
+    monto: input.monto,
+    metodoPago: input.metodoPago,
+    motivo: input.motivo,
+    moduloOrigenSlug: movimiento.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
+    categoriaGastoId: movimiento.tipo === "egreso" ? input.categoriaGastoId : undefined,
+  });
+
+  const fecha = new Date(actualizado.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+  await repo.insertEdicionHistorial({
+    movimientoId,
+    fecha,
+    accion: "editado",
+    datosAntes,
+    datosDespues: actualizado,
+    nota: input.nota,
+    usuarioId,
+  });
+
+  await recalcularCierreTurno(turno.id);
+
+  return actualizado;
+}
+
+export async function listarEdicionesDelDia(fecha: string) {
+  return repo.listEdicionesDelDia(fecha);
 }

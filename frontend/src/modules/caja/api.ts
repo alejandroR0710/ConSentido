@@ -86,6 +86,56 @@ export interface ResetearCajaResultado {
   egresosBorrados: number;
 }
 
+// Ajustar historial de un día ya cerrado: agregar un movimiento retroactivo,
+// o corregir uno existente. Exclusivo de Root/Super Root, ver
+// general.caja.editar_movimiento.
+export type AgregarMovimientoHistoricoInput =
+  | {
+      tipo: "ingreso";
+      moduloOrigenSlug: ModuloOrigenSlug;
+      monto: number;
+      metodoPago: MetodoPago;
+      motivo?: string;
+      nota: string;
+      confirmacion: "AJUSTAR HISTORIAL";
+    }
+  | {
+      tipo: "egreso";
+      categoriaGastoId: number;
+      monto: number;
+      metodoPago: MetodoPago;
+      motivo: string;
+      nota: string;
+      confirmacion: "AJUSTAR HISTORIAL";
+    };
+
+export interface EditarMovimientoHistoricoInput {
+  monto?: number;
+  metodoPago?: MetodoPago;
+  motivo?: string;
+  moduloOrigenSlug?: ModuloOrigenSlug;
+  categoriaGastoId?: number;
+  nota: string;
+  confirmacion: "AJUSTAR HISTORIAL";
+}
+
+// `datosAntes`/`datosDespues` son una foto cruda de la fila de movimientos_caja
+// en el momento del ajuste (columnas snake_case de la tabla, sin los JOIN de
+// módulo/categoría) — se muestran tal cual en el historial de cambios, no se
+// tipan de forma estricta.
+export interface EdicionHistorialCaja {
+  id: number;
+  movimientoId: number | null;
+  fecha: string;
+  accion: "creado" | "editado";
+  datosAntes: Record<string, unknown> | null;
+  datosDespues: Record<string, unknown>;
+  nota: string;
+  usuarioId: string;
+  usuarioNombre: string | null;
+  createdAt: string;
+}
+
 export const cajaApi = {
   obtenerTurnoActual: () => apiFetch<TurnoCaja | null>("/caja/turno-actual"),
   abrirTurno: (montoInicialEfectivo?: number, montoInicialBanco?: number) =>
@@ -133,4 +183,10 @@ export const cajaApi = {
       method: "DELETE",
       body: { confirmacion: "BORRAR TURNO" },
     }),
+  agregarMovimientoHistorico: (fecha: string, input: AgregarMovimientoHistoricoInput) =>
+    apiFetch<MovimientoCaja>(`/caja/historial/${fecha}/movimientos`, { method: "POST", body: input }),
+  editarMovimientoHistorico: (movimientoId: number | string, input: EditarMovimientoHistoricoInput) =>
+    apiFetch<MovimientoCaja>(`/caja/movimientos/${movimientoId}/historico`, { method: "PATCH", body: input }),
+  listarEdicionesDelDia: (fecha: string) =>
+    apiFetch<EdicionHistorialCaja[]>(`/caja/historial/${fecha}/ediciones`),
 };

@@ -60,3 +60,44 @@ export const ROLE_HOME: Record<string, string> = {
   Mesero: "/mesero",
   Administrador: "/menu",
 };
+
+export interface NavGroupMeta {
+  slug: string;
+  label: string;
+  icon: string;
+  /** Paths de MODULES_META que pertenecen a este grupo, en el orden a mostrar. */
+  paths: string[];
+}
+
+/**
+ * Agrupamiento puramente visual del sidebar (acordeón): no cambia el acceso
+ * de nadie, solo cómo se organiza. MODULES_META se queda como array plano
+ * (HomeRoute.tsx depende de esa forma para calcular a dónde aterriza cada
+ * rol), este es un mapeo aparte que RoleNav usa para decidir qué items van
+ * agrupados bajo un encabezado y cuáles quedan sueltos (Dashboard, Caja
+ * General/Historial de Caja quedan sueltos por no estar en ningún grupo).
+ */
+export const NAV_GROUPS: NavGroupMeta[] = [
+  {
+    slug: "migao-grupo",
+    label: "Migao",
+    icon: "🍽️",
+    paths: [
+      "/migao",
+      "/cocina",
+      "/cocina/historial",
+      "/menu",
+      "/mesero",
+      "/mesero/historial",
+      "/migao/historial",
+      "/migao/historial-administrativo",
+    ],
+  },
+  {
+    slug: "con-sentido-grupo",
+    label: "Con Sentido",
+    icon: "🛍️",
+    paths: ["/con-sentido", "/pedidos", "/talleres"],
+  },
+  { slug: "insumos-grupo", label: "Insumos", icon: "📦", paths: ["/insumos"] },
+];

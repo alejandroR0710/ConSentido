@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
+import { NumeroInput } from "../../../shared/components/NumeroInput";
 import { migaoApi } from "../api";
 
 interface NuevoInventarioProductoModalProps {
@@ -72,13 +73,9 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium">Unidades por paquete</label>
-          <input
-            type="number"
-            min={1}
-            step="1"
-            value={unidadesPorPaquete || ""}
-            onChange={(e) => setUnidadesPorPaquete(Number(e.target.value))}
-            onBlur={() => setUnidadesPorPaquete((actual) => Math.max(1, actual || 1))}
+          <NumeroInput
+            value={unidadesPorPaquete}
+            onChange={setUnidadesPorPaquete}
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>
@@ -106,13 +103,9 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium">Stock mínimo en unidades (opcional)</label>
-          <input
-            type="number"
-            min={0}
-            step="1"
-            value={stockMinimoUnidades || ""}
-            onChange={(e) => setStockMinimoUnidades(Number(e.target.value))}
-            onBlur={() => setStockMinimoUnidades((actual) => Math.max(0, actual || 0))}
+          <NumeroInput
+            value={stockMinimoUnidades}
+            onChange={setStockMinimoUnidades}
             placeholder="0"
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />

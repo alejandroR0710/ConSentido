@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
+import { NumeroInput } from "../../../shared/components/NumeroInput";
 import { migaoApi, type InventarioProducto } from "../api";
 
 interface RegistrarMovimientoInventarioModalProps {
@@ -84,13 +85,9 @@ export function RegistrarMovimientoInventarioModal({
       {tipo === "entrada" ? (
         <>
           <label className="mb-1 block text-xs font-medium">Paquetes recibidos</label>
-          <input
-            type="number"
-            min={1}
-            step="1"
-            value={paquetes || ""}
-            onChange={(e) => setPaquetes(Number(e.target.value))}
-            onBlur={() => setPaquetes((actual) => Math.max(1, actual || 1))}
+          <NumeroInput
+            value={paquetes}
+            onChange={setPaquetes}
             className="mb-1 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
           <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -102,11 +99,10 @@ export function RegistrarMovimientoInventarioModal({
           <label className="mb-1 block text-xs font-medium">
             Unidades a corregir (positivo suma, negativo resta)
           </label>
-          <input
-            type="number"
-            step="0.01"
-            value={unidades || ""}
-            onChange={(e) => setUnidades(Number(e.target.value))}
+          <NumeroInput
+            value={unidades}
+            onChange={setUnidades}
+            permitirNegativo
             placeholder="Ej. -2"
             className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />

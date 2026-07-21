@@ -1,3 +1,4 @@
+import { NumeroInput } from "../../../shared/components/NumeroInput";
 import type { InventarioProducto } from "../api";
 
 export interface FilaIngrediente {
@@ -56,12 +57,9 @@ export function SelectorIngredientes({ inventario, value, onChange }: SelectorIn
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  min={0.001}
-                  step="0.01"
+                <NumeroInput
                   value={fila.cantidadPorUnidad}
-                  onChange={(e) => actualizarFila(idx, { cantidadPorUnidad: Math.max(0.001, Number(e.target.value)) })}
+                  onChange={(v) => actualizarFila(idx, { cantidadPorUnidad: v })}
                   className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 />
                 <span className="w-16 shrink-0 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">

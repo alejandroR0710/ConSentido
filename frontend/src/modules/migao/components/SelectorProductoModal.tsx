@@ -29,6 +29,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
     observacion: string;
   } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputBusquedaRef = useRef<HTMLInputElement | null>(null);
 
   const filtrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
@@ -45,6 +46,12 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
     onSeleccionar(producto, cantidad, observacionFinal || undefined);
     setEligiendo(null);
     setBusqueda("");
+    // `autoFocus` solo actúa al montar el input, no en cada re-render — como el
+    // modal se queda abierto entre un producto y otro, hay que reenfocar a mano
+    // para que el mesero pueda seguir buscando el siguiente sin tocar el campo.
+    // Se llama en el mismo gesto de tap del botón (no en un callback async),
+    // que es lo que los navegadores de celular exigen para reabrir el teclado.
+    inputBusquedaRef.current?.focus();
     // Confirmación visual inmediata ("✓ Agregado") aunque el guardado real (API
     // o borrador local) siga su curso aparte — el mesero necesita saber YA que
     // el toque registró, sin esperar la respuesta del servidor.
@@ -56,6 +63,7 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
   return (
     <Modal titulo="Agregar producto" onCerrar={onCerrar}>
       <input
+        ref={inputBusquedaRef}
         autoFocus
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}

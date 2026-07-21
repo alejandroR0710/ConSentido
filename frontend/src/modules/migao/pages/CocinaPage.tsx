@@ -34,11 +34,21 @@ export function CocinaPage() {
   // permite repetirla cada MINUTOS_REPETICION_ALERTA en vez de solo una vez, y
   // se olvida en cuanto la orden se empieza a preparar (deja de estar "en espera").
   const ultimaAlertaRef = useRef<Map<string, number>>(new Map());
+  // Epoch ms de la última mutación local (empezar a preparar / check / marcar
+  // listo). Un poll que arrancó ANTES de eso puede resolver DESPUÉS y traer
+  // datos viejos (de antes del cambio) — sin esto, ese poll pisaba el estado
+  // recién actualizado con la versión vieja durante un instante, hasta que el
+  // siguiente poll (varios segundos después) volvía a traer lo correcto. Por
+  // eso se veía "parpadear" a pendiente y recién solo tras unos segundos
+  // quedaba en preparando.
+  const ultimaMutacionRef = useRef(0);
 
   async function cargar() {
     setAudioActivo(audioDesbloqueado());
+    const inicioPeticion = Date.now();
     try {
       const cola = await migaoApi.listarColaCocina();
+      if (inicioPeticion < ultimaMutacionRef.current) return;
 
       if (idsConocidosRef.current) {
         const hayPedidoNuevo = cola.some((item) => !idsConocidosRef.current!.has(item.id));
@@ -103,6 +113,7 @@ export function CocinaPage() {
   }
 
   async function empezarPreparar(ordenId: string) {
+    ultimaMutacionRef.current = Date.now();
     setProcesandoId(ordenId);
     try {
       const actualizados = await migaoApi.empezarPreparar(ordenId);
@@ -115,22 +126,32 @@ export function CocinaPage() {
   }
 
   async function toggleCheck(item: ItemCocina) {
+    ultimaMutacionRef.current = Date.now();
+    // Optimista: se marca al instante en pantalla, sin esperar la ida y vuelta
+    // al servidor (que en el plan gratuito de Render puede tardar segundos) —
+    // si falla, se revierte al valor original.
+    const nuevoValor = !item.listo_cocina;
+    aplicarActualizacion([{ ...item, listo_cocina: nuevoValor }]);
     try {
-      const actualizado = await migaoApi.marcarCheckItem(item.id, !item.listo_cocina);
+      const actualizado = await migaoApi.marcarCheckItem(item.id, nuevoValor);
       aplicarActualizacion([actualizado]);
     } catch (err) {
+      aplicarActualizacion([item]);
       setError(err instanceof ApiError ? err.message : "No se pudo marcar el producto");
     }
   }
 
   async function marcarOrdenLista(ordenId: string) {
+    ultimaMutacionRef.current = Date.now();
     setProcesandoId(ordenId);
+    // Optimista: la orden sale de la cola de Cocina al instante, sin esperar
+    // la ida y vuelta al servidor — si falla, se restauran sus ítems.
+    const itemsDeLaOrden = items.filter((i) => i.orden_id === ordenId);
+    setItems((actual) => actual.filter((i) => i.orden_id !== ordenId));
     try {
       await migaoApi.marcarOrdenLista(ordenId);
-      // Una orden lista sale de la cola de Cocina (el backend ya no la incluye en
-      // listarColaCocina) — se quita local de una vez, sin esperar el próximo poll.
-      setItems((actual) => actual.filter((i) => i.orden_id !== ordenId));
     } catch (err) {
+      setItems((actual) => [...actual, ...itemsDeLaOrden]);
       setError(err instanceof ApiError ? err.message : "No se pudo marcar la orden como lista");
     } finally {
       setProcesandoId(null);

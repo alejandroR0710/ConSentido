@@ -284,16 +284,6 @@ export function MeseroPage() {
     }
   }
 
-  async function entregarItem(itemId: number) {
-    if (!ordenSeleccionadaId) return;
-    try {
-      await migaoApi.entregarItem(itemId);
-      await cargarDetalle(ordenSeleccionadaId);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo marcar como entregado");
-    }
-  }
-
   async function guardarNuevaMesa(mesaNumero: string, piso: number) {
     if (!ordenSeleccionadaId) return;
     try {
@@ -578,14 +568,6 @@ export function MeseroPage() {
                   <EstadoBadge estado={item.estado} />
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  {item.estado === "listo" && (
-                    <button
-                      onClick={() => entregarItem(item.id)}
-                      className="rounded-md bg-brand-green-700 px-3 py-2 text-sm text-brand-vanilla hover:bg-brand-green-600"
-                    >
-                      Entregado
-                    </button>
-                  )}
                   {item.estado !== "cancelado" && item.estado !== "servido" && (
                     <button
                       onClick={() => setItemEditando(item)}

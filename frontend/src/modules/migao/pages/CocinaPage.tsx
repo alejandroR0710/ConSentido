@@ -34,21 +34,23 @@ export function CocinaPage() {
   // permite repetirla cada MINUTOS_REPETICION_ALERTA en vez de solo una vez, y
   // se olvida en cuanto la orden se empieza a preparar (deja de estar "en espera").
   const ultimaAlertaRef = useRef<Map<string, number>>(new Map());
-  // Epoch ms de la última mutación local (empezar a preparar / check / marcar
-  // listo). Un poll que arrancó ANTES de eso puede resolver DESPUÉS y traer
-  // datos viejos (de antes del cambio) — sin esto, ese poll pisaba el estado
-  // recién actualizado con la versión vieja durante un instante, hasta que el
-  // siguiente poll (varios segundos después) volvía a traer lo correcto. Por
-  // eso se veía "parpadear" a pendiente y recién solo tras unos segundos
-  // quedaba en preparando.
-  const ultimaMutacionRef = useRef(0);
+  // Cuántas mutaciones (empezar a preparar / check / marcar listo) están en
+  // curso ahora mismo. Comparar solo la hora de inicio del poll contra la de
+  // la mutación no alcanza: un poll que arranca DESPUÉS de que la mutación
+  // empezó puede llegar al servidor y leer la fila ANTES de que la mutación
+  // la haya escrito/comiteado — ese poll igual trae datos viejos aunque su
+  // "inicio" sea más reciente. Por eso se descarta cualquier poll cuyo inicio
+  // O resolución se solape con una mutación en curso, sin importar el orden
+  // exacto: es la única forma de garantizar que el poll aplicado sea
+  // posterior al commit real de la mutación (lectura después de escritura).
+  const mutacionesEnCursoRef = useRef(0);
 
   async function cargar() {
     setAudioActivo(audioDesbloqueado());
-    const inicioPeticion = Date.now();
+    const habiaMutacionEnCurso = mutacionesEnCursoRef.current > 0;
     try {
       const cola = await migaoApi.listarColaCocina();
-      if (inicioPeticion < ultimaMutacionRef.current) return;
+      if (habiaMutacionEnCurso || mutacionesEnCursoRef.current > 0) return;
 
       if (idsConocidosRef.current) {
         const hayPedidoNuevo = cola.some((item) => !idsConocidosRef.current!.has(item.id));
@@ -113,7 +115,7 @@ export function CocinaPage() {
   }
 
   async function empezarPreparar(ordenId: string) {
-    ultimaMutacionRef.current = Date.now();
+    mutacionesEnCursoRef.current++;
     setProcesandoId(ordenId);
     try {
       const actualizados = await migaoApi.empezarPreparar(ordenId);
@@ -121,12 +123,13 @@ export function CocinaPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo empezar a preparar la orden");
     } finally {
+      mutacionesEnCursoRef.current--;
       setProcesandoId(null);
     }
   }
 
   async function toggleCheck(item: ItemCocina) {
-    ultimaMutacionRef.current = Date.now();
+    mutacionesEnCursoRef.current++;
     // Optimista: se marca al instante en pantalla, sin esperar la ida y vuelta
     // al servidor (que en el plan gratuito de Render puede tardar segundos) —
     // si falla, se revierte al valor original.
@@ -138,11 +141,13 @@ export function CocinaPage() {
     } catch (err) {
       aplicarActualizacion([item]);
       setError(err instanceof ApiError ? err.message : "No se pudo marcar el producto");
+    } finally {
+      mutacionesEnCursoRef.current--;
     }
   }
 
   async function marcarOrdenLista(ordenId: string) {
-    ultimaMutacionRef.current = Date.now();
+    mutacionesEnCursoRef.current++;
     setProcesandoId(ordenId);
     // Optimista: la orden sale de la cola de Cocina al instante, sin esperar
     // la ida y vuelta al servidor — si falla, se restauran sus ítems.
@@ -154,6 +159,7 @@ export function CocinaPage() {
       setItems((actual) => [...actual, ...itemsDeLaOrden]);
       setError(err instanceof ApiError ? err.message : "No se pudo marcar la orden como lista");
     } finally {
+      mutacionesEnCursoRef.current--;
       setProcesandoId(null);
     }
   }

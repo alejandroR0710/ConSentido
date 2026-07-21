@@ -28,16 +28,14 @@ export const MODULES_META: ModuloMeta[] = [
   },
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
   { slug: "general", label: "Caja General", path: "/caja", icon: "💰", roles: ["Cajero"] },
-  // Solo Root/Super Root: el Cajero opera desde "Caja General" pero no audita
-  // el historial de ingresos/egresos (ver el guard en CajaHistorialPage.tsx).
-  { slug: "general", label: "Historial de Caja", path: "/caja/historial", icon: "📅", roles: ["Super Root", "Root"] },
+  // Historial de Caja/Cocina/Mesero ya no viven en el sidebar: cada módulo
+  // tiene su propio botón "Historial" arriba (CajaPage/CocinaPage/MeseroPage),
+  // las rutas siguen existiendo en App.tsx, solo se llega por ese botón.
   { slug: "insumos", label: "Insumos", path: "/insumos", icon: "📦" },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },
   { slug: "con_sentido", label: "Con Sentido", path: "/con-sentido", icon: "🛍️" },
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
-  { slug: "migao", label: "Mi historial", path: "/mesero/historial", icon: "🧾", roles: ["Mesero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
-  { slug: "migao", label: "Historial", path: "/cocina/historial", icon: "🧾", roles: ["Cocina"] },
   { slug: "migao", label: "Menú", path: "/menu", icon: "🗂️", roles: ["Administrador"] },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
 ];
@@ -82,16 +80,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "migao-grupo",
     label: "Migao",
     icon: "🍽️",
-    paths: [
-      "/migao",
-      "/cocina",
-      "/cocina/historial",
-      "/menu",
-      "/mesero",
-      "/mesero/historial",
-      "/migao/historial",
-      "/migao/historial-administrativo",
-    ],
+    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/historial", "/migao/historial-administrativo"],
   },
   {
     slug: "con-sentido-grupo",

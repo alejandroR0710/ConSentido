@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
@@ -107,7 +108,17 @@ export function CajaPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja General</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja General</h1>
+            {puedeEditarPagos && (
+              <Link
+                to="/caja/historial"
+                className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+              >
+                📅 Historial
+              </Link>
+            )}
+          </div>
           <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
             Un solo turno para todo el negocio. Cada turno arranca con la base que escribas — no se hereda nada del
             día anterior.

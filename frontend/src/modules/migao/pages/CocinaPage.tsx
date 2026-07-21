@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
@@ -138,7 +139,15 @@ export function CocinaPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Cocina</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Cocina</h1>
+          <Link
+            to="/cocina/historial"
+            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            🧾 Historial
+          </Link>
+        </div>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Un ticket por orden. "Empezar a preparar" mueve todo el ticket; el check es por producto. Se actualiza
           solo cada {REFRESCO_MS / 1000}s.

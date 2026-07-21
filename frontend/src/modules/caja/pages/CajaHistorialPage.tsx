@@ -4,6 +4,7 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { Modal } from "../../../shared/components/Modal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
@@ -309,6 +310,7 @@ export function CajaHistorialPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <BotonVolver to="/caja" />
           <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial de Caja</h1>
           <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
             Resumen de ingresos y egresos por día, semana y mes.

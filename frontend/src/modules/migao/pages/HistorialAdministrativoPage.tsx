@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -112,6 +113,7 @@ export function HistorialAdministrativoPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BotonVolver to="/migao" />
         <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial Administrativo</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Cuentas cerradas con pago administrativo — no generan ingreso en Caja General, quedan aparte del pago

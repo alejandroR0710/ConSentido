@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
@@ -50,6 +51,7 @@ export function CocinaHistorialPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BotonVolver to="/cocina" />
         <h1 className="text-2xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial de Cocina</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Pedidos ya despachados (listos o entregados). Últimos 300 productos.

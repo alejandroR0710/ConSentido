@@ -30,6 +30,7 @@ export function MenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<ProductoAdmin | null>(null);
+  const [busqueda, setBusqueda] = useState("");
 
   async function cargar() {
     setLoading(true);
@@ -58,7 +59,8 @@ export function MenuPage() {
     setCategorias((actual) => [...actual, categoria].sort((a, b) => a.nombre.localeCompare(b.nombre)));
   }
 
-  const grupos = agruparPorCategoria(productos);
+  const productosFiltrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
+  const grupos = agruparPorCategoria(productosFiltrados);
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,6 +79,13 @@ export function MenuPage() {
         </button>
       </div>
 
+      <input
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+        placeholder="Buscar producto..."
+        className="w-full max-w-sm rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      />
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {loading ? (
@@ -84,6 +93,10 @@ export function MenuPage() {
       ) : productos.length === 0 ? (
         <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
           Aún no hay productos en el menú.
+        </p>
+      ) : productosFiltrados.length === 0 ? (
+        <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
+          Sin resultados para "{busqueda}".
         </p>
       ) : (
         <div className="flex flex-col gap-6">

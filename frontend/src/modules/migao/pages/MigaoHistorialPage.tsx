@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -167,6 +168,7 @@ export function MigaoHistorialPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BotonVolver to="/migao" />
         <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial Migao</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Órdenes cobradas/canceladas + ingresos manuales de Migao.

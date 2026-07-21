@@ -88,11 +88,6 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsMigao |
               valor={formatMin(datos.cocina.tiempoPromedioMin)}
               detalle={`sobre ${datos.cocina.itemsPreparados} producto(s)`}
             />
-            <StatCard
-              titulo="Tiempo estimado de entrega"
-              valor={formatMin(datos.entrega.tiempoPromedioMin)}
-              detalle={`sobre ${datos.entrega.itemsEntregados} producto(s) entregado(s)`}
-            />
           </div>
 
           <Link

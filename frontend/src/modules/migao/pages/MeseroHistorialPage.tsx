@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type OrdenHistorialResumen } from "../api";
@@ -53,6 +54,7 @@ export function MeseroHistorialPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BotonVolver to="/mesero" />
         <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Mi historial</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Órdenes que creaste y que Caja ya cobró o canceló.

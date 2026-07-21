@@ -14,9 +14,9 @@ export interface ModuloMeta {
 
 export const MODULES_META: ModuloMeta[] = [
   { slug: "migao", label: "Caja Migao", path: "/migao", icon: "🍽️", roles: ["Cajero"] },
-  // Solo Root/Super Root: el Cajero cobra desde "Caja Migao" pero no audita el
-  // historial ya cobrado/cancelado (ver el guard en MigaoHistorialPage.tsx).
-  { slug: "migao", label: "Historial Migao", path: "/migao/historial", icon: "🧾", roles: ["Super Root", "Root"] },
+  // Historial Migao ya no vive en el sidebar: Root/Super Root lo abren desde
+  // el botón "Historial" en Caja Migao (ver MigaoPage.tsx); la ruta sigue
+  // existiendo en App.tsx, solo cambia cómo se llega.
   // Cuentas con pago "administrativo" — no cuentan en Caja General, su propio
   // historial aparte (ver el guard en HistorialAdministrativoPage.tsx).
   {
@@ -80,7 +80,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "migao-grupo",
     label: "Migao",
     icon: "🍽️",
-    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/historial", "/migao/historial-administrativo"],
+    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/historial-administrativo"],
   },
   {
     slug: "con-sentido-grupo",

@@ -22,5 +22,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // sw.ts corre en el contexto de un service worker (lib "WebWorker", no
+  // "DOM" — self.__WB_MANIFEST, etc.), por eso tiene su propio proyecto
+  // (tsconfig.sw.json) en vez de compartir este.
+  "exclude": ["src/sw.ts"]
 }

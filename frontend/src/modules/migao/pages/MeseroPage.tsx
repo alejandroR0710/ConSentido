@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
+import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
 import { CambiarMesaModal } from "../components/CambiarMesaModal";
 import { EditarItemModal } from "../components/EditarItemModal";
@@ -337,6 +338,8 @@ export function MeseroPage() {
           </button>
         )}
       </div>
+
+      {vista === "lista" && <BannerNotificaciones />}
 
       {notificaciones.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 dark:bg-amber-950/30">

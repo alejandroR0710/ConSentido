@@ -5,6 +5,7 @@ import { analyticsRouter } from "./modules/general/analytics/analytics.routes";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
+import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
 import { errorHandler, notFoundHandler } from "./shared/middlewares/error-handler";
 import { obtenerCarpetaUploads } from "./shared/middlewares/upload.middleware";
@@ -66,6 +67,7 @@ export function createApp() {
   app.use("/api/v1/caja", cajaRouter);
   app.use("/api/v1/migao", migaoRouter);
   app.use("/api/v1/analytics", analyticsRouter);
+  app.use("/api/v1/notificaciones", notificacionesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

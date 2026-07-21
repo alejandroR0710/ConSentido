@@ -3,6 +3,7 @@ import { Errors } from "../../shared/utils/app-error";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
+import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as repo from "./migao.repository";
 import {
   AgregarItemInput,
@@ -141,6 +142,11 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
     }
 
     await client.query("COMMIT");
+    // Aviso push a Cocina (aunque tenga la pestaña cerrada) — nunca debe
+    // romper la creación de la orden si el push falla.
+    notificacionesService
+      .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: `Mesa ${mesa.numero}`, url: "/cocina" })
+      .catch(() => {});
     return orden;
   } catch (err) {
     await client.query("ROLLBACK");
@@ -164,6 +170,9 @@ export async function agregarItem(ordenId: string, input: AgregarItemInput, usua
     detalle: { cantidad: input.cantidad, precioUnitario: input.precioUnitario },
     usuarioId,
   });
+  notificacionesService
+    .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: "Se agregó un producto a una orden", url: "/cocina" })
+    .catch(() => {});
   return item;
 }
 
@@ -354,6 +363,11 @@ export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
       await repo.insertHistorial(client, { ordenId, ordenItemId: item.id, accion: "item_listo", usuarioId });
     }
     await client.query("COMMIT");
+    if (orden.mesero_id) {
+      notificacionesService
+        .enviarAUsuario(orden.mesero_id, { titulo: "Orden lista", cuerpo: "Una orden tuya ya está lista", url: "/mesero" })
+        .catch(() => {});
+    }
     return actualizados;
   } catch (err) {
     await client.query("ROLLBACK");

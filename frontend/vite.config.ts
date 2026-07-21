@@ -15,6 +15,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // injectManifest (en vez de generateSW, el default): hace falta un
+      // service worker propio (src/sw.ts) para poder escuchar el evento
+      // "push" — generateSW no permite agregar código propio al SW.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/icon.svg"],
       manifest: {
@@ -30,18 +36,8 @@ export default defineConfig({
           { src: "icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "maskable" },
         ],
       },
-      workbox: {
-        // Lecturas (catálogos, productos, mesas) se sirven de red y quedan en caché
-        // para revisitas rápidas; las escrituras nunca pasan por el service worker
-        // porque se hacen con POST/PATCH, que Workbox no intercepta por defecto.
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/v1/"),
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "api-cache" },
-          },
-        ],
-      },
+      // El runtimeCaching de la API ahora vive dentro de src/sw.ts (injectManifest
+      // no lee esta opción, es exclusiva del modo generateSW).
     }),
   ],
 });

@@ -174,6 +174,21 @@ CREATE TABLE movimientos_caja_ediciones (
 );
 CREATE INDEX idx_movimientos_caja_ediciones_fecha ON movimientos_caja_ediciones(fecha, created_at);
 
+-- Notificaciones push (Web Push/VAPID) para la PWA: pedido nuevo en Cocina,
+-- orden lista en Mesero, aunque la pestaña esté cerrada o el celular
+-- bloqueado. `endpoint` es único por dispositivo/navegador; un usuario puede
+-- tener varias filas (varios dispositivos suscritos a la vez).
+CREATE TABLE push_subscriptions (
+  id          BIGSERIAL PRIMARY KEY,
+  usuario_id  UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      VARCHAR(255) NOT NULL,
+  auth        VARCHAR(255) NOT NULL,
+  user_agent  VARCHAR(300),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_push_subscriptions_usuario ON push_subscriptions(usuario_id);
+
 -- ============================================================================
 -- 2. CLIENTES (entidad compartida entre Con Sentido, Migao, Talleres, Pedidos)
 -- ============================================================================

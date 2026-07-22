@@ -156,6 +156,14 @@ export function MenuPage() {
                               🥡 para llevar
                             </span>
                           )}
+                          {p.ingredientes.length > 0 && (
+                            <p className="mt-0.5 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                              Consume:{" "}
+                              {p.ingredientes
+                                .map((i) => `${i.nombre} (${Number(i.cantidadPorUnidad)} ${i.unidadMedida})`)
+                                .join(" · ")}
+                            </p>
+                          )}
                           {p.descripcion && (
                             <details className="mt-1">
                               <summary className="cursor-pointer select-none text-xs text-brand-green-700 dark:text-brand-vanilla/80">

@@ -6,6 +6,7 @@ import { migaoApi, type InventarioProducto } from "../api";
 
 interface RegistrarMovimientoInventarioModalProps {
   producto: InventarioProducto;
+  tipo: "entrada" | "ajuste";
   onCerrar: () => void;
   onRegistrado: () => Promise<void> | void;
 }
@@ -13,14 +14,15 @@ interface RegistrarMovimientoInventarioModalProps {
 /**
  * Alta de stock a mano (entrada) o corrección de un conteo (ajuste) — la
  * salida por venta nunca se toca acá, la descuenta sola el flujo de órdenes
- * (ver aplicarConsumoPorProducto en el backend).
+ * (ver aplicarConsumoPorProducto en el backend). El tipo lo decide el botón
+ * de la tabla que abrió el modal (Entrada/Ajuste), no se elige adentro.
  */
 export function RegistrarMovimientoInventarioModal({
   producto,
+  tipo,
   onCerrar,
   onRegistrado,
 }: RegistrarMovimientoInventarioModalProps) {
-  const [tipo, setTipo] = useState<"entrada" | "ajuste">("entrada");
   const [paquetes, setPaquetes] = useState(1);
   const [unidades, setUnidades] = useState(0);
   const [motivo, setMotivo] = useState("");
@@ -52,35 +54,13 @@ export function RegistrarMovimientoInventarioModal({
   }
 
   return (
-    <Modal titulo={`Registrar movimiento — ${producto.nombre}`} onCerrar={onCerrar}>
+    <Modal
+      titulo={`Registrar ${tipo === "entrada" ? "entrada" : "ajuste"} — ${producto.nombre}`}
+      onCerrar={onCerrar}
+    >
       <p className="mb-3 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
         Stock actual: {producto.stock_unidades} {producto.unidad_medida}
       </p>
-
-      <div className="mb-3 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTipo("entrada")}
-          className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium ${
-            tipo === "entrada"
-              ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
-              : "border-brand-vanilla-dark text-brand-ink dark:border-brand-green-700 dark:text-brand-vanilla"
-          }`}
-        >
-          Entrada (llegó mercancía)
-        </button>
-        <button
-          type="button"
-          onClick={() => setTipo("ajuste")}
-          className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium ${
-            tipo === "ajuste"
-              ? "border-amber-600 bg-amber-500 text-white"
-              : "border-brand-vanilla-dark text-brand-ink dark:border-brand-green-700 dark:text-brand-vanilla"
-          }`}
-        >
-          Ajuste (corregir conteo)
-        </button>
-      </div>
 
       {tipo === "entrada" ? (
         <>

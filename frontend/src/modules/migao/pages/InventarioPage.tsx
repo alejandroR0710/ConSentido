@@ -24,7 +24,9 @@ export function InventarioPage() {
   const [error, setError] = useState<string | null>(null);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<InventarioProducto | null>(null);
-  const [productoParaMovimiento, setProductoParaMovimiento] = useState<InventarioProducto | null>(null);
+  const [movimiento, setMovimiento] = useState<{ producto: InventarioProducto; tipo: "entrada" | "ajuste" } | null>(
+    null,
+  );
 
   async function cargar() {
     try {
@@ -140,10 +142,16 @@ export function InventarioPage() {
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => setProductoParaMovimiento(p)}
-                          className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
+                          onClick={() => setMovimiento({ producto: p, tipo: "entrada" })}
+                          className="rounded-md border border-brand-green-700 px-3 py-1 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
                         >
-                          Movimiento
+                          + Entrada
+                        </button>
+                        <button
+                          onClick={() => setMovimiento({ producto: p, tipo: "ajuste" })}
+                          className="rounded-md border border-amber-500 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                        >
+                          Ajuste
                         </button>
                         <button
                           onClick={() => setProductoEditando(p)}
@@ -172,10 +180,11 @@ export function InventarioPage() {
         />
       )}
 
-      {productoParaMovimiento && (
+      {movimiento && (
         <RegistrarMovimientoInventarioModal
-          producto={productoParaMovimiento}
-          onCerrar={() => setProductoParaMovimiento(null)}
+          producto={movimiento.producto}
+          tipo={movimiento.tipo}
+          onCerrar={() => setMovimiento(null)}
           onRegistrado={cargar}
         />
       )}

@@ -244,14 +244,30 @@ export async function crearProductoMigao(params: {
 }
 
 /** Listado completo (activos e inactivos) para la pantalla de administración del menú. */
+/** Incluye, por producto, la receta de ingredientes de inventario que
+ *  consume (para mostrarla como descripción ligera en la vista de Menú) —
+ *  '[]' si no tiene ninguno asociado. */
 export async function listProductosMigaoAdmin() {
   const result = await pool.query(
     `SELECT p.id, p.nombre, p.precio, p.costo, p.unidad_medida, p.imagen_url, p.categoria_id,
-            p.descripcion, cp.nombre AS categoria_nombre, p.activo, p.es_para_llevar
+            p.descripcion, cp.nombre AS categoria_nombre, p.activo, p.es_para_llevar,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'nombre', ip.nombre,
+                  'cantidadPorUnidad', mpi.cantidad_por_unidad,
+                  'unidadMedida', ip.unidad_medida
+                )
+              ) FILTER (WHERE mpi.id IS NOT NULL),
+              '[]'
+            ) AS ingredientes
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+       LEFT JOIN migao_producto_ingredientes mpi ON mpi.producto_id = p.id
+       LEFT JOIN migao_inventario_productos ip ON ip.id = mpi.inventario_producto_id
       WHERE m.slug = 'migao'
+      GROUP BY p.id, cp.nombre
       ORDER BY cp.nombre ASC NULLS LAST, p.nombre ASC`,
   );
   return result.rows;

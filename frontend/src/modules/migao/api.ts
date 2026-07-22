@@ -158,6 +158,8 @@ export interface ProductoAdmin extends Producto {
   unidad_medida: string;
   imagen_url: string | null;
   activo: boolean;
+  // Receta de inventario que consume — [] si no tiene ninguna asociada.
+  ingredientes: { nombre: string; cantidadPorUnidad: string; unidadMedida: string }[];
 }
 
 export interface CategoriaProducto {

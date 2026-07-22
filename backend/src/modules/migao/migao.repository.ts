@@ -333,6 +333,9 @@ export async function listItemsCocina() {
        LEFT JOIN usuarios u ON u.id = o.mesero_id
       WHERE oi.estado IN ('pendiente', 'preparando')
         AND o.estado NOT IN ('cerrada', 'cancelada')
+        -- Los cargos "para llevar" (envases) los agrega el Cajero al cobrar,
+        -- no son comida que Cocina deba preparar.
+        AND p.es_para_llevar = false
       ORDER BY oi.created_at ASC`,
   );
   return result.rows;

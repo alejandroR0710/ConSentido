@@ -164,7 +164,12 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
   }
 }
 
-export async function agregarItem(ordenId: string, input: AgregarItemInput, usuarioId: string) {
+export async function agregarItem(
+  ordenId: string,
+  input: AgregarItemInput,
+  usuarioId: string,
+  notificarCocina = true,
+) {
   const orden = await repo.getOrdenById(ordenId);
   if (!orden) throw Errors.notFound("Orden no encontrada");
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
@@ -199,9 +204,11 @@ export async function agregarItem(ordenId: string, input: AgregarItemInput, usua
     client.release();
   }
 
-  notificacionesService
-    .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: "Se agregó un producto a una orden", url: "/cocina" })
-    .catch(() => {});
+  if (notificarCocina) {
+    notificacionesService
+      .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: "Se agregó un producto a una orden", url: "/cocina" })
+      .catch(() => {});
+  }
   return { ...item, alertasInventario };
 }
 
@@ -217,7 +224,9 @@ export async function agregarCargoParaLlevar(ordenId: string, input: AgregarItem
   if (!producto || !producto.es_para_llevar) {
     throw Errors.badRequest('Este producto no está marcado como "para llevar"');
   }
-  return agregarItem(ordenId, input, usuarioId);
+  // No es comida: no debe avisarle a Cocina ni aparecer en su cola (ver el
+  // filtro es_para_llevar en migao.repository.ts::listItemsCocina).
+  return agregarItem(ordenId, input, usuarioId, false);
 }
 
 /**

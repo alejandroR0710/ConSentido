@@ -19,7 +19,7 @@ interface NuevoInventarioProductoModalProps {
 export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInventarioProductoModalProps) {
   const [nombre, setNombre] = useState("");
   const [unidadMedida, setUnidadMedida] = useState("");
-  const [unidadesPorPaquete, setUnidadesPorPaquete] = useState(1);
+  const [unidadesPorPaquete, setUnidadesPorPaquete] = useState(0);
   const [tamanoUnidad, setTamanoUnidad] = useState("");
   const [costoPaquete, setCostoPaquete] = useState(0);
   const [stockMinimoUnidades, setStockMinimoUnidades] = useState(0);
@@ -76,6 +76,7 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
           <NumeroInput
             value={unidadesPorPaquete}
             onChange={setUnidadesPorPaquete}
+            placeholder="Ej. 12"
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>

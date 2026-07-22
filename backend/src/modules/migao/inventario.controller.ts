@@ -26,7 +26,8 @@ export async function editarInventarioProductoController(req: Request, res: Resp
 }
 
 export async function eliminarInventarioProductoController(req: Request, res: Response) {
-  await service.eliminarProducto(req.params.id);
+  const forzar = req.query.forzar === "true";
+  await service.eliminarProducto(req.params.id, req.auth!.rolId, forzar);
   return ok(res, { eliminado: true });
 }
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { NumeroInput } from "../../../shared/components/NumeroInput";
@@ -12,6 +13,12 @@ interface EditarInventarioProductoModalProps {
 }
 
 export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }: EditarInventarioProductoModalProps) {
+  const { usuario } = useAuth();
+  // Solo Super Root puede forzar el borrado aunque el producto ya tenga
+  // movimientos/recetas asociadas (el backend valida el permiso igual); a
+  // cualquier otro rol el backend le sigue bloqueando ese caso.
+  const esSuperRoot = usuario?.rol === "Super Root";
+
   const [nombre, setNombre] = useState(producto.nombre);
   const [unidadMedida, setUnidadMedida] = useState(producto.unidad_medida);
   const [unidadesPorPaquete, setUnidadesPorPaquete] = useState(Number(producto.unidades_por_paquete));
@@ -63,21 +70,18 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
   }
 
   async function eliminar() {
-    if (!confirmandoEliminar) {
-      setConfirmandoEliminar(true);
-      return;
-    }
     setEliminando(true);
     setError(null);
     try {
-      await migaoApi.eliminarInventarioProducto(producto.id);
+      // Super Root fuerza el borrado (incluye movimientos/recetas asociadas,
+      // de forma permanente); cualquier otro rol sigue bloqueado si el
+      // producto ya tiene historial — el backend responde con ese mensaje.
+      await migaoApi.eliminarInventarioProducto(producto.id, esSuperRoot);
       await onGuardado();
       onCerrar();
     } catch (err) {
-      // El backend rechaza el borrado si ya tiene movimientos o recetas
-      // asociadas (usa "Desactivar" en ese caso) — el mensaje ya lo explica.
-      setError(err instanceof ApiError ? err.message : "No se pudo eliminar el producto");
       setConfirmandoEliminar(false);
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar el producto");
     } finally {
       setEliminando(false);
     }
@@ -165,12 +169,43 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
       </button>
 
       <button
-        onClick={eliminar}
+        onClick={() => setConfirmandoEliminar(true)}
         disabled={bloqueado}
         className="w-full rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
       >
-        {eliminando ? "Eliminando..." : confirmandoEliminar ? "¿Seguro? Toca de nuevo para eliminar" : "Eliminar producto"}
+        Eliminar producto
       </button>
+
+      {confirmandoEliminar && (
+        <Modal titulo="Eliminar producto" onCerrar={() => !eliminando && setConfirmandoEliminar(false)} maxWidth="sm:max-w-sm">
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+            ¿Seguro que quieres eliminar <span className="font-semibold">"{producto.nombre}"</span>? Esta acción no se
+            puede deshacer.
+            {esSuperRoot && (
+              <span className="mt-2 block text-amber-700 dark:text-amber-400">
+                Como Super Root, esto también borrará de forma permanente cualquier movimiento o receta ya asociada a
+                este producto.
+              </span>
+            )}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmandoEliminar(false)}
+              disabled={eliminando}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium disabled:opacity-60 dark:border-brand-green-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={eliminar}
+              disabled={eliminando}
+              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {eliminando ? "Eliminando..." : "Sí, eliminar"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 }

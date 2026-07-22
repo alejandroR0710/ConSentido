@@ -99,6 +99,28 @@ export async function eliminarProducto(id: string): Promise<boolean> {
 }
 
 /**
+ * Borrado forzado (exclusivo de Super Root, ver inventario.service.ts): borra
+ * también sus movimientos y sus vínculos de receta antes de borrar la fila —
+ * permanente e irreversible, a propósito no queda ningún rastro.
+ */
+export async function eliminarProductoForzado(id: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM migao_inventario_movimientos WHERE producto_id = $1`, [id]);
+    await client.query(`DELETE FROM migao_producto_ingredientes WHERE inventario_producto_id = $1`, [id]);
+    const result = await client.query(`DELETE FROM migao_inventario_productos WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+    return (result.rowCount ?? 0) > 0;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Aplica un delta (positivo o negativo) al stock en unidades — nunca bloquea:
  * se permite quedar en negativo (el usuario decidió que avisar es mejor que
  * frenar una venta por un inventario que puede estar mal contado). Quien

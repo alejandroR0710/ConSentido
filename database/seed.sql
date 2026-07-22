@@ -37,7 +37,8 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear_producto',  'migao.productos.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_producto', 'migao.productos.editar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_inventario',         'migao.inventario.ver'),
-  ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar');
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_forzado_inventario', 'migao.inventario.eliminar_forzado');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES
@@ -62,7 +63,8 @@ WHERE p.codigo NOT IN (
   'general.caja.resetear',
   'general.caja.borrar_historial',
   'general.sistema.reiniciar_todo',
-  'migao.ordenes.resetear'
+  'migao.ordenes.resetear',
+  'migao.inventario.eliminar_forzado'
 );
 
 -- Cajero: Caja General completa + ver y cerrar órdenes de Migao (NO crear/agregar_item: eso es del mesero)

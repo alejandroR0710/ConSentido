@@ -1,5 +1,6 @@
 import { PoolClient } from "pg";
 import { pool } from "../../shared/db/pool";
+import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { Errors } from "../../shared/utils/app-error";
 import * as repo from "./inventario.repository";
 import {
@@ -29,8 +30,21 @@ export async function editarProducto(id: string, input: EditarInventarioProducto
  * de prueba, que nunca tuvieron entradas/consumos. Si ya tiene movimientos o
  * está en la receta de algún producto del menú, la base rechaza el borrado
  * (foreign key sin CASCADE) y se traduce en un conflicto legible.
+ *
+ * `forzar` (exclusivo de Super Root, vía el permiso migao.inventario.eliminar_forzado)
+ * se salta esa protección: borra también los movimientos y recetas asociadas
+ * antes de borrar el producto. Es permanente e irreversible.
  */
-export async function eliminarProducto(id: string) {
+export async function eliminarProducto(id: string, rolId: number, forzar = false) {
+  if (forzar) {
+    if (!(await tienePermiso(rolId, "migao.inventario.eliminar_forzado"))) {
+      throw Errors.forbidden("No tienes permiso para forzar la eliminación de este producto");
+    }
+    const borrado = await repo.eliminarProductoForzado(id);
+    if (!borrado) throw Errors.notFound("Producto de inventario no encontrado");
+    return;
+  }
+
   try {
     const borrado = await repo.eliminarProducto(id);
     if (!borrado) throw Errors.notFound("Producto de inventario no encontrado");

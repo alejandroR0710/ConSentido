@@ -10,6 +10,16 @@ interface NuevoInventarioProductoModalProps {
   onCreado: () => Promise<void> | void;
 }
 
+const campoClase =
+  "w-full rounded-lg border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2.5 text-sm text-brand-ink outline-none transition focus:border-brand-green-600 focus:ring-2 focus:ring-brand-green-600/20 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
+const etiquetaClase = "mb-1 block text-xs font-medium text-brand-ink/80 dark:text-brand-vanilla/80";
+const seccionClase =
+  "mb-3 rounded-xl border border-brand-green-100 bg-brand-green-50/60 p-3 dark:border-brand-green-700/50 dark:bg-brand-green-700/10";
+const seccionOpcionalClase =
+  "mb-4 rounded-xl border border-dashed border-brand-vanilla-dark bg-transparent p-3 dark:border-brand-green-700";
+const tituloSeccionClase =
+  "mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla/70";
+
 /**
  * Alta de un producto de inventario "tal como lo entrega el proveedor" — ej.
  * una torta de chocolate (12 porciones), una paca de leche (6 unidades), o
@@ -51,65 +61,71 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
   }
 
   return (
-    <Modal titulo="Nuevo producto de inventario" onCerrar={onCerrar}>
-      <label className="mb-1 block text-xs font-medium">Nombre</label>
-      <input
-        autoFocus
-        value={nombre}
-        onChange={(e) => setNombre(e.target.value)}
-        placeholder='Ej. "Torta de chocolate"'
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium">Unidad de medida</label>
-          <input
-            value={unidadMedida}
-            onChange={(e) => setUnidadMedida(e.target.value)}
-            placeholder='"porción", "unidad", "bolsita"...'
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Unidades por paquete</label>
-          <NumeroInput
-            value={unidadesPorPaquete}
-            onChange={setUnidadesPorPaquete}
-            placeholder="Ej. 12"
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
-        </div>
+    <Modal titulo="Nuevo producto de inventario" onCerrar={onCerrar} maxWidth="sm:max-w-lg">
+      <div className={seccionClase}>
+        <p className={tituloSeccionClase}>
+          <span aria-hidden>📋</span> Información básica
+        </p>
+        <label className={etiquetaClase}>Nombre</label>
+        <input
+          autoFocus
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder='Ej. "Torta de chocolate"'
+          className={campoClase}
+        />
       </div>
-      <p className="-mt-2 mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-        Ej. una torta de chocolate = 12 porciones; una paca de leche = 6 unidades; una bolsita suelta = 1.
-      </p>
 
-      <label className="mb-1 block text-xs font-medium">Tamaño/descripción de la unidad (opcional)</label>
-      <input
-        value={tamanoUnidad}
-        onChange={(e) => setTamanoUnidad(e.target.value)}
-        placeholder='Ej. "140g"'
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium">Costo por paquete (opcional)</label>
-          <MoneyInput
-            value={costoPaquete}
-            onChange={setCostoPaquete}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
+      <div className={seccionClase}>
+        <p className={tituloSeccionClase}>
+          <span aria-hidden>📦</span> Unidades y empaque
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={etiquetaClase}>Unidad de medida</label>
+            <input
+              value={unidadMedida}
+              onChange={(e) => setUnidadMedida(e.target.value)}
+              placeholder='"porción", "bolsita"...'
+              className={campoClase}
+            />
+          </div>
+          <div>
+            <label className={etiquetaClase}>Unidades por paquete</label>
+            <NumeroInput value={unidadesPorPaquete} onChange={setUnidadesPorPaquete} placeholder="Ej. 12" className={campoClase} />
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Stock mínimo en unidades (opcional)</label>
-          <NumeroInput
-            value={stockMinimoUnidades}
-            onChange={setStockMinimoUnidades}
-            placeholder="0"
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
+
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-green-100 px-3 py-1 text-xs font-medium text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+          <span aria-hidden>🧮</span>
+          1 paquete = {unidadesPorPaquete > 0 ? unidadesPorPaquete : "?"} {unidadMedida.trim() || "unidad(es)"}
+        </div>
+        <p className="mt-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+          💡 Ej. una torta de chocolate = 12 porciones; una paca de leche = 6 unidades; una bolsita suelta = 1.
+        </p>
+
+        <label className={`${etiquetaClase} mt-3`}>Tamaño/descripción de la unidad (opcional)</label>
+        <input
+          value={tamanoUnidad}
+          onChange={(e) => setTamanoUnidad(e.target.value)}
+          placeholder='Ej. "140g"'
+          className={campoClase}
+        />
+      </div>
+
+      <div className={seccionOpcionalClase}>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-ink/50 dark:text-brand-vanilla/50">
+          ⚙️ Opcional
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={etiquetaClase}>Costo por paquete</label>
+            <MoneyInput value={costoPaquete} onChange={setCostoPaquete} className={campoClase} />
+          </div>
+          <div>
+            <label className={etiquetaClase}>Stock mínimo (unidades)</label>
+            <NumeroInput value={stockMinimoUnidades} onChange={setStockMinimoUnidades} placeholder="0" className={campoClase} />
+          </div>
         </div>
       </div>
 
@@ -118,7 +134,7 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
       <button
         onClick={guardar}
         disabled={guardando || !puedeGuardar}
-        className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+        className="w-full rounded-lg bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla transition hover:bg-brand-green-600 disabled:opacity-60"
       >
         {guardando ? "Creando..." : "Crear producto"}
       </button>

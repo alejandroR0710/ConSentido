@@ -249,6 +249,19 @@ export function MigaoPage() {
     });
   }
 
+  /** Al activar "Dividir cuenta", arranca en tantas partes como comensales se
+   *  registraron al crear la orden (numero_personas) — no siempre en 2 —
+   *  ajustado a los límites válidos (mínimo 2, máximo una por unidad cobrable). */
+  function activarDivision() {
+    const personasRegistradas = detalle?.orden.numero_personas ?? 0;
+    const partesIniciales = Math.min(
+      Math.max(2, personasRegistradas || 2),
+      Math.max(2, unidadesCobrables.length),
+    );
+    cambiarNumPartes(partesIniciales);
+    setDividirCuenta(true);
+  }
+
   function subtotalParte(parteIdx: number) {
     return unidadesCobrables
       .filter((u) => asignaciones[u.key] === parteIdx)
@@ -481,11 +494,17 @@ export function MigaoPage() {
                 <input
                   type="checkbox"
                   checked={dividirCuenta}
-                  onChange={(e) => (e.target.checked ? setDividirCuenta(true) : reiniciarDivision())}
+                  onChange={(e) => (e.target.checked ? activarDivision() : reiniciarDivision())}
                   disabled={unidadesCobrables.length < 2}
                   className="h-4 w-4"
                 />
                 Dividir cuenta entre varias personas
+                {!dividirCuenta && Boolean(detalle?.orden.numero_personas) && (
+                  <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                    (sugerido: {detalle!.orden.numero_personas} comensal
+                    {detalle!.orden.numero_personas === 1 ? "" : "es"})
+                  </span>
+                )}
               </label>
 
               {!dividirCuenta ? (

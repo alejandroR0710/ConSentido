@@ -14,10 +14,14 @@ interface SelectorMetodoPagoProps {
   totalFijo?: number;
 }
 
-const claseSelect =
-  "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 const claseMonto =
   "flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
+
+const METODOS: { valor: MetodoPagoValor["metodoPago"]; label: string; icono: string }[] = [
+  { valor: "efectivo", label: "Efectivo", icono: "💵" },
+  { valor: "banco", label: "Banco", icono: "🏦" },
+  { valor: "mixto", label: "Mixto", icono: "🔀" },
+];
 
 /**
  * "Mixto" no es un método de pago real (la base solo acepta efectivo/banco por
@@ -29,24 +33,38 @@ export function SelectorMetodoPago({ value, onChange, totalFijo }: SelectorMetod
   const sumaMixta = value.metodoPago === "mixto" ? value.montoEfectivo + value.montoBanco : 0;
   const cuadra = totalFijo === undefined || Math.abs(sumaMixta - totalFijo) < 0.01;
 
+  function seleccionar(metodo: MetodoPagoValor["metodoPago"]) {
+    onChange(
+      metodo === "mixto"
+        ? { metodoPago: "mixto", montoEfectivo: totalFijo ?? 0, montoBanco: 0 }
+        : { metodoPago: metodo },
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
-      <select
-        value={value.metodoPago}
-        onChange={(e) => {
-          const metodo = e.target.value as MetodoPagoValor["metodoPago"];
-          onChange(
-            metodo === "mixto"
-              ? { metodoPago: "mixto", montoEfectivo: totalFijo ?? 0, montoBanco: 0 }
-              : { metodoPago: metodo },
+      <div className="grid grid-cols-3 gap-2">
+        {METODOS.map((m) => {
+          const activo = value.metodoPago === m.valor;
+          return (
+            <button
+              key={m.valor}
+              type="button"
+              onClick={() => seleccionar(m.valor)}
+              className={`flex flex-col items-center gap-1 rounded-lg border-2 px-2 py-3 text-xs font-medium transition-colors ${
+                activo
+                  ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                  : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+              }`}
+            >
+              <span className="text-2xl" aria-hidden>
+                {m.icono}
+              </span>
+              {m.label}
+            </button>
           );
-        }}
-        className={claseSelect}
-      >
-        <option value="efectivo">Efectivo</option>
-        <option value="banco">Banco (tarjeta/transferencia)</option>
-        <option value="mixto">Mixto (efectivo + banco)</option>
-      </select>
+        })}
+      </div>
 
       {value.metodoPago === "mixto" && (
         <div className="flex flex-col gap-2 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">

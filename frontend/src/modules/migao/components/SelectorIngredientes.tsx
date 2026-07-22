@@ -90,7 +90,10 @@ function ComboboxIngrediente({
 export function SelectorIngredientes({ inventario, value, onChange }: SelectorIngredientesProps) {
   function agregarFila() {
     if (inventario.length === 0) return;
-    onChange([...value, { inventarioProductoId: inventario[0].id, cantidadPorUnidad: 1 }]);
+    // Arranca sin elegir nada (el combobox se ve vacío) — que el usuario
+    // busque y elija a propósito, en vez de quedar en el primero de la
+    // lista sin que se note.
+    onChange([...value, { inventarioProductoId: "", cantidadPorUnidad: 1 }]);
   }
 
   function actualizarFila(idx: number, cambios: Partial<FilaIngrediente>) {

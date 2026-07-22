@@ -64,8 +64,9 @@ export function NuevoProductoModal({
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
       });
-      if (ingredientes.length > 0) {
-        await migaoApi.guardarIngredientesProducto(producto.id, ingredientes);
+      const ingredientesCompletos = ingredientes.filter((i) => i.inventarioProductoId);
+      if (ingredientesCompletos.length > 0) {
+        await migaoApi.guardarIngredientesProducto(producto.id, ingredientesCompletos);
       }
       await onCreado();
       onCerrar();

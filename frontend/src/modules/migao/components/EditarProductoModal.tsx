@@ -82,7 +82,10 @@ export function EditarProductoModal({
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
       });
-      await migaoApi.guardarIngredientesProducto(producto.id, ingredientes);
+      await migaoApi.guardarIngredientesProducto(
+        producto.id,
+        ingredientes.filter((i) => i.inventarioProductoId),
+      );
       await onGuardado();
       onCerrar();
     } catch (err) {

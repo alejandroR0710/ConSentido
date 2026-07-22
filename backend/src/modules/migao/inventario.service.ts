@@ -24,6 +24,27 @@ export async function editarProducto(id: string, input: EditarInventarioProducto
 }
 
 /**
+ * A diferencia de "desactivar" (soft-delete, para productos con historial),
+ * esto borra la fila de verdad — pensado para productos creados por error o
+ * de prueba, que nunca tuvieron entradas/consumos. Si ya tiene movimientos o
+ * está en la receta de algún producto del menú, la base rechaza el borrado
+ * (foreign key sin CASCADE) y se traduce en un conflicto legible.
+ */
+export async function eliminarProducto(id: string) {
+  try {
+    const borrado = await repo.eliminarProducto(id);
+    if (!borrado) throw Errors.notFound("Producto de inventario no encontrado");
+  } catch (err) {
+    if (err instanceof Error && (err as { code?: string }).code === "23503") {
+      throw Errors.conflict(
+        'No se puede eliminar: ya tiene movimientos o recetas asociadas. Usa "Desactivar" en su lugar.',
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * Alta de stock a mano (Root/Super Root/Cocina) — nunca 'consumo', eso solo
  * lo escribe aplicarConsumoPorProducto. 'entrada' llega en paquetes (así los
  * entrega el proveedor) y se convierte a unidades; 'ajuste' ya viene en

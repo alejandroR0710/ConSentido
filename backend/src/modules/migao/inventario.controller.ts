@@ -25,6 +25,11 @@ export async function editarInventarioProductoController(req: Request, res: Resp
   return ok(res, producto);
 }
 
+export async function eliminarInventarioProductoController(req: Request, res: Response) {
+  await service.eliminarProducto(req.params.id);
+  return ok(res, { eliminado: true });
+}
+
 export async function registrarMovimientoInventarioController(req: Request, res: Response) {
   const data = registrarMovimientoInventarioSchema.parse(req.body);
   const resultado = await service.registrarMovimiento(data, req.auth!.usuarioId);

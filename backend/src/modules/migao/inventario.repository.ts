@@ -89,6 +89,16 @@ export async function actualizarProducto(
 }
 
 /**
+ * Borrado físico — solo tiene éxito si el producto no tiene movimientos ni
+ * recetas asociadas (las FK sin ON DELETE CASCADE lo impiden con un 23503).
+ * Si ya tiene historial, el llamador debe ofrecer "Desactivar" en su lugar.
+ */
+export async function eliminarProducto(id: string): Promise<boolean> {
+  const result = await pool.query(`DELETE FROM migao_inventario_productos WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
  * Aplica un delta (positivo o negativo) al stock en unidades — nunca bloquea:
  * se permite quedar en negativo (el usuario decidió que avisar es mejor que
  * frenar una venta por un inventario que puede estar mal contado). Quien

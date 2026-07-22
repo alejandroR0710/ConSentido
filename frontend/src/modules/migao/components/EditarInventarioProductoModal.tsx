@@ -20,6 +20,8 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
   const [stockMinimoUnidades, setStockMinimoUnidades] = useState(Number(producto.stock_minimo_unidades ?? 0));
   const [guardando, setGuardando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const puedeGuardar = nombre.trim().length >= 2 && unidadMedida.trim().length > 0 && unidadesPorPaquete > 0;
@@ -60,7 +62,28 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
     }
   }
 
-  const bloqueado = guardando || cambiandoEstado;
+  async function eliminar() {
+    if (!confirmandoEliminar) {
+      setConfirmandoEliminar(true);
+      return;
+    }
+    setEliminando(true);
+    setError(null);
+    try {
+      await migaoApi.eliminarInventarioProducto(producto.id);
+      await onGuardado();
+      onCerrar();
+    } catch (err) {
+      // El backend rechaza el borrado si ya tiene movimientos o recetas
+      // asociadas (usa "Desactivar" en ese caso) — el mensaje ya lo explica.
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar el producto");
+      setConfirmandoEliminar(false);
+    } finally {
+      setEliminando(false);
+    }
+  }
+
+  const bloqueado = guardando || cambiandoEstado || eliminando;
 
   return (
     <Modal titulo="Editar producto de inventario" onCerrar={onCerrar}>
@@ -134,11 +157,19 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
         disabled={bloqueado}
         className={
           producto.activo
-            ? "w-full rounded-md border border-red-300 px-4 py-3 font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-            : "w-full rounded-md border border-brand-green-700 px-4 py-3 font-medium text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+            ? "mb-2 w-full rounded-md border border-red-300 px-4 py-3 font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+            : "mb-2 w-full rounded-md border border-brand-green-700 px-4 py-3 font-medium text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
         }
       >
         {cambiandoEstado ? "Actualizando..." : producto.activo ? "Desactivar" : "Reactivar producto"}
+      </button>
+
+      <button
+        onClick={eliminar}
+        disabled={bloqueado}
+        className="w-full rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+      >
+        {eliminando ? "Eliminando..." : confirmandoEliminar ? "¿Seguro? Toca de nuevo para eliminar" : "Eliminar producto"}
       </button>
     </Modal>
   );

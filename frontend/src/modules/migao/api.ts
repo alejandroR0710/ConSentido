@@ -381,6 +381,8 @@ export const migaoApi = {
       activo?: boolean;
     },
   ) => apiFetch<InventarioProducto>(`/migao/inventario/productos/${id}`, { method: "PATCH", body: input }),
+  eliminarInventarioProducto: (id: string) =>
+    apiFetch<{ eliminado: boolean }>(`/migao/inventario/productos/${id}`, { method: "DELETE" }),
   registrarMovimientoInventario: (
     input:
       | { tipo: "entrada"; productoId: string; paquetes: number; motivo?: string }

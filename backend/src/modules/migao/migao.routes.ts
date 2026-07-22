@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   crearInventarioProductoController,
   editarInventarioProductoController,
+  eliminarInventarioProductoController,
   guardarIngredientesProductoController,
   listarInventarioController,
   listarMovimientosInventarioController,
@@ -244,6 +245,11 @@ migaoRouter.patch(
   "/inventario/productos/:id",
   requirePermission("migao.inventario.administrar"),
   asyncHandler(editarInventarioProductoController),
+);
+migaoRouter.delete(
+  "/inventario/productos/:id",
+  requirePermission("migao.inventario.administrar"),
+  asyncHandler(eliminarInventarioProductoController),
 );
 migaoRouter.get(
   "/inventario/productos/:id/movimientos",

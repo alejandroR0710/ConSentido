@@ -119,7 +119,6 @@ export async function actualizarImagenProducto(id: string, imagenUrl: string) {
 export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
   const client = await pool.connect();
-  const alertasInventario: string[] = [];
   try {
     await client.query("BEGIN");
 
@@ -141,12 +140,9 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
         detalle: { cantidad: item.cantidad, precioUnitario: item.precioUnitario },
         usuarioId: meseroId,
       });
-      // Descuenta del inventario los ingredientes que ese producto consume
-      // (si no tiene receta asociada, no hace nada) — nunca bloquea, solo
-      // devuelve un aviso si el stock queda en negativo.
-      alertasInventario.push(
-        ...(await inventarioService.aplicarConsumoPorProducto(client, item.productoId, item.cantidad, meseroId, nuevoItem.id)),
-      );
+      // El consumo de inventario ya NO pasa acá: se descuenta recién cuando
+      // Cocina marca el producto como "listo" (ver marcarOrdenLista) — ahí
+      // es cuando de verdad se usó el ingrediente, no al solo pedirlo.
     }
 
     await client.query("COMMIT");
@@ -155,7 +151,7 @@ export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
     notificacionesService
       .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: `Mesa ${mesa.numero}`, url: "/cocina" })
       .catch(() => {});
-    return { ...orden, alertasInventario };
+    return { ...orden, alertasInventario: [] as string[] };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -169,6 +165,11 @@ export async function agregarItem(
   input: AgregarItemInput,
   usuarioId: string,
   notificarCocina = true,
+  // Los productos "para llevar" (envases) nunca pasan por Cocina — se quedan
+  // en 'pendiente' para siempre (ver el filtro es_para_llevar en
+  // listItemsCocina), así que nunca llegarían a "listo" para descontar ahí.
+  // Para esos, el consumo se aplica de una vez al agregarlos.
+  consumirInmediato = false,
 ) {
   const orden = await repo.getOrdenById(ordenId);
   if (!orden) throw Errors.notFound("Orden no encontrada");
@@ -178,7 +179,7 @@ export async function agregarItem(
 
   const client = await pool.connect();
   let item;
-  let alertasInventario: string[];
+  let alertasInventario: string[] = [];
   try {
     await client.query("BEGIN");
     item = await repo.agregarItem(ordenId, input.productoId, input.cantidad, input.precioUnitario, input.observaciones, client);
@@ -189,13 +190,15 @@ export async function agregarItem(
       detalle: { cantidad: input.cantidad, precioUnitario: input.precioUnitario },
       usuarioId,
     });
-    alertasInventario = await inventarioService.aplicarConsumoPorProducto(
-      client,
-      input.productoId,
-      input.cantidad,
-      usuarioId,
-      item.id,
-    );
+    if (consumirInmediato) {
+      alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+        client,
+        input.productoId,
+        input.cantidad,
+        usuarioId,
+        item.id,
+      );
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -225,8 +228,9 @@ export async function agregarCargoParaLlevar(ordenId: string, input: AgregarItem
     throw Errors.badRequest('Este producto no está marcado como "para llevar"');
   }
   // No es comida: no debe avisarle a Cocina ni aparecer en su cola (ver el
-  // filtro es_para_llevar en migao.repository.ts::listItemsCocina).
-  return agregarItem(ordenId, input, usuarioId, false);
+  // filtro es_para_llevar en migao.repository.ts::listItemsCocina), así que
+  // nunca pasará por marcarOrdenLista — el consumo se aplica de una vez.
+  return agregarItem(ordenId, input, usuarioId, false, true);
 }
 
 /**
@@ -246,9 +250,19 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
     throw Errors.conflict("No se puede editar un ítem de una orden cerrada o cancelada");
   }
 
+  // El consumo de inventario ya se aplicó si Cocina ya marcó este ítem como
+  // "listo" (ver marcarOrdenLista), o si es un cargo "para llevar" (esos se
+  // consumen de una vez al agregarlos, nunca pasan por Cocina). En cualquier
+  // otro estado (pendiente/preparando) todavía no se tocó el inventario, así
+  // que no hay nada que revertir aquí: updateItemCantidad deja el ítem en
+  // 'pendiente' de nuevo y se consumirá, ya con la cantidad correcta, cuando
+  // de verdad llegue a "listo".
+  const producto = await repo.getProductoMigaoById(item.producto_id);
+  const yaConsumido = item.estado === "listo" || Boolean(producto?.es_para_llevar);
+
   const client = await pool.connect();
   let actualizado;
-  let alertasInventario: string[];
+  let alertasInventario: string[] = [];
   try {
     await client.query("BEGIN");
 
@@ -261,17 +275,19 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
         detalle: { cantidadAnterior: item.cantidad },
         usuarioId,
       });
-      // Se devuelve TODO lo que ese ítem había consumido (delta negativo = el
-      // stock sube).
-      alertasInventario = await inventarioService.aplicarConsumoPorProducto(
-        client,
-        item.producto_id,
-        -Number(item.cantidad),
-        usuarioId,
-        Number(itemId),
-      );
-    } else {
-      actualizado = await repo.updateItemCantidad(itemId, input.cantidad!, client);
+      if (yaConsumido) {
+        // Se devuelve TODO lo que ese ítem había consumido (delta negativo =
+        // el stock sube).
+        alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+          client,
+          item.producto_id,
+          -Number(item.cantidad),
+          usuarioId,
+          Number(itemId),
+        );
+      }
+    } else if (input.cantidad !== undefined) {
+      actualizado = await repo.updateItemCantidad(itemId, input.cantidad, input.observaciones, client);
       await repo.insertHistorial(client, {
         ordenId: item.orden_id,
         ordenItemId: Number(itemId),
@@ -279,15 +295,43 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
         detalle: { cantidadAnterior: item.cantidad, cantidadNueva: input.cantidad, estadoAnterior: item.estado },
         usuarioId,
       });
-      // Solo el DELTA entre la cantidad vieja y la nueva — si aumentó,
-      // consume más; si bajó, se devuelve la diferencia.
-      alertasInventario = await inventarioService.aplicarConsumoPorProducto(
-        client,
-        item.producto_id,
-        input.cantidad! - Number(item.cantidad),
+      if (producto?.es_para_llevar) {
+        // Estos nunca vuelven a pasar por marcarOrdenLista, así que se ajusta
+        // ahora mismo solo el DELTA entre la cantidad vieja y la nueva.
+        alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+          client,
+          item.producto_id,
+          input.cantidad - Number(item.cantidad),
+          usuarioId,
+          Number(itemId),
+        );
+      } else if (item.estado === "listo") {
+        // updateItemCantidad regresa el ítem a 'pendiente': se volverá a
+        // preparar y a consumir COMPLETO (ya con la cantidad corregida) la
+        // próxima vez que cocina lo marque listo — por eso acá se revierte
+        // TODO lo que ya se había consumido, no solo el delta, para no
+        // duplicar el descuento cuando eso vuelva a pasar.
+        alertasInventario = await inventarioService.aplicarConsumoPorProducto(
+          client,
+          item.producto_id,
+          -Number(item.cantidad),
+          usuarioId,
+          Number(itemId),
+        );
+      }
+      // Si seguía pendiente/preparando, todavía no se había consumido nada:
+      // se consumirá por primera vez, ya con la cantidad correcta, al llegar a "listo".
+    } else {
+      // Solo se corrigió la observación (nota para cocina): la cantidad y el
+      // estado del ítem no cambian, así que el inventario no se toca.
+      actualizado = await repo.updateItemObservaciones(itemId, input.observaciones!, client);
+      await repo.insertHistorial(client, {
+        ordenId: item.orden_id,
+        ordenItemId: Number(itemId),
+        accion: "item_editado",
+        detalle: { observacionAnterior: item.observaciones, observacionNueva: input.observaciones },
         usuarioId,
-        Number(itemId),
-      );
+      });
     }
 
     await client.query("COMMIT");
@@ -425,12 +469,25 @@ export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
   }
 
   const client = await pool.connect();
+  const alertasInventario: string[] = [];
   try {
     await client.query("BEGIN");
     const actualizados = await repo.marcarItemsListos(ordenId, client);
     // Marca de tiempo de cierre para el tiempo de preparación (ver item_preparando arriba).
     for (const item of actualizados) {
       await repo.insertHistorial(client, { ordenId, ordenItemId: item.id, accion: "item_listo", usuarioId });
+      // Recién ahora el producto de verdad "salió de cocina": se descuentan
+      // sus ingredientes de inventario (si no tiene receta, no hace nada) —
+      // nunca bloquea, solo devuelve un aviso si el stock queda en negativo.
+      alertasInventario.push(
+        ...(await inventarioService.aplicarConsumoPorProducto(
+          client,
+          item.producto_id,
+          Number(item.cantidad),
+          usuarioId,
+          item.id,
+        )),
+      );
     }
     await client.query("COMMIT");
     if (orden.mesero_id) {
@@ -438,7 +495,7 @@ export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
         .enviarAUsuario(orden.mesero_id, { titulo: "Orden lista", cuerpo: "Una orden tuya ya está lista", url: "/mesero" })
         .catch(() => {});
     }
-    return actualizados;
+    return { items: actualizados, alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

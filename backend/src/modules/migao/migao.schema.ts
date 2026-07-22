@@ -163,8 +163,11 @@ export const editarItemSchema = z
   .object({
     cantidad: z.number().positive().optional(),
     cancelar: z.boolean().optional(),
+    // Permite corregir la nota del mesero (ej. "sin azúcar") sin necesidad de
+    // tocar la cantidad — puede venir sola o junto con un cambio de cantidad.
+    observaciones: z.string().trim().max(300).optional(),
   })
-  .refine((data) => data.cantidad !== undefined || data.cancelar === true, {
-    message: "Debes indicar una nueva cantidad o cancelar el ítem",
+  .refine((data) => data.cantidad !== undefined || data.cancelar === true || data.observaciones !== undefined, {
+    message: "Debes indicar una nueva cantidad, una observación, o cancelar el ítem",
   });
 export type EditarItemInput = z.infer<typeof editarItemSchema>;

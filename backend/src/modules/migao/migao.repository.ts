@@ -449,10 +449,26 @@ export async function updateItemEstado(itemId: string, estado: string, executor:
  * prepararlo y marcarlo de nuevo, y el mesero recibe notificación cuando cocina
  * lo procese otra vez.
  */
-export async function updateItemCantidad(itemId: string, cantidad: number, executor: Executor = pool) {
+export async function updateItemCantidad(
+  itemId: string,
+  cantidad: number,
+  observaciones: string | undefined,
+  executor: Executor = pool,
+) {
   const result = await executor.query(
-    `UPDATE orden_items SET cantidad = $2, estado = 'pendiente', listo_cocina = false WHERE id = $1 RETURNING *`,
-    [itemId, cantidad],
+    `UPDATE orden_items
+        SET cantidad = $2, estado = 'pendiente', listo_cocina = false, observaciones = COALESCE($3, observaciones)
+      WHERE id = $1 RETURNING *`,
+    [itemId, cantidad, observaciones ?? null],
+  );
+  return result.rows[0];
+}
+
+/** Corrige solo la nota del ítem (ej. "sin azúcar"), sin tocar cantidad ni estado. */
+export async function updateItemObservaciones(itemId: string, observaciones: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `UPDATE orden_items SET observaciones = $2 WHERE id = $1 RETURNING *`,
+    [itemId, observaciones],
   );
   return result.rows[0];
 }

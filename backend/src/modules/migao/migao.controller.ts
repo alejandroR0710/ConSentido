@@ -176,8 +176,8 @@ export async function marcarCheckItemController(req: Request, res: Response) {
 }
 
 export async function marcarOrdenListaController(req: Request, res: Response) {
-  const items = await service.marcarOrdenLista(req.params.id, req.auth!.usuarioId);
-  return ok(res, items);
+  const resultado = await service.marcarOrdenLista(req.params.id, req.auth!.usuarioId);
+  return ok(res, resultado);
 }
 
 export async function listarItemsActivosController(_req: Request, res: Response) {

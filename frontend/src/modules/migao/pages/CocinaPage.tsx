@@ -23,6 +23,9 @@ export function CocinaPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
+  // Aviso NO bloqueante de stock bajo/negativo al descontar del inventario los
+  // productos que salieron de cocina como "orden lista" — nunca bloquea.
+  const [alertaInventario, setAlertaInventario] = useState<string | null>(null);
   // Si nadie tocó la pantalla en toda la sesión (tablet que solo se mira),
   // el AudioContext nunca se desbloquea con el toque global de AppShell — se
   // ofrece este botón explícito para no depender de eso.
@@ -154,7 +157,8 @@ export function CocinaPage() {
     const itemsDeLaOrden = items.filter((i) => i.orden_id === ordenId);
     setItems((actual) => actual.filter((i) => i.orden_id !== ordenId));
     try {
-      await migaoApi.marcarOrdenLista(ordenId);
+      const { alertasInventario } = await migaoApi.marcarOrdenLista(ordenId);
+      setAlertaInventario(alertasInventario.length > 0 ? alertasInventario.join(" ") : null);
     } catch (err) {
       setItems((actual) => [...actual, ...itemsDeLaOrden]);
       setError(err instanceof ApiError ? err.message : "No se pudo marcar la orden como lista");
@@ -183,6 +187,11 @@ export function CocinaPage() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {alertaInventario && (
+        <p className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-600 dark:bg-amber-950/20 dark:text-amber-400">
+          {alertaInventario}
+        </p>
+      )}
 
       {!audioActivo && (
         <button

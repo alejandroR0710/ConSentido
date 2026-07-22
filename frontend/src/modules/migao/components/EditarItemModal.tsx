@@ -6,14 +6,16 @@ import { formatCantidad } from "../format";
 interface EditarItemModalProps {
   item: OrdenItem;
   onCerrar: () => void;
-  onGuardar: (cantidad: number) => Promise<void>;
+  onGuardar: (cantidad: number, observaciones: string) => Promise<void>;
   onCancelarProducto: () => Promise<void>;
 }
 
-/** Popup de edición: cambiar cantidad o cancelar el producto, sin ensuciar la
- *  lista de ítems con un input+botón permanente en cada fila. */
+/** Popup de edición: cambiar cantidad, corregir la nota para cocina, o cancelar
+ *  el producto, sin ensuciar la lista de ítems con un input+botón permanente
+ *  en cada fila. */
 export function EditarItemModal({ item, onCerrar, onGuardar, onCancelarProducto }: EditarItemModalProps) {
   const [cantidad, setCantidad] = useState(formatCantidad(item.cantidad));
+  const [observaciones, setObservaciones] = useState(item.observaciones ?? "");
   const [guardando, setGuardando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
@@ -22,7 +24,7 @@ export function EditarItemModal({ item, onCerrar, onGuardar, onCancelarProducto 
     if (!valor || valor <= 0) return;
     setGuardando(true);
     try {
-      await onGuardar(valor);
+      await onGuardar(valor, observaciones.trim());
       onCerrar();
     } finally {
       setGuardando(false);
@@ -41,10 +43,6 @@ export function EditarItemModal({ item, onCerrar, onGuardar, onCancelarProducto 
 
   return (
     <Modal titulo={item.producto_nombre} onCerrar={onCerrar}>
-      {item.observaciones && (
-        <p className="mb-3 text-sm font-semibold text-amber-700 dark:text-amber-400">⚠ {item.observaciones}</p>
-      )}
-
       <label className="mb-1 block text-xs font-medium">Cantidad</label>
       <input
         type="number"
@@ -54,6 +52,15 @@ export function EditarItemModal({ item, onCerrar, onGuardar, onCancelarProducto 
         value={cantidad}
         onChange={(e) => setCantidad(e.target.value)}
         className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-3 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      />
+
+      <label className="mb-1 block text-xs font-medium">Observación para cocina (opcional)</label>
+      <input
+        value={observaciones}
+        onChange={(e) => setObservaciones(e.target.value)}
+        placeholder="Ej. sin azúcar, sin hielo..."
+        maxLength={300}
+        className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
 
       <button

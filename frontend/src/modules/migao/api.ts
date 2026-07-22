@@ -261,7 +261,9 @@ export const migaoApi = {
   marcarCheckItem: (itemId: number, listoCocina: boolean) =>
     apiFetch<ItemCocina>(`/migao/items/${itemId}/check`, { method: "PATCH", body: { listoCocina } }),
   marcarOrdenLista: (ordenId: string) =>
-    apiFetch<ItemCocina[]>(`/migao/ordenes/${ordenId}/marcar-listo`, { method: "POST" }),
+    apiFetch<{ items: ItemCocina[]; alertasInventario: string[] }>(`/migao/ordenes/${ordenId}/marcar-listo`, {
+      method: "POST",
+    }),
 
   listarProductos: () => apiFetch<Producto[]>("/migao/productos"),
   // Solo los productos marcados "para llevar" — es lo único que ve el Cajero
@@ -331,10 +333,10 @@ export const migaoApi = {
       method: "POST",
       body: { productoId, cantidad, precioUnitario, observaciones },
     }),
-  editarCantidadItem: (itemId: number, cantidad: number) =>
+  editarCantidadItem: (itemId: number, cantidad: number, observaciones?: string) =>
     apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {
       method: "PATCH",
-      body: { cantidad },
+      body: { cantidad, observaciones },
     }),
   cancelarItem: (itemId: number) =>
     apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {

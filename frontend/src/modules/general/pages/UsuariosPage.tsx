@@ -52,11 +52,14 @@ export function UsuariosPage() {
 
   useRegistrarRefresco(cargar);
 
-  const usuariosFiltrados = usuarios.filter(
-    (u) =>
-      u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()) ||
-      u.email.toLowerCase().includes(busqueda.trim().toLowerCase()),
-  );
+  const usuariosFiltrados = usuarios.filter((u) => {
+    const termino = busqueda.trim().toLowerCase();
+    return (
+      u.nombre.toLowerCase().includes(termino) ||
+      (u.email?.toLowerCase().includes(termino) ?? false) ||
+      (u.numero_documento?.toLowerCase().includes(termino) ?? false)
+    );
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,7 +99,7 @@ export function UsuariosPage() {
             <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
                 <th className="px-3 py-2">Nombre</th>
-                <th className="px-3 py-2">Correo</th>
+                <th className="px-3 py-2">Correo / Documento</th>
                 <th className="px-3 py-2">Rol</th>
                 <th className="px-3 py-2">Último ingreso</th>
                 <th className="px-3 py-2">Estado</th>
@@ -120,7 +123,9 @@ export function UsuariosPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2">{u.email}</td>
+                    <td className="px-3 py-2">
+                      {u.email ? <>✉️ {u.email}</> : <>🪪 {u.numero_documento}</>}
+                    </td>
                     <td className="px-3 py-2">{u.rol_nombre}</td>
                     <td className="px-3 py-2 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
                       {formatFecha(u.ultimo_login)}

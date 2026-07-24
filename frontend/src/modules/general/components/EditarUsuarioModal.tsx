@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { Modal } from "../../../shared/components/Modal";
-import { usuariosApi, type Rol, type Usuario } from "../api";
+import { usuariosApi, type Rol, type TipoIdentificador, type Usuario } from "../api";
 
 interface EditarUsuarioModalProps {
   usuario: Usuario;
@@ -32,7 +32,10 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
   const rolesDisponibles = esSuperRoot ? roles : roles.filter((r) => !ROLES_PROTEGIDOS.has(r.nombre));
 
   const [nombre, setNombre] = useState(objetivo.nombre);
-  const [email, setEmail] = useState(objetivo.email);
+  const [tipoIdentificador, setTipoIdentificador] = useState<TipoIdentificador>(
+    objetivo.numero_documento ? "documento" : "email",
+  );
+  const [identificador, setIdentificador] = useState(objetivo.email ?? objetivo.numero_documento ?? "");
   const [password, setPassword] = useState("");
   const [rolId, setRolId] = useState(objetivo.rol_id);
   const [guardando, setGuardando] = useState(false);
@@ -41,7 +44,9 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const puedeGuardar = nombre.trim().length >= 2 && email.trim().length > 3;
+  const identificadorValido =
+    tipoIdentificador === "email" ? /\S+@\S+\.\S+/.test(identificador.trim()) : identificador.trim().length >= 3;
+  const puedeGuardar = nombre.trim().length >= 2 && identificadorValido;
   const bloqueado = guardando || cambiandoEstado || eliminando;
 
   async function guardar() {
@@ -51,7 +56,8 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
     try {
       await usuariosApi.editar(objetivo.id, {
         nombre: nombre.trim(),
-        email: email.trim(),
+        tipoIdentificador,
+        identificador: identificador.trim(),
         rolId: rolId !== objetivo.rol_id ? rolId : undefined,
         password: password.trim() ? password : undefined,
       });
@@ -113,11 +119,36 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
         <label className={etiquetaClase}>Nombre</label>
         <input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} className={`${campoClase} mb-3`} />
 
-        <label className={etiquetaClase}>Correo</label>
+        <label className={etiquetaClase}>Iniciar sesión con</label>
+        <div className="mb-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTipoIdentificador("email")}
+            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+              tipoIdentificador === "email"
+                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+            }`}
+          >
+            ✉️ Correo
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoIdentificador("documento")}
+            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+              tipoIdentificador === "documento"
+                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+            }`}
+          >
+            🪪 Documento
+          </button>
+        </div>
         <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type={tipoIdentificador === "email" ? "email" : "text"}
+          value={identificador}
+          onChange={(e) => setIdentificador(e.target.value)}
+          placeholder={tipoIdentificador === "email" ? "ejemplo@correo.com" : "Ej. 1020304050"}
           className={`${campoClase} mb-3`}
         />
 

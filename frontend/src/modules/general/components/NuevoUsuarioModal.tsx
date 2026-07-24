@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { Modal } from "../../../shared/components/Modal";
-import { usuariosApi, type Rol } from "../api";
+import { usuariosApi, type Rol, type TipoIdentificador } from "../api";
 
 interface NuevoUsuarioModalProps {
   roles: Rol[];
@@ -29,20 +29,29 @@ export function NuevoUsuarioModal({ roles, onCerrar, onCreado }: NuevoUsuarioMod
   const rolesDisponibles = esSuperRoot ? roles : roles.filter((r) => !ROLES_PROTEGIDOS.has(r.nombre));
 
   const [nombre, setNombre] = useState("");
-  const [email, setEmail] = useState("");
+  const [tipoIdentificador, setTipoIdentificador] = useState<TipoIdentificador>("email");
+  const [identificador, setIdentificador] = useState("");
   const [password, setPassword] = useState("");
   const [rolId, setRolId] = useState<number | "">("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const puedeGuardar = nombre.trim().length >= 2 && email.trim().length > 3 && password.length >= 8 && rolId !== "";
+  const identificadorValido =
+    tipoIdentificador === "email" ? /\S+@\S+\.\S+/.test(identificador.trim()) : identificador.trim().length >= 3;
+  const puedeGuardar = nombre.trim().length >= 2 && identificadorValido && password.length >= 8 && rolId !== "";
 
   async function crear() {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
     try {
-      await usuariosApi.crear({ nombre: nombre.trim(), email: email.trim(), password, rolId: Number(rolId) });
+      await usuariosApi.crear({
+        nombre: nombre.trim(),
+        tipoIdentificador,
+        identificador: identificador.trim(),
+        password,
+        rolId: Number(rolId),
+      });
       await onCreado();
       onCerrar();
     } catch (err) {
@@ -67,12 +76,36 @@ export function NuevoUsuarioModal({ roles, onCerrar, onCreado }: NuevoUsuarioMod
           className={`${campoClase} mb-3`}
         />
 
-        <label className={etiquetaClase}>Correo</label>
+        <label className={etiquetaClase}>Iniciar sesión con</label>
+        <div className="mb-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTipoIdentificador("email")}
+            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+              tipoIdentificador === "email"
+                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+            }`}
+          >
+            ✉️ Correo
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoIdentificador("documento")}
+            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+              tipoIdentificador === "documento"
+                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+            }`}
+          >
+            🪪 Documento
+          </button>
+        </div>
         <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="ejemplo@correo.com"
+          type={tipoIdentificador === "email" ? "email" : "text"}
+          value={identificador}
+          onChange={(e) => setIdentificador(e.target.value)}
+          placeholder={tipoIdentificador === "email" ? "ejemplo@correo.com" : "Ej. 1020304050"}
           className={`${campoClase} mb-3`}
         />
 

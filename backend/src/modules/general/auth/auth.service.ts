@@ -3,13 +3,13 @@ import { Errors } from "../../../shared/utils/app-error";
 import { SESSION_TTL_MS, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../../shared/utils/jwt";
 import {
   findModulosPermitidos,
-  findUsuarioByEmail,
+  findUsuarioByIdentificador,
   findUsuarioById,
   updateUltimoLogin,
 } from "./auth.repository";
 
-export async function login(email: string, password: string) {
-  const usuario = await findUsuarioByEmail(email);
+export async function login(identificador: string, password: string) {
+  const usuario = await findUsuarioByIdentificador(identificador);
   if (!usuario || !usuario.activo) {
     throw Errors.unauthorized("Credenciales inválidas");
   }
@@ -31,6 +31,7 @@ export async function login(email: string, password: string) {
       id: usuario.id,
       nombre: usuario.nombre,
       email: usuario.email,
+      numeroDocumento: usuario.numeroDocumento,
       rolId: usuario.rolId,
       rol: usuario.rolNombre,
       modulos,
@@ -48,6 +49,7 @@ export async function me(usuarioId: string) {
     id: usuario.id,
     nombre: usuario.nombre,
     email: usuario.email,
+    numeroDocumento: usuario.numeroDocumento,
     rolId: usuario.rolId,
     rol: usuario.rolNombre,
     modulos,

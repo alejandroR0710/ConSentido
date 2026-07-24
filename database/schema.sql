@@ -45,16 +45,21 @@ CREATE TABLE roles_permisos (
   PRIMARY KEY (rol_id, permiso_id)
 );
 
+-- El inicio de sesión acepta correo O número de documento como identificador
+-- (nunca ambos a la vez, ver el CHECK) — cuál de los dos se usa lo decide
+-- quien crea la cuenta desde el módulo de Usuarios.
 CREATE TABLE usuarios (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nombre        VARCHAR(120) NOT NULL,
-  email         VARCHAR(160) UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  rol_id        INT NOT NULL REFERENCES roles(id),
-  activo        BOOLEAN NOT NULL DEFAULT true,
-  ultimo_login  TIMESTAMPTZ,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre            VARCHAR(120) NOT NULL,
+  email             VARCHAR(160) UNIQUE,
+  numero_documento  VARCHAR(30) UNIQUE,
+  password_hash     TEXT NOT NULL,
+  rol_id            INT NOT NULL REFERENCES roles(id),
+  activo            BOOLEAN NOT NULL DEFAULT true,
+  ultimo_login      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chk_usuarios_identificador CHECK ((email IS NOT NULL) <> (numero_documento IS NOT NULL))
 );
 CREATE INDEX idx_usuarios_rol ON usuarios(rol_id);
 CREATE TRIGGER trg_usuarios_updated BEFORE UPDATE ON usuarios

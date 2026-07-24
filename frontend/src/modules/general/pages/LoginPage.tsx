@@ -5,7 +5,7 @@ import { useAuth } from "../../../shared/auth/useAuth";
 
 export function LoginPage() {
   const { usuario, login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -17,7 +17,7 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(identificador, password);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión");
     } finally {
@@ -36,12 +36,14 @@ export function LoginPage() {
         </h1>
         <p className="mb-6 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">Ingresa con tu cuenta de rol.</p>
 
-        <label className="mb-1 block text-sm font-medium">Email</label>
+        <label className="mb-1 block text-sm font-medium">Correo o número de documento</label>
         <input
-          type="email"
+          type="text"
+          autoComplete="username"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={identificador}
+          onChange={(e) => setIdentificador(e.target.value)}
+          placeholder="correo@ejemplo.com o tu número de documento"
           className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-transparent px-3 py-2 outline-none focus:border-brand-green-600 dark:border-brand-green-700"
         />
 

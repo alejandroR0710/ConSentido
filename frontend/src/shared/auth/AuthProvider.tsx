@@ -3,7 +3,7 @@ import { apiFetch, bindTokenHandlers, setAccessToken } from "../api/client";
 import type { AuthState, UsuarioSesion } from "./types";
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (identificador: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -78,10 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function login(email: string, password: string) {
+  async function login(identificador: string, password: string) {
     const result = await apiFetch<{ accessToken: string; usuario: UsuarioSesion }>("/auth/login", {
       method: "POST",
-      body: { email, password },
+      body: { identificador, password },
     });
     setAccessToken(result.accessToken);
     setAccessTokenState(result.accessToken);

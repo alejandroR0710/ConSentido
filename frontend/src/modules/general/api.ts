@@ -49,7 +49,10 @@ export const analyticsApi = {
 export interface Usuario {
   id: string;
   nombre: string;
-  email: string;
+  // Cada usuario tiene guardado uno u otro, nunca ambos (ver el CHECK en la
+  // tabla usuarios) — el módulo de Usuarios elige cuál usar al crear/editar.
+  email: string | null;
+  numero_documento: string | null;
   rol_id: number;
   rol_nombre: string;
   activo: boolean;
@@ -62,14 +65,28 @@ export interface Rol {
   nombre: string;
 }
 
+export type TipoIdentificador = "email" | "documento";
+
 export const usuariosApi = {
   listar: () => apiFetch<Usuario[]>("/usuarios"),
   listarRoles: () => apiFetch<Rol[]>("/usuarios/roles"),
-  crear: (input: { nombre: string; email: string; password: string; rolId: number }) =>
-    apiFetch<Usuario>("/usuarios", { method: "POST", body: input }),
+  crear: (input: {
+    nombre: string;
+    password: string;
+    rolId: number;
+    tipoIdentificador: TipoIdentificador;
+    identificador: string;
+  }) => apiFetch<Usuario>("/usuarios", { method: "POST", body: input }),
   editar: (
     id: string,
-    input: { nombre?: string; email?: string; password?: string; rolId?: number; activo?: boolean },
+    input: {
+      nombre?: string;
+      password?: string;
+      rolId?: number;
+      activo?: boolean;
+      tipoIdentificador?: TipoIdentificador;
+      identificador?: string;
+    },
   ) => apiFetch<Usuario>(`/usuarios/${id}`, { method: "PATCH", body: input }),
   eliminar: (id: string) => apiFetch<{ eliminado: boolean }>(`/usuarios/${id}`, { method: "DELETE" }),
 };

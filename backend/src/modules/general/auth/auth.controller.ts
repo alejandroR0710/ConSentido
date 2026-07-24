@@ -22,8 +22,8 @@ function setRefreshCookie(res: Response, token: string, sessionExpiresAt: number
 }
 
 export async function loginController(req: Request, res: Response) {
-  const { email, password } = loginSchema.parse(req.body);
-  const { accessToken, refreshToken, usuario, sessionExpiresAt } = await authService.login(email, password);
+  const { identificador, password } = loginSchema.parse(req.body);
+  const { accessToken, refreshToken, usuario, sessionExpiresAt } = await authService.login(identificador, password);
   setRefreshCookie(res, refreshToken, sessionExpiresAt);
   return ok(res, { accessToken, usuario });
 }

@@ -3,20 +3,24 @@ import { pool } from "../../../shared/db/pool";
 export interface UsuarioAuth {
   id: string;
   nombre: string;
-  email: string;
+  email: string | null;
+  numeroDocumento: string | null;
   passwordHash: string;
   rolId: number;
   rolNombre: string;
   activo: boolean;
 }
 
-export async function findUsuarioByEmail(email: string): Promise<UsuarioAuth | null> {
+/** Busca por correo O número de documento — cada usuario solo tiene uno de
+ *  los dos guardado (ver el CHECK en la tabla), así que un único valor
+ *  comparado contra ambas columnas identifica a lo sumo una fila. */
+export async function findUsuarioByIdentificador(identificador: string): Promise<UsuarioAuth | null> {
   const result = await pool.query(
-    `SELECT u.id, u.nombre, u.email, u.password_hash, u.rol_id, u.activo, r.nombre AS rol_nombre
+    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.password_hash, u.rol_id, u.activo, r.nombre AS rol_nombre
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
-      WHERE u.email = $1`,
-    [email],
+      WHERE u.email = $1 OR u.numero_documento = $1`,
+    [identificador],
   );
   if (result.rowCount === 0) return null;
   const row = result.rows[0];
@@ -24,6 +28,7 @@ export async function findUsuarioByEmail(email: string): Promise<UsuarioAuth | n
     id: row.id,
     nombre: row.nombre,
     email: row.email,
+    numeroDocumento: row.numero_documento,
     passwordHash: row.password_hash,
     rolId: row.rol_id,
     rolNombre: row.rol_nombre,
@@ -33,7 +38,7 @@ export async function findUsuarioByEmail(email: string): Promise<UsuarioAuth | n
 
 export async function findUsuarioById(id: string): Promise<UsuarioAuth | null> {
   const result = await pool.query(
-    `SELECT u.id, u.nombre, u.email, u.password_hash, u.rol_id, u.activo, r.nombre AS rol_nombre
+    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.password_hash, u.rol_id, u.activo, r.nombre AS rol_nombre
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
       WHERE u.id = $1`,
@@ -45,6 +50,7 @@ export async function findUsuarioById(id: string): Promise<UsuarioAuth | null> {
     id: row.id,
     nombre: row.nombre,
     email: row.email,
+    numeroDocumento: row.numero_documento,
     passwordHash: row.password_hash,
     rolId: row.rol_id,
     rolNombre: row.rol_nombre,

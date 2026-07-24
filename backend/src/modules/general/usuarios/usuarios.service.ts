@@ -15,6 +15,10 @@ export interface ActorUsuario {
   rolId: number;
 }
 
+function normalizarIdentificador(tipo: "email" | "documento", valor: string) {
+  return tipo === "email" ? valor.trim().toLowerCase() : valor.trim();
+}
+
 async function obtenerRolNombreActor(actor: ActorUsuario): Promise<string> {
   const rol = await repo.getRolById(actor.rolId);
   if (!rol) throw Errors.forbidden("Tu rol ya no existe");
@@ -39,16 +43,18 @@ export async function crearUsuario(input: CrearUsuarioInput, actor: ActorUsuario
   }
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+  const valor = normalizarIdentificador(input.tipoIdentificador, input.identificador);
   try {
     return await repo.crearUsuario({
       nombre: input.nombre,
-      email: input.email,
+      email: input.tipoIdentificador === "email" ? valor : null,
+      numeroDocumento: input.tipoIdentificador === "documento" ? valor : null,
       passwordHash,
       rolId: input.rolId,
     });
   } catch (err) {
     if (err instanceof Error && (err as { code?: string }).code === "23505") {
-      throw Errors.conflict("Ya existe un usuario con ese correo");
+      throw Errors.conflict("Ya existe un usuario con ese correo o número de documento");
     }
     throw err;
   }
@@ -78,19 +84,23 @@ export async function editarUsuario(id: string, input: EditarUsuarioInput, actor
   }
 
   const passwordHash = input.password ? await bcrypt.hash(input.password, SALT_ROUNDS) : undefined;
+  const identificador =
+    input.tipoIdentificador && input.identificador
+      ? { tipo: input.tipoIdentificador, valor: normalizarIdentificador(input.tipoIdentificador, input.identificador) }
+      : undefined;
   try {
     const actualizado = await repo.actualizarUsuario(id, {
       nombre: input.nombre,
-      email: input.email,
       passwordHash,
       rolId: input.rolId,
       activo: input.activo,
+      identificador,
     });
     if (!actualizado) throw Errors.notFound("Usuario no encontrado");
     return actualizado;
   } catch (err) {
     if (err instanceof Error && (err as { code?: string }).code === "23505") {
-      throw Errors.conflict("Ya existe un usuario con ese correo");
+      throw Errors.conflict("Ya existe un usuario con ese correo o número de documento");
     }
     throw err;
   }

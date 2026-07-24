@@ -120,30 +120,14 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
         <input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} className={`${campoClase} mb-3`} />
 
         <label className={etiquetaClase}>Iniciar sesión con</label>
-        <div className="mb-2 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setTipoIdentificador("email")}
-            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
-              tipoIdentificador === "email"
-                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
-            }`}
-          >
-            ✉️ Correo
-          </button>
-          <button
-            type="button"
-            onClick={() => setTipoIdentificador("documento")}
-            className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
-              tipoIdentificador === "documento"
-                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
-            }`}
-          >
-            🪪 Documento
-          </button>
-        </div>
+        <select
+          value={tipoIdentificador}
+          onChange={(e) => setTipoIdentificador(e.target.value as TipoIdentificador)}
+          className={`${campoClase} mb-2`}
+        >
+          <option value="email">Correo</option>
+          <option value="documento">Número de documento</option>
+        </select>
         <input
           type={tipoIdentificador === "email" ? "email" : "text"}
           value={identificador}

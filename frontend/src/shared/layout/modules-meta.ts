@@ -41,7 +41,16 @@ export const MODULES_META: ModuloMeta[] = [
   // solo consulta el catálogo desde dentro del modal de producto del Menú.
   { slug: "migao", label: "Inventario", path: "/migao/inventario", icon: "📦", roles: ["Cocina"] },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
+  // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
+  // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
+  // resto de módulos operativos del día a día.
+  { slug: "general", label: "Usuarios", path: "/usuarios", icon: "👥", roles: ["Super Root", "Root"] },
 ];
+
+/** Path que SIEMPRE se ancla al final del sidebar, después de los grupos en
+ *  acordeón — no es "un módulo más" del negocio, es administración del propio
+ *  sistema. Ver RoleNav.tsx. */
+export const MODULO_FINAL_PATH = "/usuarios";
 
 /**
  * No todos los roles necesitan una vista general: Mesero/Cocina/Cajero tienen

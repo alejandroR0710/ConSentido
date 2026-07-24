@@ -45,3 +45,31 @@ export const analyticsApi = {
   obtenerMigao: (desde: string, hasta: string) =>
     apiFetch<AnalyticsMigao>(`/analytics/migao?desde=${desde}&hasta=${hasta}`),
 };
+
+export interface Usuario {
+  id: string;
+  nombre: string;
+  email: string;
+  rol_id: number;
+  rol_nombre: string;
+  activo: boolean;
+  ultimo_login: string | null;
+  created_at: string;
+}
+
+export interface Rol {
+  id: number;
+  nombre: string;
+}
+
+export const usuariosApi = {
+  listar: () => apiFetch<Usuario[]>("/usuarios"),
+  listarRoles: () => apiFetch<Rol[]>("/usuarios/roles"),
+  crear: (input: { nombre: string; email: string; password: string; rolId: number }) =>
+    apiFetch<Usuario>("/usuarios", { method: "POST", body: input }),
+  editar: (
+    id: string,
+    input: { nombre?: string; email?: string; password?: string; rolId?: number; activo?: boolean },
+  ) => apiFetch<Usuario>(`/usuarios/${id}`, { method: "PATCH", body: input }),
+  eliminar: (id: string) => apiFetch<{ eliminado: boolean }>(`/usuarios/${id}`, { method: "DELETE" }),
+};

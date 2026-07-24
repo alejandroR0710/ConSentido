@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { MODULES_META, NAV_GROUPS, ROLES_CON_DASHBOARD } from "./modules-meta";
+import { MODULES_META, MODULO_FINAL_PATH, NAV_GROUPS, ROLES_CON_DASHBOARD } from "./modules-meta";
 
 interface RoleNavProps {
   modulosPermitidos: string[];
@@ -51,11 +51,15 @@ export function RoleNav({ modulosPermitidos, rol, onNavigate }: RoleNavProps) {
   }, [location.pathname]);
 
   const pathsAgrupados = new Set(NAV_GROUPS.flatMap((g) => g.paths));
-  const itemsSueltos = items.filter((i) => !pathsAgrupados.has(i.path));
+  const itemsSueltos = items.filter((i) => !pathsAgrupados.has(i.path) && i.path !== MODULO_FINAL_PATH);
   const gruposConItems = NAV_GROUPS.map((g) => ({
     ...g,
     items: items.filter((i) => g.paths.includes(i.path)),
   })).filter((g) => g.items.length > 0);
+  // Se ancla literalmente al final del sidebar (después de los acordeones),
+  // no junto a Dashboard/Caja General — es administración del sistema, no un
+  // módulo operativo más.
+  const itemFinal = items.find((i) => i.path === MODULO_FINAL_PATH) ?? null;
 
   function claseLink({ isActive }: { isActive: boolean }) {
     return ["flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors", isActive ? CLASE_LINK_ACTIVO : CLASE_LINK_INACTIVO].join(" ");
@@ -98,6 +102,18 @@ export function RoleNav({ modulosPermitidos, rol, onNavigate }: RoleNavProps) {
           </div>
         );
       })}
+
+      {itemFinal && (
+        <NavLink
+          key={itemFinal.path}
+          to={itemFinal.path}
+          onClick={onNavigate}
+          className={(props) => `${claseLink(props)} mt-2 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700`}
+        >
+          <span aria-hidden>{itemFinal.icon}</span>
+          <span>{itemFinal.label}</span>
+        </NavLink>
+      )}
     </nav>
   );
 }

@@ -381,10 +381,24 @@ export async function listItemsDespachados() {
   return result.rows;
 }
 
-/** Cocina empieza a preparar TODA la orden de una vez: todo lo pendiente pasa a preparando. */
+/**
+ * Cocina empieza a preparar TODA la orden de una vez: todo lo pendiente pasa a
+ * preparando. Los cargos "para llevar" (envases) quedan afuera: nunca pasan
+ * por Cocina (ver el mismo filtro en listItemsCocina), así que tampoco deben
+ * entrar a este flujo de preparando/check/listo — si entraran, Cocina nunca
+ * podría marcarles el check (ni siquiera los ve) y marcarOrdenLista quedaría
+ * bloqueada para siempre esperando un check que nadie puede poner.
+ */
 export async function empezarPreparar(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
-    `UPDATE orden_items SET estado = 'preparando' WHERE orden_id = $1 AND estado = 'pendiente' RETURNING *`,
+    `UPDATE orden_items oi
+        SET estado = 'preparando'
+       FROM productos p
+      WHERE oi.producto_id = p.id
+        AND oi.orden_id = $1
+        AND oi.estado = 'pendiente'
+        AND p.es_para_llevar = false
+      RETURNING oi.*`,
     [ordenId],
   );
   return result.rows;

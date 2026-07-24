@@ -453,7 +453,13 @@ export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
   if (!orden) throw Errors.notFound("Orden no encontrada");
 
   const items = await repo.getItemsPorOrden(ordenId);
-  const activos = items.filter((i) => i.estado !== "cancelado" && i.estado !== "servido" && i.estado !== "listo");
+  // Los cargos "para llevar" (envases) nunca pasan por Cocina — ni aparecen en
+  // su cola ni llegan a "preparando" (ver el filtro en empezarPreparar), así
+  // que tampoco deben contar acá: de lo contrario esta orden quedaría
+  // bloqueada para siempre esperando un check que Cocina jamás puede poner.
+  const activos = items.filter(
+    (i) => !i.es_para_llevar && i.estado !== "cancelado" && i.estado !== "servido" && i.estado !== "listo",
+  );
 
   if (activos.length === 0) {
     throw Errors.conflict("Esta orden no tiene productos en preparación");

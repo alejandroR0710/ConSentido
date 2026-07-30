@@ -82,13 +82,10 @@ export function VentasPage() {
       } catch {
         // No hay datos
       }
-    } finally {
-      setCargando(false);
     }
   };
 
   useEffect(() => {
-    setCargando(true);
     cargarVentasActuales();
   }, []);
 
@@ -132,7 +129,6 @@ export function VentasPage() {
 
   async function guardarVenta(venta: any) {
     try {
-      setRegistrando(true);
       setError(null);
 
       // Guardar en API de Con Sentido
@@ -171,8 +167,6 @@ export function VentasPage() {
     } catch (err) {
       setError("Error al registrar la venta");
       console.error(err);
-    } finally {
-      setRegistrando(false);
     }
   }
 

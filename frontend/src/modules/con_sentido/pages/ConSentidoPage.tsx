@@ -45,10 +45,6 @@ export function ConSentidoPage() {
           setVentas(JSON.parse(ventasGuardadas));
         }
 
-        // Cargar clientes desde localStorage
-        const clientesGuardados = localStorage.getItem("consentido_clientes");
-        if (clientesGuardados) setClientes(JSON.parse(clientesGuardados));
-
         // Cargar productos desde localStorage
         const productosGuardados = localStorage.getItem("consentido_inventario_productos");
         if (productosGuardados) setProductos(JSON.parse(productosGuardados));

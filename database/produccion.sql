@@ -57,9 +57,14 @@ EXECUTE FUNCTION set_updated_at();
 -- SECCIÓN 1B: PERMISOS (Acceso a usuario del backend)
 -- ========================================================================
 -- Permisos necesarios para que el backend acceda a las tablas de Con Sentido
-GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_ventas TO usuario;
-GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_venta_items TO usuario;
-GRANT USAGE, SELECT ON SEQUENCE con_sentido_venta_items_id_seq TO usuario;
+-- ⚠️ SOLO ejecutar si el rol "usuario" existe en tu base de datos
+-- DO $$ BEGIN
+--   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+--     GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_ventas TO usuario;
+--     GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_venta_items TO usuario;
+--     GRANT USAGE, SELECT ON SEQUENCE con_sentido_venta_items_id_seq TO usuario;
+--   END IF;
+-- END $$;
 
 
 -- ========================================================================

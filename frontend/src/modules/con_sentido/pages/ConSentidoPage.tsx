@@ -5,7 +5,6 @@ import { conSentidoApi } from "../api";
 
 export function ConSentidoPage() {
   const [ventas, setVentas] = useState<any[]>([]);
-  const [clientes, setClientes] = useState<any[]>([]);
   const [productos, setProductos] = useState<any[]>([]);
 
   useEffect(() => {

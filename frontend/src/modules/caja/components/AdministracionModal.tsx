@@ -1,4 +1,3 @@
-import { Modal } from "../../../shared/components/Modal";
 import { CategoriasPanel } from "./CategoriasPanel";
 import { ProveedoresPanel } from "./ProveedoresPanel";
 

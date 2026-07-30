@@ -40,9 +40,7 @@ export function VentasPage() {
   const [ventas, setVentas] = useState<any[]>([]);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [productos, setProductos] = useState(cargarProductos());
-  const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(true);
   const [ventasExpandidas, setVentasExpandidas] = useState<Set<string>>(new Set());
 
   // Cargar ventas desde API (siempre, sin cache)

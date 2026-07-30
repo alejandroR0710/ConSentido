@@ -45,6 +45,7 @@ export type RegistrarIngresoInput = z.infer<typeof registrarIngresoSchema>;
 const camposEgreso = {
   categoriaGastoId: z.number().int().positive(),
   motivo: z.string().max(200),
+  proveedorId: z.string().uuid().optional(),
 };
 export const registrarEgresoSchema = z.union([
   z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

@@ -52,19 +52,25 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
 
   return (
     <Modal titulo="Registrar ingreso" onCerrar={onCerrar}>
-      <label className="mb-1 block text-xs font-medium">Viene de</label>
-      <select
-        autoFocus
-        value={modulo}
-        onChange={(e) => setModulo(e.target.value as ModuloOrigenSlug)}
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      >
+      <label className="mb-2 block text-xs font-medium">Viene de</label>
+      <div className="mb-3 grid grid-cols-3 gap-2">
         {MODULOS_ORIGEN.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.label}
-          </option>
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => setModulo(m.value)}
+            autoFocus={m.value === "migao"}
+            className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-center transition-colors ${
+              modulo === m.value
+                ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-400 dark:bg-brand-green-700/30"
+                : "border-brand-vanilla-dark hover:border-brand-green-400 dark:border-brand-green-700 dark:hover:border-brand-green-600"
+            }`}
+          >
+            <span className="text-2xl">{m.icon}</span>
+            <span className="text-xs font-medium leading-tight text-brand-ink dark:text-brand-vanilla">{m.label}</span>
+          </button>
         ))}
-      </select>
+      </div>
 
       <label className="mb-1 block text-xs font-medium">Monto</label>
       <MoneyInput

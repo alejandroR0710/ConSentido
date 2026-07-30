@@ -332,13 +332,14 @@ export async function insertEgreso(params: {
   metodoPago: string;
   motivo: string;
   usuarioId: string;
+  proveedorId?: string;
 }) {
   const result = await pool.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id)
-     VALUES ($1, 'egreso', $2, $3, $4, $5, $6)
+       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id)
+     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [params.turnoId, params.categoriaGastoId, params.monto, params.metodoPago, params.motivo, params.usuarioId],
+    [params.turnoId, params.categoriaGastoId, params.monto, params.metodoPago, params.motivo, params.usuarioId, params.proveedorId || null],
   );
   return result.rows[0];
 }
@@ -591,6 +592,77 @@ export async function crearCategoriaGasto(nombre: string) {
   const result = await pool.query(
     `INSERT INTO categorias_gasto (nombre) VALUES ($1) RETURNING id, nombre, activo`,
     [nombre],
+  );
+  return result.rows[0];
+}
+
+export async function actualizarCategoriaGasto(id: number, nombre: string) {
+  const result = await pool.query(
+    `UPDATE categorias_gasto SET nombre = $2 WHERE id = $1 RETURNING id, nombre, activo`,
+    [id, nombre],
+  );
+  return result.rows[0];
+}
+
+export async function listProveedores() {
+  const result = await pool.query(
+    `SELECT id, nombre, contacto, telefono, email FROM proveedores WHERE activo = true ORDER BY nombre ASC`,
+  );
+  return result.rows;
+}
+
+export async function crearProveedor(nombre: string, contacto?: string, telefono?: string, email?: string) {
+  const result = await pool.query(
+    `INSERT INTO proveedores (nombre, contacto, telefono, email)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, nombre, contacto, telefono, email, activo`,
+    [nombre, contacto || null, telefono || null, email || null],
+  );
+  return result.rows[0];
+}
+
+export async function actualizarProveedor(
+  id: string,
+  nombre?: string,
+  contacto?: string,
+  telefono?: string,
+  email?: string,
+) {
+  const updates: string[] = [];
+  const values: (string | undefined)[] = [];
+  let paramCount = 1;
+
+  if (nombre !== undefined) {
+    updates.push(`nombre = $${paramCount++}`);
+    values.push(nombre);
+  }
+  if (contacto !== undefined) {
+    updates.push(`contacto = $${paramCount++}`);
+    values.push(contacto);
+  }
+  if (telefono !== undefined) {
+    updates.push(`telefono = $${paramCount++}`);
+    values.push(telefono);
+  }
+  if (email !== undefined) {
+    updates.push(`email = $${paramCount++}`);
+    values.push(email);
+  }
+
+  if (updates.length === 0) return null;
+
+  values.push(id);
+  const result = await pool.query(
+    `UPDATE proveedores SET ${updates.join(", ")}, updated_at = now() WHERE id = $${paramCount} RETURNING *`,
+    values,
+  );
+  return result.rows[0];
+}
+
+export async function desactivarProveedor(id: string) {
+  const result = await pool.query(
+    `UPDATE proveedores SET activo = false, updated_at = now() WHERE id = $1 RETURNING *`,
+    [id],
   );
   return result.rows[0];
 }

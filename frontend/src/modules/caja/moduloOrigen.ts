@@ -1,12 +1,12 @@
 import type { ModuloOrigenSlug } from "./api";
 
-export const MODULOS_ORIGEN: { value: ModuloOrigenSlug; label: string }[] = [
-  { value: "migao", label: "Migao (POS)" },
-  { value: "con_sentido", label: "Con Sentido" },
-  { value: "talleres", label: "Talleres" },
-  { value: "pedidos", label: "Pedidos" },
-  { value: "insumos", label: "Insumos" },
-  { value: "general", label: "General" },
+export const MODULOS_ORIGEN: { value: ModuloOrigenSlug; label: string; icon: string }[] = [
+  { value: "migao", label: "Migao (POS)", icon: "🍽️" },
+  { value: "con_sentido", label: "Con Sentido", icon: "🎨" },
+  { value: "talleres", label: "Talleres", icon: "🔧" },
+  { value: "pedidos", label: "Pedidos", icon: "🚚" },
+  { value: "insumos", label: "Insumos", icon: "📦" },
+  { value: "general", label: "General", icon: "📊" },
 ];
 
 export const LABEL_POR_MODULO_SLUG: Record<string, string> = Object.fromEntries(

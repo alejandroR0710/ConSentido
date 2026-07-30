@@ -32,8 +32,8 @@ export const MODULES_META: ModuloMeta[] = [
   // tiene su propio botón "Historial" arriba (CajaPage/CocinaPage/MeseroPage),
   // las rutas siguen existiendo en App.tsx, solo se llega por ese botón.
   { slug: "insumos", label: "Insumos", path: "/insumos", icon: "📦" },
+  { slug: "con_sentido", label: "Caja Con Sentido", path: "/con-sentido", icon: "🛍️" },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },
-  { slug: "con_sentido", label: "Con Sentido", path: "/con-sentido", icon: "🛍️" },
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
   { slug: "migao", label: "Menú", path: "/menu", icon: "🗂️", roles: ["Administrador"] },

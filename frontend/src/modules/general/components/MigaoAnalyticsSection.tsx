@@ -77,11 +77,6 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsMigao |
             />
             <StatCard titulo="Ingresos en efectivo" valor={formatMoney(datos.ganancias.efectivo)} />
             <StatCard titulo="Ingresos en banco" valor={formatMoney(datos.ganancias.banco)} />
-            <StatCard
-              titulo="Total cobrado (Migao)"
-              valor={formatMoney(datos.ganancias.ingresos)}
-              detalle={`${formatMoney(datos.ganancias.efectivo)} efectivo + ${formatMoney(datos.ganancias.banco)} banco`}
-            />
             <StatCard titulo="Productos vendidos" valor={String(datos.ganancias.itemsVendidos)} />
             <StatCard
               titulo="Tiempo de preparación (Cocina)"

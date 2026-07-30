@@ -41,9 +41,83 @@ export interface AnalyticsMigao {
   };
 }
 
+export interface AnalyticsGeneral {
+  resumenGeneral: {
+    ingresos_totales: number;
+    egresos_totales: number;
+    saldo_neto: number;
+  };
+  porModulo: {
+    modulo_id: number;
+    modulo_nombre: string;
+    ingresos: number;
+    egresos: number;
+    saldo_neto: number;
+    efectivo: number;
+    banco: number;
+  }[];
+}
+
+export interface AnalyticsConSentido {
+  ingresos: number;
+  ventasCount: number;
+  ventasPorCategoria: {
+    categoria: string;
+    cantidad: number;
+    total: number;
+  }[];
+  productosTopVendidos: {
+    productoNombre: string;
+    cantidadVendida: number;
+    ingresoTotal: number;
+  }[];
+  clientesFrecuentes: {
+    clienteNombre: string;
+    compras: number;
+    totalGastado: number;
+  }[];
+}
+
+export interface AnalyticsInsumos {
+  ingresos: number;
+  costos: number;
+  ganancia: number;
+  margenNeto: number;
+  ventasCount: number;
+  productosVendidos: {
+    productoNombre: string;
+    cantidadVendida: number;
+    costo: number;
+    precio: number;
+    margen: number;
+  }[];
+}
+
+export interface AnalyticsPedidos {
+  pedidosTotal: number;
+  ingresoTotal: number;
+  costoTotal: number;
+  gananciaTotal: number;
+  margenPromedio: number;
+  porEstado: {
+    estado: string;
+    cantidad: number;
+    ingresoEstimado: number;
+  }[];
+  proximas_entregas: any[];
+}
+
 export const analyticsApi = {
+  obtenerGeneral: (desde: string, hasta: string) =>
+    apiFetch<AnalyticsGeneral>(`/analytics/general?desde=${desde}&hasta=${hasta}`),
   obtenerMigao: (desde: string, hasta: string) =>
     apiFetch<AnalyticsMigao>(`/analytics/migao?desde=${desde}&hasta=${hasta}`),
+  obtenerConSentido: (desde: string, hasta: string) =>
+    apiFetch<AnalyticsConSentido>(`/analytics/con-sentido?desde=${desde}&hasta=${hasta}`),
+  obtenerInsumos: (desde: string, hasta: string) =>
+    apiFetch<AnalyticsInsumos>(`/analytics/insumos?desde=${desde}&hasta=${hasta}`),
+  obtenerPedidos: (desde: string, hasta: string) =>
+    apiFetch<AnalyticsPedidos>(`/analytics/pedidos?desde=${desde}&hasta=${hasta}`),
 };
 
 export interface Usuario {

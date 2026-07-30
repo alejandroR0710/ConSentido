@@ -1,6 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { CajaHistorialPage } from "./modules/caja/pages/CajaHistorialPage";
 import { CajaPage } from "./modules/caja/pages/CajaPage";
+import { ClientesPage } from "./modules/con_sentido/pages/ClientesPage";
+import { ConSentidoPage } from "./modules/con_sentido/pages/ConSentidoPage";
+import { InventarioConSentidoPage } from "./modules/con_sentido/pages/InventarioPage";
+import { VentasPage } from "./modules/con_sentido/pages/VentasPage";
 import { HomeRoute } from "./modules/general/pages/HomeRoute";
 import { LoginPage } from "./modules/general/pages/LoginPage";
 import { InsumosListPage } from "./modules/insumos/pages/InsumosListPage";
@@ -32,6 +36,10 @@ export default function App() {
         <Route path="/" element={<HomeRoute />} />
         <Route path="/caja" element={<CajaPage />} />
         <Route path="/caja/historial" element={<CajaHistorialPage />} />
+        <Route path="/con-sentido" element={<ConSentidoPage />} />
+        <Route path="/con-sentido/ventas" element={<VentasPage />} />
+        <Route path="/con-sentido/clientes" element={<ClientesPage />} />
+        <Route path="/con-sentido/inventario" element={<InventarioConSentidoPage />} />
         <Route path="/insumos" element={<InsumosListPage />} />
         <Route path="/mesero" element={<MeseroPage />} />
         <Route path="/mesero/historial" element={<MeseroHistorialPage />} />

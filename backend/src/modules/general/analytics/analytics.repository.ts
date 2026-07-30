@@ -12,6 +12,161 @@ import { pool } from "../../../shared/db/pool";
  */
 const BOGOTA = "AT TIME ZONE 'America/Bogota'";
 
+export async function getMovimientosPorModulo(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       m.id as modulo_id,
+       m.nombre as modulo_nombre,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso'), 0) AS ingresos,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'egreso'), 0) AS egresos,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso' AND mc.metodo_pago = 'efectivo'), 0) AS efectivo,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso' AND mc.metodo_pago = 'banco'), 0) AS banco
+     FROM modulos m
+     LEFT JOIN movimientos_caja mc ON m.id = mc.modulo_origen_id
+       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE m.id != 1
+     GROUP BY m.id, m.nombre
+     ORDER BY ingresos DESC`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
+export async function getIngresosModulo(moduloId: number, desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(DISTINCT v.id) as cantidad,
+       COALESCE(SUM(v.total), 0) as total
+     FROM ventas v
+     WHERE v.modulo_id = $1
+       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND v.estado = 'completada'`,
+    [moduloId, desde, hasta],
+  );
+  return result.rows[0];
+}
+
+export async function getVentasPorCategoria(moduloId: number, desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       cp.nombre as categoria,
+       COUNT(vi.id) as cantidad,
+       COALESCE(SUM(vi.subtotal), 0) as total
+     FROM venta_items vi
+     JOIN productos p ON p.id = vi.producto_id
+     LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+     JOIN ventas v ON v.id = vi.venta_id
+     WHERE p.modulo_id = $1
+       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND v.estado = 'completada'
+     GROUP BY cp.id, cp.nombre
+     ORDER BY total DESC`,
+    [moduloId, desde, hasta],
+  );
+  return result.rows;
+}
+
+export async function getProductosTopVendidos(moduloId: number, desde: string, hasta: string, limit: number) {
+  const result = await pool.query(
+    `SELECT
+       p.nombre as producto_nombre,
+       p.costo,
+       p.precio,
+       COUNT(vi.id) as cantidad,
+       COALESCE(SUM(vi.subtotal), 0) as total
+     FROM venta_items vi
+     JOIN productos p ON p.id = vi.producto_id
+     JOIN ventas v ON v.id = vi.venta_id
+     WHERE p.modulo_id = $1
+       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND v.estado = 'completada'
+     GROUP BY p.id, p.nombre, p.costo, p.precio
+     ORDER BY cantidad DESC
+     LIMIT $4`,
+    [moduloId, desde, hasta, limit],
+  );
+  return result.rows;
+}
+
+export async function getClientesFrecuentes(moduloId: number, desde: string, hasta: string, limit: number) {
+  const result = await pool.query(
+    `SELECT
+       c.nombre as cliente_nombre,
+       COUNT(DISTINCT v.id) as compras,
+       COALESCE(SUM(v.total), 0) as total
+     FROM ventas v
+     JOIN clientes c ON c.id = v.cliente_id
+     WHERE v.modulo_id = $1
+       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND v.estado = 'completada'
+     GROUP BY c.id, c.nombre
+     ORDER BY compras DESC
+     LIMIT $4`,
+    [moduloId, desde, hasta, limit],
+  );
+  return result.rows;
+}
+
+export async function getCostosModulo(moduloId: number, desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(vi.cantidad * p.costo), 0) as total_costos
+     FROM venta_items vi
+     JOIN productos p ON p.id = vi.producto_id
+     JOIN ventas v ON v.id = vi.venta_id
+     WHERE p.modulo_id = $1
+       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND v.estado = 'completada'`,
+    [moduloId, desde, hasta],
+  );
+  return result.rows[0];
+}
+
+export async function getPedidosResumen(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(*) as total,
+       COALESCE(SUM(p.precio_acordado), 0) as ingreso_total,
+       COALESCE(SUM(p.costo_estimado), 0) as costo_total
+     FROM pedidos p
+     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+       AND p.estado != 'cancelado'`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
+export async function getPedidosPorEstado(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       p.estado,
+       COUNT(*) as cantidad,
+       COALESCE(SUM(p.precio_acordado), 0) as ingreso_estimado
+     FROM pedidos p
+     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     GROUP BY p.estado
+     ORDER BY cantidad DESC`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
+export async function getGananciasPedidos(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(p.precio_acordado - p.costo_estimado), 0) as ganancia_total,
+       CASE
+         WHEN SUM(p.precio_acordado) = 0 THEN 0
+         ELSE ROUND(100 * AVG((p.precio_acordado - p.costo_estimado) / NULLIF(p.precio_acordado, 0)))
+       END as margen_promedio
+     FROM pedidos p
+     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+       AND p.estado != 'cancelado'`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
 /** Una cuenta pagada "administrativo" no generó ingreso real en Caja General
  *  (ver migao.service.ts::cerrarOrden) — tampoco debe contar en analíticas de
  *  pedidos/ganancias, aunque su `ordenes.estado` quede en 'cerrada' igual que

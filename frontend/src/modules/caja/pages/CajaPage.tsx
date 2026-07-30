@@ -8,6 +8,7 @@ import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ResumenTurno } from "../api";
+import { AdministracionModal } from "../components/AdministracionModal";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
 import { IngresoModal } from "../components/IngresoModal";
@@ -42,7 +43,7 @@ export function CajaPage() {
   const [montoInicialBanco, setMontoInicialBanco] = useState(0);
   const [abriendo, setAbriendo] = useState(false);
 
-  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | null>(null);
+  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | "administracion" | null>(null);
   const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
 
   const turnoIdRef = useRef<string | null>(null);
@@ -110,6 +111,12 @@ export function CajaPage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja General</h1>
+            <button
+              onClick={() => setModalAbierto("administracion")}
+              className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+            >
+              ⚙️ Administrar
+            </button>
             {puedeEditarPagos && (
               <Link
                 to="/caja/historial"
@@ -124,19 +131,6 @@ export function CajaPage() {
             día anterior.
           </p>
         </div>
-        {resumen && (
-          <div className="rounded-lg border-2 border-brand-green-600 px-4 py-2 text-right dark:border-brand-green-500">
-            <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-              Ganancia en efectivo
-            </div>
-            <div className="text-2xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-              {formatearMoneda(resumen.ingresosEfectivo - resumen.egresosEfectivo)}
-            </div>
-            <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-              Base con la que abrió el turno: {formatearMoneda(Number(resumen.turno.montoInicialEfectivo))}
-            </div>
-          </div>
-        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -220,56 +214,111 @@ export function CajaPage() {
           </div>
 
           <div>
-            <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
+            <h2 className="mb-4 font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
             {resumen.movimientos.length === 0 ? (
               <p className="text-sm text-brand-ink/60">Sin movimientos todavía.</p>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {resumen.movimientos.map((m) => (
-                  <li
-                    key={m.id}
-                    className={`flex items-center justify-between rounded-lg border-l-4 bg-brand-vanilla p-3 dark:bg-brand-green-900 ${
-                      m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                        {m.modulo_origen_slug ?? m.categoria_gasto_nombre ?? "—"}
-                        <span className="ml-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                          {m.metodo_pago}
-                        </span>
-                      </div>
-                      <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                        {formatearHora(m.created_at)}
-                      </div>
-                      {m.descuento_porcentaje != null && (
-                        <div className="text-xs text-amber-700 dark:text-amber-400">
-                          Sin descuento: {formatearMoneda(Number(m.monto_sin_descuento))} · -
-                          {Number(m.descuento_porcentaje)}%
+              <div className="flex flex-col gap-6">
+                {(() => {
+                  const movimientosPorDia = resumen.movimientos.reduce(
+                    (acc, m) => {
+                      const fecha = new Date(m.created_at).toLocaleDateString("es-CO");
+                      if (!acc[fecha]) acc[fecha] = [];
+                      acc[fecha].push(m);
+                      return acc;
+                    },
+                    {} as Record<string, typeof resumen.movimientos>
+                  );
+
+                  return Object.entries(movimientosPorDia).map(([fecha, movimientos]) => {
+                    const totalIngresos = movimientos
+                      .filter((m) => m.tipo === "ingreso")
+                      .reduce((sum, m) => sum + Number(m.monto), 0);
+                    const totalEgresos = movimientos
+                      .filter((m) => m.tipo === "egreso")
+                      .reduce((sum, m) => sum + Number(m.monto), 0);
+
+                    return (
+                      <div key={fecha} className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
+                        <div className="mb-4 flex items-center justify-between border-b border-brand-vanilla-dark pb-3 dark:border-brand-green-700">
+                          <h3 className="font-semibold text-brand-green-700 dark:text-brand-vanilla">{fecha}</h3>
+                          <div className="flex gap-4">
+                            <div className="text-right">
+                              <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</div>
+                              <div className="font-bold text-brand-green-700 dark:text-brand-vanilla">
+                                +{formatearMoneda(totalIngresos)}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Egresos</div>
+                              <div className="font-bold text-red-600">-{formatearMoneda(totalEgresos)}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Balance</div>
+                              <div className={`font-bold ${totalIngresos - totalEgresos >= 0 ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"}`}>
+                                {formatearMoneda(totalIngresos - totalEgresos)}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`text-base font-semibold ${
-                          m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
-                        }`}
-                      >
-                        {m.tipo === "egreso" ? "-" : "+"}
-                        {formatearMoneda(Number(m.monto))}
+
+                        <ul className="flex flex-col gap-2">
+                          {movimientos.map((m) => (
+                            <li
+                              key={m.id}
+                              className={`rounded-lg border-l-4 bg-brand-vanilla p-3 dark:bg-brand-green-900 ${
+                                m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                                      {m.modulo_origen_slug ?? m.categoria_gasto_nombre ?? "—"}
+                                    </div>
+                                    <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">{m.metodo_pago}</span>
+                                  </div>
+                                  {m.motivo && (
+                                    <div className="mt-1 text-xs text-brand-ink/70 dark:text-brand-vanilla/70 italic">
+                                      {m.motivo}
+                                    </div>
+                                  )}
+                                  <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                    {formatearHora(m.created_at)}
+                                  </div>
+                                  {m.descuento_porcentaje != null && (
+                                    <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                                      Sin descuento: {formatearMoneda(Number(m.monto_sin_descuento))} · -{Number(m.descuento_porcentaje)}%
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`font-semibold ${
+                                      m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                                    }`}
+                                  >
+                                    {m.tipo === "egreso" ? "-" : "+"}
+                                    {formatearMoneda(Number(m.monto))}
+                                  </div>
+                                  {puedeEditarPagos && (
+                                    <button
+                                      onClick={() => setMovimientoEditando(m)}
+                                      className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                    >
+                                      Editar
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      {puedeEditarPagos && (
-                        <button
-                          onClick={() => setMovimientoEditando(m)}
-                          className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                        >
-                          Editar
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    );
+                  });
+                })()}
+              </div>
             )}
           </div>
 
@@ -307,7 +356,6 @@ export function CajaPage() {
           categorias={categorias}
           onCerrar={() => setModalAbierto(null)}
           onRegistrado={cargarResumenDeTurnoActual}
-          onCategoriaCreada={(categoria) => setCategorias((actual) => [...actual, categoria])}
         />
       )}
 
@@ -329,6 +377,13 @@ export function CajaPage() {
             setMensaje(mensajeReset);
             await cargarResumenDeTurnoActual();
           }}
+        />
+      )}
+
+      {modalAbierto === "administracion" && (
+        <AdministracionModal
+          onCerrar={() => setModalAbierto(null)}
+          onActualizar={cargarResumenDeTurnoActual}
         />
       )}
 

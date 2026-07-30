@@ -4,15 +4,20 @@ import { requirePermission } from "../../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../../shared/utils/async-handler";
 import {
   abrirTurnoController,
+  actualizarCategoriaGastoController,
+  actualizarProveedorController,
   agregarMovimientoHistoricoController,
   borrarHistorialDiaController,
   borrarTurnoController,
   cerrarTurnoController,
   crearCategoriaGastoController,
+  crearProveedorController,
+  desactivarProveedorController,
   editarMetodoPagoMovimientoController,
   editarMovimientoHistoricoController,
   listarCategoriasGastoController,
   listarEdicionesDelDiaController,
+  listarProveedoresController,
   obtenerHistorialCajaController,
   obtenerMovimientosDelDiaController,
   obtenerResumenTurnoController,
@@ -56,6 +61,32 @@ cajaRouter.post(
   "/categorias-gasto",
   requirePermission("general.caja.administrar_categorias"),
   asyncHandler(crearCategoriaGastoController),
+);
+cajaRouter.patch(
+  "/categorias-gasto/:id",
+  requirePermission("general.caja.administrar_categorias"),
+  asyncHandler(actualizarCategoriaGastoController),
+);
+
+cajaRouter.get(
+  "/proveedores",
+  requirePermission("general.caja.ver"),
+  asyncHandler(listarProveedoresController),
+);
+cajaRouter.post(
+  "/proveedores",
+  requirePermission("general.caja.administrar_categorias"),
+  asyncHandler(crearProveedorController),
+);
+cajaRouter.patch(
+  "/proveedores/:id",
+  requirePermission("general.caja.administrar_categorias"),
+  asyncHandler(actualizarProveedorController),
+);
+cajaRouter.delete(
+  "/proveedores/:id",
+  requirePermission("general.caja.administrar_categorias"),
+  asyncHandler(desactivarProveedorController),
 );
 
 cajaRouter.get("/historial", requirePermission("general.caja.ver"), asyncHandler(obtenerHistorialCajaController));

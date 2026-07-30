@@ -132,6 +132,7 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
         metodoPago: parte.metodoPago,
         motivo: input.motivo,
         usuarioId,
+        proveedorId: input.proveedorId,
       }),
     );
   }
@@ -223,6 +224,32 @@ export async function listarCategoriasGasto() {
 
 export async function crearCategoriaGasto(nombre: string) {
   return repo.crearCategoriaGasto(nombre);
+}
+
+export async function actualizarCategoriaGasto(id: number, nombre: string) {
+  return repo.actualizarCategoriaGasto(id, nombre);
+}
+
+export async function listarProveedores() {
+  return repo.listProveedores();
+}
+
+export async function crearProveedor(nombre: string, contacto?: string, telefono?: string, email?: string) {
+  return repo.crearProveedor(nombre, contacto, telefono, email);
+}
+
+export async function actualizarProveedor(
+  id: string,
+  nombre?: string,
+  contacto?: string,
+  telefono?: string,
+  email?: string,
+) {
+  return repo.actualizarProveedor(id, nombre, contacto, telefono, email);
+}
+
+export async function desactivarProveedor(id: string) {
+  return repo.desactivarProveedor(id);
 }
 
 /**

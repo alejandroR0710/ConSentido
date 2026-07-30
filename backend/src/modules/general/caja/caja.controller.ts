@@ -63,6 +63,12 @@ export async function crearCategoriaGastoController(req: Request, res: Response)
   return created(res, categoria);
 }
 
+export async function actualizarCategoriaGastoController(req: Request, res: Response) {
+  const { nombre } = crearCategoriaGastoSchema.parse(req.body);
+  const categoria = await service.actualizarCategoriaGasto(Number(req.params.id), nombre);
+  return ok(res, categoria);
+}
+
 export async function editarMetodoPagoMovimientoController(req: Request, res: Response) {
   const data = editarMetodoPagoMovimientoSchema.parse(req.body);
   const movimientos = await service.editarMetodoPagoMovimiento(Number(req.params.id), data);
@@ -122,4 +128,28 @@ export async function listarEdicionesDelDiaController(req: Request, res: Respons
   const { fecha } = fechaParamSchema.parse(req.params);
   const ediciones = await service.listarEdicionesDelDia(fecha);
   return ok(res, ediciones);
+}
+
+export async function listarProveedoresController(_req: Request, res: Response) {
+  const proveedores = await service.listarProveedores();
+  return ok(res, proveedores);
+}
+
+export async function crearProveedorController(req: Request, res: Response) {
+  const { nombre, contacto, telefono, email } = req.body;
+  const proveedor = await service.crearProveedor(nombre, contacto, telefono, email);
+  return created(res, proveedor);
+}
+
+export async function actualizarProveedorController(req: Request, res: Response) {
+  const { id } = req.params;
+  const { nombre, contacto, telefono, email } = req.body;
+  const proveedor = await service.actualizarProveedor(id, nombre, contacto, telefono, email);
+  return ok(res, proveedor);
+}
+
+export async function desactivarProveedorController(req: Request, res: Response) {
+  const { id } = req.params;
+  const proveedor = await service.desactivarProveedor(id);
+  return ok(res, proveedor);
 }

@@ -29,6 +29,14 @@ export interface TurnoCaja {
   cerradoEn: string | null;
 }
 
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  contacto?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+}
+
 export interface MovimientoCaja {
   id: number;
   turno_id: string;
@@ -48,6 +56,8 @@ export interface MovimientoCaja {
   created_at: string;
   modulo_origen_slug: string | null;
   categoria_gasto_nombre: string | null;
+  proveedor_id?: string | null;
+  proveedor_nombre?: string | null;
 }
 
 export interface IngresoPorArea {
@@ -152,8 +162,23 @@ export const cajaApi = {
   registrarIngreso: (
     input: { moduloOrigenSlug: ModuloOrigenSlug; motivo?: string; descuentoPorcentaje?: number } & PagoInput,
   ) => apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
-  registrarEgreso: (input: { categoriaGastoId: number; motivo: string } & PagoInput) =>
+  registrarEgreso: (input: { categoriaGastoId: number; motivo: string; proveedorId?: string } & PagoInput) =>
     apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
+  listarProveedores: () => apiFetch<Proveedor[]>("/caja/proveedores"),
+  crearProveedor: (nombre: string, contacto?: string, telefono?: string, email?: string) =>
+    apiFetch<Proveedor>("/caja/proveedores", {
+      method: "POST",
+      body: { nombre, contacto, telefono, email },
+    }),
+  actualizarProveedor: (id: string, nombre?: string, contacto?: string, telefono?: string, email?: string) =>
+    apiFetch<Proveedor>(`/caja/proveedores/${id}`, {
+      method: "PATCH",
+      body: { nombre, contacto, telefono, email },
+    }),
+  desactivarProveedor: (id: string) =>
+    apiFetch<Proveedor>(`/caja/proveedores/${id}`, {
+      method: "DELETE",
+    }),
   editarMetodoPagoMovimiento: (movimientoId: number | string, input: EditarPagoInput) =>
     apiFetch<MovimientoCaja[]>(`/caja/movimientos/${movimientoId}/metodo-pago`, {
       method: "PATCH",
@@ -162,6 +187,8 @@ export const cajaApi = {
   listarCategoriasGasto: () => apiFetch<CategoriaGasto[]>("/caja/categorias-gasto"),
   crearCategoriaGasto: (nombre: string) =>
     apiFetch<CategoriaGasto>("/caja/categorias-gasto", { method: "POST", body: { nombre } }),
+  actualizarCategoriaGasto: (id: number, nombre: string) =>
+    apiFetch<CategoriaGasto>(`/caja/categorias-gasto/${id}`, { method: "PATCH", body: { nombre } }),
   obtenerHistorialAnual: (anio: number) => apiFetch<DiaHistorialCaja[]>(`/caja/historial?anio=${anio}`),
   resetear: () =>
     apiFetch<ResetearCajaResultado>("/caja/reset", {

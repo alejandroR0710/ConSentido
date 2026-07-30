@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
+import { GeneralAnalyticsSection } from "../components/GeneralAnalyticsSection";
 import { MigaoAnalyticsSection } from "../components/MigaoAnalyticsSection";
+import { ConSentidoAnalyticsSection } from "../components/ConSentidoAnalyticsSection";
+import { InsumosAnalyticsSection } from "../components/InsumosAnalyticsSection";
+import { PedidosAnalyticsSection } from "../components/PedidosAnalyticsSection";
 import { ReiniciarTodoModal } from "../components/ReiniciarTodoModal";
 
-const MODULOS_SIN_ANALYTICS = [
-  { nombre: "Insumos", nota: "Analíticas de inventario/consumo — próximamente." },
-  { nombre: "Talleres", nota: "Analíticas de talleres — próximamente." },
-  { nombre: "Con Sentido", nota: "Analíticas de ventas — próximamente." },
-  { nombre: "Pedidos", nota: "Analíticas de pedidos a domicilio — próximamente." },
+type Seccion = "general" | "migao" | "consentido" | "insumos" | "pedidos";
+
+const SECCIONES: { id: Seccion; label: string; icon: string }[] = [
+  { id: "general", label: "Resumen General", icon: "📊" },
+  { id: "migao", label: "Migao (POS)", icon: "🍽️" },
+  { id: "consentido", label: "Con Sentido", icon: "🎨" },
+  { id: "insumos", label: "Insumos", icon: "📦" },
+  { id: "pedidos", label: "Pedidos", icon: "🚚" },
 ];
 
 export function DashboardPage() {
@@ -15,6 +22,7 @@ export function DashboardPage() {
   const esSuperRoot = usuario?.rol === "Super Root";
   const [modalAbierto, setModalAbierto] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [seccionActual, setSeccionActual] = useState<Seccion>("general");
 
   return (
     <div className="flex flex-col gap-6">
@@ -29,17 +37,31 @@ export function DashboardPage() {
 
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
 
-      <MigaoAnalyticsSection />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {MODULOS_SIN_ANALYTICS.map((m) => (
-          <div
-            key={m.nombre}
-            className="rounded-lg border border-dashed border-brand-vanilla-dark p-4 text-sm text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
+      {/* Steps/Secciones */}
+      <div className="flex overflow-x-auto gap-2 pb-4 -mx-6 px-6 sm:mx-0 sm:px-0">
+        {SECCIONES.map((seccion) => (
+          <button
+            key={seccion.id}
+            onClick={() => setSeccionActual(seccion.id)}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 whitespace-nowrap font-medium transition-colors ${
+              seccionActual === seccion.id
+                ? "bg-brand-green-600 text-white"
+                : "bg-brand-green-50 text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
+            }`}
           >
-            <span className="font-medium text-brand-ink dark:text-brand-vanilla">{m.nombre}</span> — {m.nota}
-          </div>
+            <span>{seccion.icon}</span>
+            <span>{seccion.label}</span>
+          </button>
         ))}
+      </div>
+
+      {/* Contenido de la sección actual */}
+      <div className="mt-2">
+        {seccionActual === "general" && <GeneralAnalyticsSection />}
+        {seccionActual === "migao" && <MigaoAnalyticsSection />}
+        {seccionActual === "consentido" && <ConSentidoAnalyticsSection />}
+        {seccionActual === "insumos" && <InsumosAnalyticsSection />}
+        {seccionActual === "pedidos" && <PedidosAnalyticsSection />}
       </div>
 
       {esSuperRoot && (

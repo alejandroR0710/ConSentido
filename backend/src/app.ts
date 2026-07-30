@@ -4,6 +4,7 @@ import express from "express";
 import { analyticsRouter } from "./modules/general/analytics/analytics.routes";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
+import { conSentidoRouter } from "./modules/con_sentido/con_sentido.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
 import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
 import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
@@ -64,6 +65,7 @@ export function createApp() {
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/con-sentido", conSentidoRouter);
   app.use("/api/v1/insumos", insumosRouter);
   app.use("/api/v1/caja", cajaRouter);
   app.use("/api/v1/migao", migaoRouter);

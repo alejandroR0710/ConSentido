@@ -42,7 +42,14 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_producto', 'migao.productos.editar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_inventario',         'migao.inventario.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar'),
-  ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_forzado_inventario', 'migao.inventario.eliminar_forzado');
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_forzado_inventario', 'migao.inventario.eliminar_forzado'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_productos',   'con_sentido.productos.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_producto',  'con_sentido.productos.crear'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'editar_producto', 'con_sentido.productos.editar'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_clientes',    'con_sentido.clientes.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_cliente',   'con_sentido.clientes.crear'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_ventas',      'con_sentido.ventas.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_venta',     'con_sentido.ventas.crear');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES

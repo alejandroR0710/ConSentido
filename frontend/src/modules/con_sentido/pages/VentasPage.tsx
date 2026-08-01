@@ -1,120 +1,59 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { NuevaVentaModal } from "../components/NuevaVentaModal";
+import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
-import { cajaApi } from "../../caja/api";
+import { NuevaVentaModal } from "../components/NuevaVentaModal";
 import { conSentidoApi } from "../api";
-
-const PRODUCTOS_EJEMPLO = [
-  {
-    id: 1,
-    nombre: "Artesanía A",
-    precio: 50000,
-    descripcion: "Pieza artesanal hecha a mano",
-  },
-  {
-    id: 2,
-    nombre: "Artesanía B",
-    precio: 75000,
-    descripcion: "Diseño exclusivo y único",
-  },
-  {
-    id: 3,
-    nombre: "Artesanía C",
-    precio: 100000,
-    descripcion: "Colección premium",
-  },
-];
-
-function cargarProductos() {
-  try {
-    const guardados = localStorage.getItem("consentido_inventario_productos");
-    const productosInventario = guardados ? JSON.parse(guardados) : [];
-    return productosInventario.length > 0 ? productosInventario : PRODUCTOS_EJEMPLO;
-  } catch {
-    return PRODUCTOS_EJEMPLO;
-  }
-}
 
 export function VentasPage() {
   const [ventas, setVentas] = useState<any[]>([]);
+  const [productos, setProductos] = useState<any[]>([]);
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [productos, setProductos] = useState(cargarProductos());
   const [error, setError] = useState<string | null>(null);
   const [ventasExpandidas, setVentasExpandidas] = useState<Set<string>>(new Set());
 
-  // Cargar ventas desde API (siempre, sin cache)
   const cargarVentasActuales = async () => {
     try {
       const ventasApi = await conSentidoApi.listarVentas();
-
-      if (ventasApi && ventasApi.length > 0) {
-        // Mapear campos del API al formato esperado por el frontend
-        const ventasMapeadas = ventasApi.map((v: any) => ({
-          id: v.id,
-          monto: parseFloat(v.monto),
-          metodoPago: v.metodo_pago,
-          fecha: v.created_at,
-          items: v.items.map((item: any) => ({
-            producto: item.producto,
-            descripcion: item.descripcion,
-            imagen: item.imagen,
-            categoria: item.categoria,
-            cantidad: parseFloat(item.cantidad),
-            precioUnitario: parseFloat(item.precio_unitario),
-            subtotal: parseFloat(item.subtotal),
-          })),
-          montoEfectivo: parseFloat(v.monto_efectivo || 0),
-          montoBanco: parseFloat(v.monto_banco || 0),
-        }));
-        setVentas(ventasMapeadas);
-      } else {
-        setVentas([]);
-      }
+      const ventasMapeadas = ventasApi.map((v: any) => ({
+        id: v.id,
+        monto: parseFloat(v.monto),
+        metodoPago: v.metodo_pago,
+        fecha: v.created_at,
+        items: v.items.map((item: any) => ({
+          producto: item.producto,
+          descripcion: item.descripcion,
+          categoria: item.categoria,
+          cantidad: parseFloat(item.cantidad),
+          precioUnitario: parseFloat(item.precio_unitario),
+          subtotal: parseFloat(item.subtotal),
+        })),
+        montoEfectivo: parseFloat(v.monto_efectivo || 0),
+        montoBanco: parseFloat(v.monto_banco || 0),
+      }));
+      setVentas(ventasMapeadas);
+      setError(null);
     } catch (err) {
-      // Fallback a localStorage solo si API falla
-      try {
-        const guardadas = localStorage.getItem("consentido_ventas");
-        const ventasLocal = guardadas ? JSON.parse(guardadas) : [];
-        if (ventasLocal.length > 0) {
-          setVentas(ventasLocal);
-        }
-      } catch {
-        // No hay datos
-      }
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial de ventas");
     }
   };
 
   useEffect(() => {
     cargarVentasActuales();
+    conSentidoApi.listarProductos().then(setProductos).catch(() => {});
   }, []);
 
-  // Sincronizar cuando la página vuelve a tener foco
+  // Sincronizar cuando la página vuelve a tener foco, y cada 5s mientras está abierta.
   useEffect(() => {
-    function handleFocus() {
-      cargarVentasActuales();
+    function alVolver() {
+      if (document.visibilityState === "visible") cargarVentasActuales();
     }
-
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, []);
-
-  // Polling automático cada 5 segundos para detectar cambios en Caja General
-  useEffect(() => {
-    const intervalo = setInterval(() => {
-      cargarVentasActuales();
-    }, 5000);
-
-    return () => clearInterval(intervalo);
-  }, []);
-
-  // Refrescar productos cuando cambian en inventario
-  useEffect(() => {
-    function handleStorageChange() {
-      setProductos(cargarProductos());
-    }
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    document.addEventListener("visibilitychange", alVolver);
+    const intervalo = setInterval(cargarVentasActuales, 5000);
+    return () => {
+      document.removeEventListener("visibilitychange", alVolver);
+      clearInterval(intervalo);
+    };
   }, []);
 
   function alternarVenta(ventaId: string) {
@@ -128,46 +67,13 @@ export function VentasPage() {
   }
 
   async function guardarVenta(venta: any) {
-    try {
-      setError(null);
-
-      // Guardar en API de Con Sentido
-      try {
-        await conSentidoApi.registrarVenta(venta);
-      } catch (apiErr) {
-        console.warn("API de Con Sentido no disponible, guardando localmente", apiErr);
-        // Fallback: guardar en localStorage
-        localStorage.setItem("consentido_ventas", JSON.stringify([venta, ...ventas]));
-      }
-
-      // Registrar ingreso en Caja
-      try {
-        if (venta.metodoPago === "mixto") {
-          await cajaApi.registrarIngreso({
-            moduloOrigenSlug: "con_sentido",
-            motivo: `Venta Con Sentido - ${venta.items?.length || 1} producto(s)`,
-            metodoPago: "mixto",
-            montoEfectivo: venta.montoEfectivo || 0,
-            montoBanco: venta.montoBanco || 0,
-          });
-        } else {
-          await cajaApi.registrarIngreso({
-            moduloOrigenSlug: "con_sentido",
-            motivo: `Venta Con Sentido - ${venta.items?.length || 1} producto(s)`,
-            metodoPago: venta.metodoPago,
-            monto: venta.monto,
-          });
-        }
-      } catch (cajaErr) {
-        console.warn("Error al registrar en Caja:", cajaErr);
-        // No es crítico si falla Caja, la venta ya se guardó
-      }
-
-      setVentas([venta, ...ventas]);
-    } catch (err) {
-      setError("Error al registrar la venta");
-      console.error(err);
-    }
+    // El backend (con_sentido.service.ts::registrarVentaService) ya registra
+    // el ingreso en movimientos_caja como parte de esta misma llamada — no hay
+    // que volver a llamar a la API de Caja acá. Hacerlo (como pasaba antes)
+    // duplicaba el ingreso: quedaba una vez desde el backend y otra vez desde
+    // el frontend, así que Caja General mostraba el doble de lo vendido.
+    await conSentidoApi.registrarVenta(venta);
+    await cargarVentasActuales();
   }
 
   return (

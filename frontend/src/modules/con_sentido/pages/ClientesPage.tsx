@@ -1,25 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ApiError } from "../../../shared/api/client";
+import { conSentidoApi, type ClienteConSentido } from "../api";
 import { NuevaClienteModal } from "../components/NuevaClienteModal";
 
 export function ClientesPage() {
-  const [clientes, setClientes] = useState<any[]>([]);
+  const [clientes, setClientes] = useState<ClienteConSentido[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
 
-  function guardarCliente(cliente: any) {
-    setClientes([cliente, ...clientes]);
+  async function cargar() {
+    try {
+      setClientes(await conSentidoApi.listarClientes());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar la lista de clientes");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  async function guardarCliente(cliente: any) {
+    await conSentidoApi.crearCliente({
+      nombre: cliente.nombre,
+      telefono: cliente.telefono || undefined,
+      email: cliente.email || undefined,
+    });
+    await cargar();
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">
-            Clientes
-          </h1>
-          <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-            Gestiona los clientes de Con Sentido
-          </p>
+          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Clientes</h1>
+          <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">Gestiona los clientes de Con Sentido</p>
         </div>
         <Link
           to="/con-sentido"
@@ -36,11 +56,13 @@ export function ClientesPage() {
         + Nuevo cliente
       </button>
 
-      {clientes.length === 0 ? (
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {loading ? (
+        <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>
+      ) : clientes.length === 0 ? (
         <div className="rounded-lg border border-brand-vanilla-dark p-8 text-center dark:border-brand-green-700">
-          <p className="text-brand-ink/60 dark:text-brand-vanilla/60">
-            No hay clientes registrados aún
-          </p>
+          <p className="text-brand-ink/60 dark:text-brand-vanilla/60">No hay clientes registrados aún</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
@@ -50,7 +72,6 @@ export function ClientesPage() {
                 <th className="px-4 py-2">Nombre</th>
                 <th className="px-4 py-2">Teléfono</th>
                 <th className="px-4 py-2">Email</th>
-                <th className="px-4 py-2">Compras</th>
               </tr>
             </thead>
             <tbody>
@@ -59,7 +80,6 @@ export function ClientesPage() {
                   <td className="px-4 py-2 font-medium">{cliente.nombre}</td>
                   <td className="px-4 py-2">{cliente.telefono || "—"}</td>
                   <td className="px-4 py-2 text-xs">{cliente.email || "—"}</td>
-                  <td className="px-4 py-2">{cliente.compras}</td>
                 </tr>
               ))}
             </tbody>
@@ -67,12 +87,7 @@ export function ClientesPage() {
         </div>
       )}
 
-      {modalAbierto && (
-        <NuevaClienteModal
-          onCerrar={() => setModalAbierto(false)}
-          onGuardar={guardarCliente}
-        />
-      )}
+      {modalAbierto && <NuevaClienteModal onCerrar={() => setModalAbierto(false)} onGuardar={guardarCliente} />}
     </div>
   );
 }

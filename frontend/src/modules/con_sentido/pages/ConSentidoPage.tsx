@@ -10,46 +10,33 @@ export function ConSentidoPage() {
   useEffect(() => {
     async function cargarDatos() {
       try {
-        // Intentar cargar ventas desde API
-        try {
-          const ventasApi = await conSentidoApi.listarVentas();
-          if (ventasApi && ventasApi.length > 0) {
-            // Mapear campos del API al formato esperado
-            const ventasMapeadas = ventasApi.map((v: any) => ({
-              id: v.id,
-              monto: parseFloat(v.monto),
-              metodoPago: v.metodo_pago,
-              fecha: v.created_at,
-              items: v.items?.map((item: any) => ({
-                producto: item.producto,
-                descripcion: item.descripcion,
-                imagen: item.imagen,
-                categoria: item.categoria,
-                cantidad: parseFloat(item.cantidad),
-                precioUnitario: parseFloat(item.precio_unitario),
-                subtotal: parseFloat(item.subtotal),
-              })) || [],
-              montoEfectivo: parseFloat(v.monto_efectivo || 0),
-              montoBanco: parseFloat(v.monto_banco || 0),
-            }));
-            setVentas(ventasMapeadas);
-            return;
-          }
-        } catch (err) {
-          console.warn("API de ventas no disponible, usando localStorage");
-        }
-
-        // Fallback a localStorage
-        const ventasGuardadas = localStorage.getItem("consentido_ventas");
-        if (ventasGuardadas) {
-          setVentas(JSON.parse(ventasGuardadas));
-        }
-
-        // Cargar productos desde localStorage
-        const productosGuardados = localStorage.getItem("consentido_inventario_productos");
-        if (productosGuardados) setProductos(JSON.parse(productosGuardados));
+        const ventasApi = await conSentidoApi.listarVentas();
+        const ventasMapeadas = ventasApi.map((v: any) => ({
+          id: v.id,
+          monto: parseFloat(v.monto),
+          metodoPago: v.metodo_pago,
+          fecha: v.created_at,
+          items:
+            v.items?.map((item: any) => ({
+              producto: item.producto,
+              descripcion: item.descripcion,
+              categoria: item.categoria,
+              cantidad: parseFloat(item.cantidad),
+              precioUnitario: parseFloat(item.precio_unitario),
+              subtotal: parseFloat(item.subtotal),
+            })) || [],
+          montoEfectivo: parseFloat(v.monto_efectivo || 0),
+          montoBanco: parseFloat(v.monto_banco || 0),
+        }));
+        setVentas(ventasMapeadas);
       } catch (err) {
-        console.error("Error cargando datos:", err);
+        console.error("Error cargando ventas:", err);
+      }
+
+      try {
+        setProductos(await conSentidoApi.listarProductos());
+      } catch (err) {
+        console.error("Error cargando productos:", err);
       }
     }
     cargarDatos();

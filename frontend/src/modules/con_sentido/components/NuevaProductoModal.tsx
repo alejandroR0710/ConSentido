@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 
@@ -11,18 +12,19 @@ const CATEGORIAS_CONSENTIDO = [
 
 interface NuevaProductoModalProps {
   onCerrar: () => void;
-  onGuardar: (producto: any) => void;
+  onGuardar: (producto: any) => Promise<void>;
 }
 
 export function NuevaProductoModal({ onCerrar, onGuardar }: NuevaProductoModalProps) {
   const [nombre, setNombre] = useState("");
-  const [sku, setSku] = useState("");
   const [stock, setStock] = useState(0);
   const [precio, setPrecio] = useState(0);
   const [descripcion, setDescripcion] = useState("");
   const [categoria, setCategoria] = useState(CATEGORIAS_CONSENTIDO[0].nombre);
   const [imagen, setImagen] = useState<string | null>(null);
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function handleImagenChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -37,31 +39,28 @@ export function NuevaProductoModal({ onCerrar, onGuardar }: NuevaProductoModalPr
     }
   }
 
-  function guardar() {
+  async function guardar() {
     if (!nombre.trim() || stock < 0 || precio <= 0) return;
 
     const producto = {
-      id: Date.now(),
       nombre: nombre.trim(),
-      sku: sku.trim() || `SKU-${Date.now()}`,
       stock,
       precio,
       descripcion: descripcion.trim(),
       categoria,
       imagen,
-      fecha_creacion: new Date().toISOString(),
     };
 
-    onGuardar(producto);
-    setNombre("");
-    setSku("");
-    setStock(0);
-    setPrecio(0);
-    setDescripcion("");
-    setCategoria(CATEGORIAS_CONSENTIDO[0].nombre);
-    setImagen(null);
-    setImagenPreview(null);
-    onCerrar();
+    setGuardando(true);
+    setError(null);
+    try {
+      await onGuardar(producto);
+      onCerrar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar el producto");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   return (
@@ -156,15 +155,6 @@ export function NuevaProductoModal({ onCerrar, onGuardar }: NuevaProductoModalPr
         </div>
       )}
 
-      <label className="mb-1 block text-xs font-medium">SKU (opcional)</label>
-      <input
-        type="text"
-        placeholder="Código SKU"
-        value={sku}
-        onChange={(e) => setSku(e.target.value)}
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-
       <label className="mb-1 block text-xs font-medium">Stock inicial</label>
       <input
         type="text"
@@ -185,12 +175,14 @@ export function NuevaProductoModal({ onCerrar, onGuardar }: NuevaProductoModalPr
         className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
 
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
       <button
         onClick={guardar}
-        disabled={!nombre.trim() || precio <= 0}
+        disabled={guardando || !nombre.trim() || precio <= 0}
         className="w-full rounded-md bg-brand-green-600 px-4 py-3 font-semibold text-white hover:bg-brand-green-700 disabled:opacity-60"
       >
-        Guardar producto
+        {guardando ? "Guardando..." : "Guardar producto"}
       </button>
     </Modal>
   );

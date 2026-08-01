@@ -4,7 +4,7 @@ import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/compon
 import { formatMoney } from "../../../shared/format/money";
 
 interface Producto {
-  id: number;
+  id: string;
   nombre: string;
   precio: number;
   descripcion?: string;

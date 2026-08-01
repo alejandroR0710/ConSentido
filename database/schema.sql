@@ -380,6 +380,10 @@ CREATE INDEX idx_productos_modulo ON productos(modulo_id);
 CREATE TRIGGER trg_productos_updated BEFORE UPDATE ON productos
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- 1:1 con un producto vendible de Con Sentido (categorias_producto/productos
+-- de arriba son compartidas con Migao, pero el stock de producto terminado
+-- solo lo usa Con Sentido — Migao descuenta ingredientes, no unidades de
+-- producto vendido, ver migao_inventario_productos más abajo).
 CREATE TABLE inventario_productos (
   id              BIGSERIAL PRIMARY KEY,
   producto_id     UUID NOT NULL UNIQUE REFERENCES productos(id) ON DELETE CASCADE,
@@ -387,6 +391,37 @@ CREATE TABLE inventario_productos (
   stock_minimo    NUMERIC(12,3) NOT NULL DEFAULT 0,
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Historial de ventas de Con Sentido, con desglose de ítems — el ingreso real
+-- en Caja General (movimientos_caja) se registra aparte, vía
+-- cajaService.registrarIngreso con referenciaEntidad='con_sentido_ventas' y
+-- referenciaId=con_sentido_ventas.id (ver con_sentido.service.ts).
+CREATE TABLE con_sentido_ventas (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id     UUID REFERENCES usuarios(id),
+  monto          NUMERIC(12,2) NOT NULL,
+  metodo_pago    VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco', 'mixto')),
+  monto_efectivo NUMERIC(12,2),
+  monto_banco    NUMERIC(12,2),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_con_sentido_ventas_fecha ON con_sentido_ventas(created_at DESC);
+CREATE TRIGGER trg_con_sentido_ventas_updated BEFORE UPDATE ON con_sentido_ventas
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE con_sentido_venta_items (
+  id              BIGSERIAL PRIMARY KEY,
+  venta_id        UUID NOT NULL REFERENCES con_sentido_ventas(id) ON DELETE CASCADE,
+  producto        VARCHAR(255) NOT NULL,
+  descripcion     TEXT,
+  categoria       VARCHAR(100),
+  cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_unitario NUMERIC(12,2) NOT NULL,
+  subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_con_sentido_venta_items_venta ON con_sentido_venta_items(venta_id);
 
 -- ============================================================================
 -- Inventario de Migao: catálogo de insumos "tal como los entrega el
@@ -397,7 +432,7 @@ CREATE TABLE inventario_productos (
 -- sirve para convertir "llegaron 3 pacas" a unidades al registrar una
 -- entrada, y para mostrar "~N paquetes" en pantalla. Prefijo `migao_` para no
 -- confundir con `insumos`/`inventario_insumos` (multi-almacén, sin receta) ni
--- con `inventario_productos` de arriba (1:1 con un producto vendible, sin usar).
+-- con `inventario_productos` de arriba (producto terminado de Con Sentido).
 -- ============================================================================
 
 CREATE TABLE migao_inventario_productos (

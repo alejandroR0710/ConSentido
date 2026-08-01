@@ -1,20 +1,26 @@
 import { apiFetch } from "../../shared/api/client";
 
-export interface Producto {
-  id: number;
+export interface ProductoConSentido {
+  id: string;
   nombre: string;
   precio: number;
-  descripcion?: string;
-  imagen?: string;
-  categoria?: string;
+  descripcion: string | null;
+  imagen_url: string | null;
+  categoria: string | null;
   stock: number;
-  sku: string;
+  activo: boolean;
+}
+
+export interface ClienteConSentido {
+  id: string;
+  nombre: string;
+  telefono: string | null;
+  email: string | null;
 }
 
 export interface ItemVenta {
   producto: string;
   descripcion?: string;
-  imagen?: string;
   categoria?: string;
   cantidad: number;
   precioUnitario: number;
@@ -22,7 +28,7 @@ export interface ItemVenta {
 }
 
 export interface Venta {
-  id?: number;
+  id?: string;
   items: ItemVenta[];
   monto: number;
   metodoPago: "efectivo" | "banco" | "mixto";
@@ -37,11 +43,38 @@ export const conSentidoApi = {
       method: "POST",
       body: venta,
     }),
-  listarVentas: (filtros?: { fecha?: string; skip?: number; limit?: number }) =>
-    apiFetch<Venta[]>("/con-sentido/ventas", {
-      method: "GET",
-      ...(filtros && { body: filtros }),
-    }),
-  listarVentasPorFecha: (fecha: string) =>
-    apiFetch<Venta[]>(`/con-sentido/ventas?fecha=${fecha}`),
+  listarVentas: (filtros?: { fecha?: string; skip?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filtros?.fecha) params.set("fecha", filtros.fecha);
+    if (filtros?.skip) params.set("skip", String(filtros.skip));
+    if (filtros?.limit) params.set("limit", String(filtros.limit));
+    const query = params.toString();
+    return apiFetch<any[]>(`/con-sentido/ventas${query ? `?${query}` : ""}`);
+  },
+
+  listarProductos: () => apiFetch<ProductoConSentido[]>("/con-sentido/productos"),
+  crearProducto: (input: {
+    nombre: string;
+    precio: number;
+    descripcion?: string;
+    categoria?: string;
+    imagenUrl?: string;
+    stock: number;
+  }) => apiFetch<ProductoConSentido>("/con-sentido/productos", { method: "POST", body: input }),
+  editarProducto: (
+    id: string,
+    input: Partial<{
+      nombre: string;
+      precio: number;
+      descripcion: string;
+      categoria: string;
+      imagenUrl: string;
+      stock: number;
+      activo: boolean;
+    }>,
+  ) => apiFetch<ProductoConSentido>(`/con-sentido/productos/${id}`, { method: "PATCH", body: input }),
+
+  listarClientes: () => apiFetch<ClienteConSentido[]>("/con-sentido/clientes"),
+  crearCliente: (input: { nombre: string; telefono?: string; email?: string }) =>
+    apiFetch<ClienteConSentido>("/con-sentido/clientes", { method: "POST", body: input }),
 };

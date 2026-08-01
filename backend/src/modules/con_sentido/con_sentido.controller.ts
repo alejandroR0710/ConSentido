@@ -1,32 +1,54 @@
 import { Request, Response } from "express";
+import { created, ok } from "../../shared/utils/response";
 import {
-  registrarVentaService,
-  listarVentasService,
-  obtenerVentaService,
-} from "./con_sentido.service";
+  crearClienteConSentidoSchema,
+  crearProductoConSentidoSchema,
+  editarProductoConSentidoSchema,
+  registrarVentaSchema,
+} from "./con_sentido.schema";
+import * as service from "./con_sentido.service";
+
+export async function listarProductosController(_req: Request, res: Response) {
+  const productos = await service.listarProductos();
+  return ok(res, productos);
+}
+
+export async function crearProductoController(req: Request, res: Response) {
+  const data = crearProductoConSentidoSchema.parse(req.body);
+  const producto = await service.crearProducto(data);
+  return created(res, producto);
+}
+
+export async function editarProductoController(req: Request, res: Response) {
+  const data = editarProductoConSentidoSchema.parse(req.body);
+  const producto = await service.editarProducto(req.params.id, data);
+  return ok(res, producto);
+}
+
+export async function listarClientesController(_req: Request, res: Response) {
+  const clientes = await service.listarClientes();
+  return ok(res, clientes);
+}
+
+export async function crearClienteController(req: Request, res: Response) {
+  const data = crearClienteConSentidoSchema.parse(req.body);
+  const cliente = await service.crearCliente(data);
+  return created(res, cliente);
+}
 
 export async function registrarVentaController(req: Request, res: Response) {
-  const usuarioId = (req as any).user?.id || null;
-  const venta = await registrarVentaService(usuarioId, req.body);
-  res.status(201).json({ data: venta, error: null, meta: {} });
+  const data = registrarVentaSchema.parse(req.body);
+  const venta = await service.registrarVenta(data, req.auth!.usuarioId);
+  return created(res, venta);
 }
 
 export async function listarVentasController(req: Request, res: Response) {
-  const { skip = 0, limit = 50, fecha } = req.query;
-  const ventas = await listarVentasService(
-    parseInt(skip as string),
-    parseInt(limit as string),
-    fecha as string,
-  );
-  res.json({ data: ventas, error: null, meta: {} });
+  const { skip = "0", limit = "50", fecha } = req.query;
+  const ventas = await service.listarVentas(parseInt(skip as string, 10), parseInt(limit as string, 10), fecha as string | undefined);
+  return ok(res, ventas);
 }
 
 export async function obtenerVentaController(req: Request, res: Response) {
-  const { id } = req.params;
-  const venta = await obtenerVentaService(id);
-  if (!venta) {
-    res.status(404).json({ data: null, error: { code: "NOT_FOUND", message: "Venta no encontrada" }, meta: {} });
-    return;
-  }
-  res.json({ data: venta, error: null, meta: {} });
+  const venta = await service.obtenerVenta(req.params.id);
+  return ok(res, venta);
 }

@@ -4,8 +4,10 @@
 -- ⚠️ IMPORTANTE: SOLO CAMBIOS DE FUNCIONALIDAD/MEJORAS
 -- ❌ NUNCA tocar datos existentes
 -- ========================================================================
--- Última actualización: 2026-07-29
--- Descripción: Nuevas funcionalidades y mejoras (schema, índices, funciones)
+-- Última actualización: 2026-07-30
+-- Descripción: Con Sentido (ventas, catálogo, clientes) + corrección de un
+-- error de la migración anterior que dejaba con_sentido_venta_items sin
+-- poder guardar ítems (ver SECCIÓN 1B).
 -- ========================================================================
 
 -- ========================================================================
@@ -15,8 +17,6 @@
 -- ========================================================================
 -- TABLA: con_sentido_ventas (Historial de ventas Con Sentido)
 -- ========================================================================
--- Almacena el historial completo de ventas del módulo Con Sentido
--- Estructura: información de venta + items desglosados
 CREATE TABLE IF NOT EXISTS con_sentido_ventas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   usuario_id UUID REFERENCES usuarios(id),
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS con_sentido_ventas (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- venta_id es UUID (referencia real a con_sentido_ventas.id) — NUNCA bigint,
+-- ver SECCIÓN 1B si esta tabla ya existía con el tipo equivocado.
 CREATE TABLE IF NOT EXISTS con_sentido_venta_items (
   id BIGSERIAL PRIMARY KEY,
   venta_id UUID NOT NULL REFERENCES con_sentido_ventas(id) ON DELETE CASCADE,
@@ -40,12 +42,10 @@ CREATE TABLE IF NOT EXISTS con_sentido_venta_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices para optimizar búsquedas
 CREATE INDEX IF NOT EXISTS idx_con_sentido_ventas_fecha ON con_sentido_ventas(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_con_sentido_ventas_usuario ON con_sentido_ventas(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_con_sentido_venta_items_venta ON con_sentido_venta_items(venta_id);
 
--- Trigger para actualizar updated_at
 DROP TRIGGER IF EXISTS update_con_sentido_ventas_updated_at ON con_sentido_ventas;
 CREATE TRIGGER update_con_sentido_ventas_updated_at
 BEFORE UPDATE ON con_sentido_ventas
@@ -54,23 +54,40 @@ EXECUTE FUNCTION set_updated_at();
 
 
 -- ========================================================================
--- SECCIÓN 1B: PERMISOS (Acceso a usuario del backend)
+-- SECCIÓN 1B: CORRECCIÓN — venta_id quedó en BIGINT por una migración
+-- anterior (intentaba enlazar con movimientos_caja, pero el código real
+-- inserta el UUID de con_sentido_ventas). Con esa migración aplicada, CADA
+-- ítem de CADA venta fallaba al insertarse en silencio (el error se
+-- descartaba en el backend), así que las ventas quedaban sin productos.
+-- Este bloque revierte el tipo a UUID — solo si la tabla está vacía (si
+-- tuviera filas con datos reales en bigint, no se puede reconstruir el UUID
+-- original, así que se prefiere frenar con un error explícito a corromper
+-- datos).
 -- ========================================================================
--- Permisos necesarios para que el backend acceda a las tablas de Con Sentido
--- ⚠️ SOLO ejecutar si el rol "usuario" existe en tu base de datos
--- DO $$ BEGIN
---   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
---     GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_ventas TO usuario;
---     GRANT SELECT, INSERT, UPDATE, DELETE ON con_sentido_venta_items TO usuario;
---     GRANT USAGE, SELECT ON SEQUENCE con_sentido_venta_items_id_seq TO usuario;
---   END IF;
--- END $$;
+DO $$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+       WHERE table_name = 'con_sentido_venta_items' AND column_name = 'venta_id') = 'bigint' THEN
+    IF (SELECT count(*) FROM con_sentido_venta_items) = 0 THEN
+      ALTER TABLE con_sentido_venta_items ALTER COLUMN venta_id TYPE UUID USING venta_id::text::uuid;
+    ELSE
+      RAISE EXCEPTION 'con_sentido_venta_items tiene filas con venta_id en bigint — revisar a mano antes de convertir a UUID (ver SECCIÓN 1B de produccion.sql)';
+    END IF;
+  END IF;
+END $$;
+
+ALTER TABLE con_sentido_venta_items DROP CONSTRAINT IF EXISTS con_sentido_venta_items_venta_id_fkey;
+ALTER TABLE con_sentido_venta_items
+  ADD CONSTRAINT con_sentido_venta_items_venta_id_fkey
+  FOREIGN KEY (venta_id) REFERENCES con_sentido_ventas(id) ON DELETE CASCADE;
+
+-- Permitir NULL en usuario_id de movimientos_caja (no siempre hay usuario autenticado).
+ALTER TABLE movimientos_caja ALTER COLUMN usuario_id DROP NOT NULL;
 
 
 -- ========================================================================
 -- SECCIÓN 2: CATEGORÍAS DE GASTO (Solo crear si NO EXISTEN)
 -- ========================================================================
--- ⚠️ Usar ON CONFLICT para NO modificar categorías existentes
 INSERT INTO categorias_gasto (nombre, activo) VALUES
 ('Servicios', true),
 ('Mantenimiento', true),
@@ -80,23 +97,35 @@ ON CONFLICT (nombre) DO NOTHING;
 
 
 -- ========================================================================
--- SECCIÓN 2B: ACTUALIZACIÓN DE SCHEMA (Cambios a tablas existentes)
+-- SECCIÓN 3: PERMISOS DE CON SENTIDO (productos/clientes/ventas)
 -- ========================================================================
--- Con Sentido ahora guarda en movimientos_caja en lugar de con_sentido_ventas
--- Por lo tanto, remover la FK que requería con_sentido_ventas
-ALTER TABLE con_sentido_venta_items DROP CONSTRAINT IF EXISTS con_sentido_venta_items_venta_id_fkey;
+-- Antes de esto, Con Sentido no tenía permisos propios: cualquier usuario
+-- autenticado podía llamar la API directamente. Se otorgan a Super Root y
+-- Root — los únicos con acceso al módulo hoy (ver usuarios_modulos en seed.sql).
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'con_sentido'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_productos', 'con_sentido.productos.ver'),
+  ('crear_producto', 'con_sentido.productos.crear'),
+  ('editar_producto', 'con_sentido.productos.editar'),
+  ('ver_clientes', 'con_sentido.clientes.ver'),
+  ('crear_cliente', 'con_sentido.clientes.crear'),
+  ('ver_ventas', 'con_sentido.ventas.ver'),
+  ('crear_venta', 'con_sentido.ventas.crear')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
 
--- Cambiar el tipo de venta_id para que sea BIGINT (referencia directa a movimientos_caja.id)
-ALTER TABLE con_sentido_venta_items ALTER COLUMN venta_id TYPE BIGINT USING venta_id::text::BIGINT;
-
--- Permitir NULL en usuario_id de movimientos_caja (no siempre hay usuario autenticado)
-ALTER TABLE movimientos_caja ALTER COLUMN usuario_id DROP NOT NULL;
-
-
--- ========================================================================
--- SECCIÓN 3: FUNCIONES Y TRIGGERS (Nuevos o mejoras)
--- ========================================================================
--- [AGREGAR AQUÍ nuevas funciones o triggers que sean necesarios]
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo IN (
+    'con_sentido.productos.ver', 'con_sentido.productos.crear', 'con_sentido.productos.editar',
+    'con_sentido.clientes.ver', 'con_sentido.clientes.crear',
+    'con_sentido.ventas.ver', 'con_sentido.ventas.crear'
+  )
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
 
 
 -- ========================================================================

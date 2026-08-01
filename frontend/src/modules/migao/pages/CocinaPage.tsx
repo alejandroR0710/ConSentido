@@ -239,7 +239,7 @@ export function CocinaPage() {
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-3xl font-extrabold text-brand-green-700 dark:text-brand-vanilla">
                     Mesa {ticket.mesaNumero}
-                    {ticket.mesaPiso && <span className="text-lg font-semibold"> (piso {ticket.mesaPiso})</span>}
+                    {ticket.mesaPiso && <span className="text-lg font-semibold"> (salón {ticket.mesaPiso})</span>}
                     {vencido && (
                       <span className="rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">
                         +{MINUTOS_ALERTA} min

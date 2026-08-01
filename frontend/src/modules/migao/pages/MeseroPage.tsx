@@ -205,7 +205,7 @@ export function MeseroPage() {
         personas,
         borradorPiso,
       );
-      setMensaje(`Orden creada — Mesa ${borradorMesaNumero} (piso ${borradorPiso}) · Comensal ${orden.comensal_numero}`);
+      setMensaje(`Orden creada — Mesa ${borradorMesaNumero} (salón ${borradorPiso}) · Comensal ${orden.comensal_numero}`);
       setAlertaInventario(orden.alertasInventario.length > 0 ? orden.alertasInventario.join(" ") : null);
       setBorradorMesaNumero("");
       setBorradorPersonas("");
@@ -386,7 +386,7 @@ export function MeseroPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                       Mesa {o.mesa_numero ?? "—"}
-                      {o.mesa_piso && <span className="text-sm font-normal"> (piso {o.mesa_piso})</span>} · Comensal{" "}
+                      {o.mesa_piso && <span className="text-sm font-normal"> (salón {o.mesa_piso})</span>} · Comensal{" "}
                       {o.comensal_numero}
                       {o.numero_personas && (
                         <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -440,7 +440,7 @@ export function MeseroPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium">Piso</label>
+              <label className="mb-1 block text-xs font-medium">Salón</label>
               <div className="flex overflow-hidden rounded-md border border-brand-vanilla-dark dark:border-brand-green-700">
                 {([1, 2] as const).map((p) => (
                   <button
@@ -453,7 +453,7 @@ export function MeseroPage() {
                         : "bg-brand-vanilla text-brand-ink hover:bg-brand-green-50 dark:bg-brand-green-900 dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
                     }`}
                   >
-                    Piso {p}
+                    Salón {p}
                   </button>
                 ))}
               </div>
@@ -544,7 +544,7 @@ export function MeseroPage() {
           <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
             <span>
               Mesa {ordenActual?.mesa_numero ?? "—"}
-              {ordenActual?.mesa_piso && <span className="text-sm font-normal"> (piso {ordenActual.mesa_piso})</span>} ·
+              {ordenActual?.mesa_piso && <span className="text-sm font-normal"> (salón {ordenActual.mesa_piso})</span>} ·
               Comensal {detalle.orden.comensal_numero}
               {detalle.orden.numero_personas && (
                 <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">

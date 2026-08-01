@@ -178,7 +178,7 @@ export function HistorialAdministrativoPage() {
                     <td className="px-3 py-2">
                       {h.mesa_numero ?? "—"}
                       {h.mesa_piso && (
-                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (piso {h.mesa_piso})</span>
+                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (salón {h.mesa_piso})</span>
                       )}
                     </td>
                     <td className="px-3 py-2">{h.mesero_nombre ?? "—"}</td>

@@ -97,7 +97,7 @@ export function MeseroHistorialPage() {
                   <td className="px-3 py-2">
                     {o.mesa_numero ?? "—"}
                     {o.mesa_piso && (
-                      <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (piso {o.mesa_piso})</span>
+                      <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (salón {o.mesa_piso})</span>
                     )}
                   </td>
                   <td className="px-3 py-2">

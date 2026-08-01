@@ -46,7 +46,7 @@ export function CambiarMesaModal({ mesaActual, pisoActual, onCerrar, onGuardar }
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium">Piso</label>
+          <label className="mb-1 block text-xs font-medium">Salón</label>
           <select
             value={piso}
             onChange={(e) => setPiso(Number(e.target.value) as 1 | 2)}

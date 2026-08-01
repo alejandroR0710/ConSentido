@@ -76,7 +76,7 @@ export function CocinaHistorialPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xl font-bold text-brand-green-700 dark:text-brand-vanilla">
                   Mesa {ticket.mesaNumero}
-                  {ticket.mesaPiso && <span className="text-sm font-semibold"> (piso {ticket.mesaPiso})</span>}
+                  {ticket.mesaPiso && <span className="text-sm font-semibold"> (salón {ticket.mesaPiso})</span>}
                 </span>
                 <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                   {formatearFechaHora(ticket.items[0].created_at)}

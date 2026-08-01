@@ -234,6 +234,12 @@ CREATE TABLE proveedores (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Proveedor opcional de un egreso de Caja (ej. "pago a proveedor X") — se
+-- agrega acá (en vez de en el CREATE TABLE de arriba) porque proveedores
+-- todavía no existe cuando se declara movimientos_caja más arriba en este
+-- archivo.
+ALTER TABLE movimientos_caja ADD COLUMN proveedor_id UUID REFERENCES proveedores(id);
+
 CREATE TABLE almacenes (
   id        SERIAL PRIMARY KEY,
   nombre    VARCHAR(100) NOT NULL,

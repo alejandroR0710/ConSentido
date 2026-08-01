@@ -84,6 +84,11 @@ ALTER TABLE con_sentido_venta_items
 -- Permitir NULL en usuario_id de movimientos_caja (no siempre hay usuario autenticado).
 ALTER TABLE movimientos_caja ALTER COLUMN usuario_id DROP NOT NULL;
 
+-- Columna que ya usa el backend (Caja → Proveedores, feature de otra sesión)
+-- pero que nunca se había agregado a la tabla: SIN esto, registrar CUALQUIER
+-- egreso (con o sin proveedor) fallaba con "no existe la columna proveedor_id".
+ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS proveedor_id UUID REFERENCES proveedores(id);
+
 
 -- ========================================================================
 -- SECCIÓN 2: CATEGORÍAS DE GASTO (Solo crear si NO EXISTEN)

@@ -375,6 +375,8 @@ export function MigaoHistorialPage() {
           metodoPagoActual={movimientoEditando.metodoPagoActual}
           monto={movimientoEditando.monto}
           etiqueta={movimientoEditando.etiqueta}
+          tipo="ingreso"
+          moduloOrigenActual="migao"
           onCerrar={() => setMovimientoEditando(null)}
           onGuardado={cargarHistorial}
         >

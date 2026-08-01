@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const METODOS_PAGO = ["efectivo", "banco"] as const;
+const MODULO_ORIGEN_VALUES = ["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"] as const;
 
 export const abrirTurnoSchema = z.object({
   // Base declarada a mano por el cajero para el turno del día — no se hereda
@@ -21,7 +22,7 @@ export type CerrarTurnoInput = z.infer<typeof cerrarTurnoSchema>;
 const MENSAJE_MIXTO_VACIO = "El total del pago mixto debe ser mayor a 0";
 
 const camposIngreso = {
-  moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]),
+  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
   motivo: z.string().max(200).optional(),
   referenciaEntidad: z.string().max(80).optional(),
   referenciaId: z.string().max(64).optional(),
@@ -74,14 +75,18 @@ export type ResetearCajaInput = z.infer<typeof resetearCajaSchema>;
 
 // Corrección de método: simple (efectivo<->banco) o a mixto, repartiendo el
 // mismo monto original del movimiento entre los dos métodos (eso lo valida
-// el service contra el monto ya existente, no aquí).
+// el service contra el monto ya existente, no aquí). `moduloOrigenSlug` es
+// independiente del método — corrige de qué área viene el ingreso (ej. se
+// registró como "Migao" pero era de "Con Sentido"); el service la rechaza si
+// el movimiento no es un ingreso (los egresos no tienen área, tienen categoría).
 export const editarMetodoPagoMovimientoSchema = z.union([
-  z.object({ metodoPago: z.enum(METODOS_PAGO) }),
+  z.object({ metodoPago: z.enum(METODOS_PAGO), moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional() }),
   z
     .object({
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),
+      moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
 ]);
@@ -125,7 +130,7 @@ export const agregarMovimientoHistoricoSchema = z.union([
   z.object({
     ...camposAjusteHistorico,
     tipo: z.literal("ingreso"),
-    moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]),
+    moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
     monto: z.number().positive(),
     metodoPago: z.enum(METODOS_PAGO),
     motivo: z.string().max(200).optional(),
@@ -147,7 +152,7 @@ export const editarMovimientoHistoricoSchema = z
     monto: z.number().positive().optional(),
     metodoPago: z.enum(METODOS_PAGO).optional(),
     motivo: z.string().max(200).optional(),
-    moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"]).optional(),
+    moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
     categoriaGastoId: z.number().int().positive().optional(),
   })
   .refine((d) => d.monto !== undefined || d.metodoPago !== undefined || d.motivo !== undefined

@@ -7,7 +7,7 @@ import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { cajaApi, type CategoriaGasto, type MovimientoCaja, type ResumenTurno } from "../api";
+import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type MovimientoCaja, type ResumenTurno } from "../api";
 import { AdministracionModal } from "../components/AdministracionModal";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
@@ -393,6 +393,8 @@ export function CajaPage() {
           metodoPagoActual={movimientoEditando.metodo_pago}
           monto={Number(movimientoEditando.monto)}
           etiqueta={movimientoEditando.modulo_origen_slug ?? movimientoEditando.categoria_gasto_nombre ?? "Movimiento"}
+          tipo={movimientoEditando.tipo}
+          moduloOrigenActual={movimientoEditando.modulo_origen_slug as ModuloOrigenSlug | null}
           onCerrar={() => setMovimientoEditando(null)}
           onGuardado={cargarResumenDeTurnoActual}
         />

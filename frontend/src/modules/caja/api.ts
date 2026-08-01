@@ -11,9 +11,12 @@ export type PagoInput =
 
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente
 // el total no cambia, solo cómo se reparte entre los dos métodos.
-export type EditarPagoInput =
+// `moduloOrigenSlug` es independiente del método: corrige de qué área viene
+// el ingreso (el backend la rechaza si el movimiento no es un ingreso).
+export type EditarPagoInput = (
   | { metodoPago: "efectivo" | "banco" }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number }
+) & { moduloOrigenSlug?: ModuloOrigenSlug };
 
 export interface TurnoCaja {
   id: string;

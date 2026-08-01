@@ -172,11 +172,22 @@ export async function getMovimientoById(movimientoId: number): Promise<Movimient
 /** Corrige el método de pago de un movimiento ya registrado (ej. el cajero marcó
  *  "efectivo" en vez de "banco" al cobrar). Si el movimiento viene de una venta
  *  (orden de Migao cerrada), también corrige el `pagos.metodo_pago` asociado
- *  para que ambos registros sigan contando la misma historia. */
-export async function actualizarMetodoPagoMovimiento(client: PoolClient, movimientoId: number, metodoPago: string) {
+ *  para que ambos registros sigan contando la misma historia. `moduloOrigenSlug`
+ *  es opcional (COALESCE): corrige de qué área viene el ingreso, sin afectarlo
+ *  si no se manda. */
+export async function actualizarMetodoPagoMovimiento(
+  client: PoolClient,
+  movimientoId: number,
+  metodoPago: string,
+  moduloOrigenSlug?: string,
+) {
   const result = await client.query(
-    `UPDATE movimientos_caja SET metodo_pago = $2 WHERE id = $1 RETURNING *`,
-    [movimientoId, metodoPago],
+    `UPDATE movimientos_caja
+        SET metodo_pago = $2,
+            modulo_origen_id = COALESCE((SELECT id FROM modulos WHERE slug = $3), modulo_origen_id)
+      WHERE id = $1
+      RETURNING *`,
+    [movimientoId, metodoPago, moduloOrigenSlug ?? null],
   );
   return result.rows[0];
 }
@@ -191,17 +202,20 @@ export async function borrarMovimiento(client: PoolClient, movimientoId: number)
 
 /** Recrea un movimiento con los mismos datos del original pero método/monto
  *  distintos — usado al convertir un pago simple en "mixto" (una línea se
- *  actualiza in-place, la otra se inserta con esta función). */
+ *  actualiza in-place, la otra se inserta con esta función). Si se manda
+ *  `moduloOrigenSlug`, reemplaza el área original (misma corrección que
+ *  actualizarMetodoPagoMovimiento, pero acá es un INSERT nuevo, no un UPDATE). */
 export async function duplicarMovimientoConOtroMetodo(
   client: PoolClient,
   original: MovimientoCaja,
   metodoPago: string,
   monto: number,
+  moduloOrigenSlug?: string,
 ) {
   const result = await client.query(
     `INSERT INTO movimientos_caja
        (turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, COALESCE((SELECT id FROM modulos WHERE slug = $11), $3), $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       original.turnoId,
@@ -214,6 +228,7 @@ export async function duplicarMovimientoConOtroMetodo(
       metodoPago,
       original.motivo,
       original.usuarioId,
+      moduloOrigenSlug ?? null,
     ],
   );
   return result.rows[0];

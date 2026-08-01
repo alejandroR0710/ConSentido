@@ -156,12 +156,23 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, input: Ed
     throw Errors.conflict("Solo se puede corregir el método de pago de movimientos del turno abierto");
   }
 
+  // El área (modulo_origen_id) solo existe en los ingresos — los egresos se
+  // clasifican por categoría de gasto, no por módulo (ver schema.sql).
+  if (input.moduloOrigenSlug && movimiento.tipo !== "ingreso") {
+    throw Errors.badRequest("Solo se puede corregir el área de un ingreso");
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     if (input.metodoPago !== "mixto") {
-      const actualizado = await repo.actualizarMetodoPagoMovimiento(client, movimientoId, input.metodoPago);
+      const actualizado = await repo.actualizarMetodoPagoMovimiento(
+        client,
+        movimientoId,
+        input.metodoPago,
+        input.moduloOrigenSlug,
+      );
       if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
         await repo.actualizarMetodoPagoPagoPorVenta(client, movimiento.referenciaId, input.metodoPago);
       }
@@ -205,7 +216,15 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, input: Ed
     await repo.borrarMovimiento(client, movimientoId);
     const nuevos = [];
     for (const parte of partes) {
-      nuevos.push(await repo.duplicarMovimientoConOtroMetodo(client, movimiento, parte.metodoPago, parte.monto));
+      nuevos.push(
+        await repo.duplicarMovimientoConOtroMetodo(
+          client,
+          movimiento,
+          parte.metodoPago,
+          parte.monto,
+          input.moduloOrigenSlug,
+        ),
+      );
     }
 
     await client.query("COMMIT");

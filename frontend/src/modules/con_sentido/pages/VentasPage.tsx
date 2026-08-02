@@ -5,6 +5,78 @@ import { formatMoney } from "../../../shared/format/money";
 import { NuevaVentaModal } from "../components/NuevaVentaModal";
 import { conSentidoApi } from "../api";
 
+const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+/** Fecha calendario en hora Colombia de un timestamp ISO, en formato
+ *  'YYYY-MM-DD' — mismo criterio que el historial de Migao, para agrupar por
+ *  el mismo día sin importar en qué huso horario esté el servidor. */
+function fechaBogota(fechaIso: string) {
+  return new Date(fechaIso).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+}
+
+/** `fecha` ya es 'YYYY-MM-DD' — se arma con el constructor de 3 argumentos
+ *  (año, mes, día) para que quede en hora LOCAL del navegador sin pasar por
+ *  UTC, y así no se corra un día (mismo truco que MigaoHistorialPage). */
+function formatearFechaLarga(fecha: string) {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const d = new Date(anio, mes - 1, dia);
+  return `${DIAS_SEMANA[d.getDay()]} ${dia} de ${MESES[mes - 1]}`;
+}
+
+interface GrupoDiaVentas {
+  fecha: string;
+  ventas: any[];
+}
+
+/** Las ventas ya vienen ordenadas por fecha DESC (ver conSentidoApi.listarVentas),
+ *  así que agrupar es un solo recorrido: cuando cambia el día (hora Colombia)
+ *  se abre un grupo nuevo — mismo patrón que agruparPorDia en Migao. */
+function agruparPorDia(ventas: any[]): GrupoDiaVentas[] {
+  const grupos: GrupoDiaVentas[] = [];
+  for (const v of ventas) {
+    const fecha = fechaBogota(v.fecha);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.fecha === fecha) {
+      ultimo.ventas.push(v);
+    } else {
+      grupos.push({ fecha, ventas: [v] });
+    }
+  }
+  return grupos;
+}
+
+/** Efectivo/banco repartido de verdad (un pago "mixto" reparte su monto entre
+ *  los dos, no cuenta completo en ninguno) — mismo criterio que el resumen
+ *  diario de Migao, necesario para que la suma cuadre con lo que en realidad
+ *  entró a cada bolsa. */
+function totalesDelDia(ventasDelDia: any[]) {
+  let efectivo = 0;
+  let banco = 0;
+  for (const v of ventasDelDia) {
+    if (v.metodoPago === "efectivo") efectivo += v.monto;
+    else if (v.metodoPago === "banco") banco += v.monto;
+    else if (v.metodoPago === "mixto") {
+      efectivo += v.montoEfectivo;
+      banco += v.montoBanco;
+    }
+  }
+  return { efectivo, banco, ganancia: efectivo + banco };
+}
+
 export function VentasPage() {
   const [ventas, setVentas] = useState<any[]>([]);
   const [productos, setProductos] = useState<any[]>([]);
@@ -125,8 +197,27 @@ export function VentasPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {ventas.map((venta) => (
+        <div className="flex flex-col gap-4">
+        {agruparPorDia(ventas).map((grupo) => {
+          const totales = totalesDelDia(grupo.ventas);
+          return (
+            <div key={grupo.fecha} className="flex flex-col gap-3">
+              <div className="rounded-lg border-t-2 border-brand-green-600 bg-brand-green-50 px-3 py-2 dark:border-brand-green-500 dark:bg-brand-green-700/20">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
+                    {formatearFechaLarga(grupo.fecha)}
+                  </span>
+                  <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                    Efectivo {formatMoney(totales.efectivo)} · Banco {formatMoney(totales.banco)} ·{" "}
+                    <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                      Ganancia {formatMoney(totales.ganancia)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+        {grupo.ventas.map((venta) => (
             <div
               key={venta.id}
               className="rounded-lg border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900/20"
@@ -224,7 +315,11 @@ export function VentasPage() {
                 </div>
               )}
             </div>
-          ))}
+        ))}
+              </div>
+            </div>
+          );
+        })}
         </div>
       )}
 

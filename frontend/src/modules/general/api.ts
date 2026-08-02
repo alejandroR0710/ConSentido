@@ -60,6 +60,8 @@ export interface AnalyticsGeneral {
 
 export interface AnalyticsConSentido {
   ingresos: number;
+  efectivo: number;
+  banco: number;
   ventasCount: number;
   ventasPorCategoria: {
     categoria: string;

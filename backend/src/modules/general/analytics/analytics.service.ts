@@ -89,8 +89,9 @@ export async function obtenerAnalyticsMigao(desde: string, hasta: string) {
 }
 
 export async function obtenerAnalyticsConSentido(desde: string, hasta: string): Promise<AnalyticsConSentido> {
-  const [ingresos, ventasPorCategoria, productosTop] = await Promise.all([
+  const [ingresos, ingresosPorMetodo, ventasPorCategoria, productosTop] = await Promise.all([
     repo.getIngresosConSentido(desde, hasta),
+    repo.getIngresosPorMetodoPagoConSentido(desde, hasta),
     repo.getVentasPorCategoriaConSentido(desde, hasta),
     repo.getProductosTopConSentido(desde, hasta, 5),
   ]);
@@ -101,6 +102,8 @@ export async function obtenerAnalyticsConSentido(desde: string, hasta: string): 
 
   return {
     ingresos: Number(ingresos.total || 0),
+    efectivo: Number(ingresosPorMetodo.efectivo || 0),
+    banco: Number(ingresosPorMetodo.banco || 0),
     ventasCount: Number(ingresos.cantidad || 0),
     ventasPorCategoria: ventasPorCategoria.map((v) => ({
       categoria: v.categoria,

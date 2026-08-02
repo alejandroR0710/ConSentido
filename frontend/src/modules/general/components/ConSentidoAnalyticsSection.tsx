@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -45,10 +46,29 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsConSent
         <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard titulo="Ingresos totales" valor={formatMoney(datos.ingresos)} detalle={`${datos.ventasCount} ventas`} />
             <StatCard titulo="Ticket promedio" valor={formatMoney(datos.ingresos / (datos.ventasCount || 1))} />
+            <StatCard titulo="Ingresos en efectivo" valor={formatMoney(datos.efectivo)} />
+            <StatCard titulo="Ingresos en banco" valor={formatMoney(datos.banco)} />
           </div>
+
+          <Link
+            to="/con-sentido/ventas"
+            className="flex items-center justify-between rounded-lg border-2 border-brand-vanilla-dark px-4 py-3 hover:border-brand-green-400 hover:bg-brand-green-50 dark:border-brand-green-700 dark:hover:bg-brand-green-700/20"
+          >
+            <div>
+              <div className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">
+                Ver historial completo de ventas
+              </div>
+              <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                Detalle día por día, con el reparto efectivo/banco de cada uno
+              </div>
+            </div>
+            <div className="text-2xl" aria-hidden>
+              →
+            </div>
+          </Link>
 
           <div>
             <h4 className="mb-3 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">Ventas por categoría</h4>

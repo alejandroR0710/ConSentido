@@ -41,6 +41,26 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
  * con_sentido.service.ts. Por eso necesita sus propias consultas en vez de
  * las genéricas de arriba con moduloId=4, que siempre daban cero.
  */
+/** Efectivo/banco ya repartido de verdad (una venta "mixta" reparte su monto
+ *  entre las dos bolsas, no cuenta completo en ninguna) — se lee de
+ *  movimientos_caja, no de con_sentido_ventas.metodo_pago, por el mismo
+ *  motivo que getIngresosPorMetodoPago de Migao más abajo: ahí ya no existe
+ *  "mixto" (se descompuso en 1-2 líneas puras al registrar la venta), y de
+ *  paso una venta anulada desaparece sola (anularVenta borra su movimiento). */
+export async function getIngresosPorMetodoPagoConSentido(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
+       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+     FROM movimientos_caja mc
+     JOIN modulos m ON m.id = mc.modulo_origen_id
+     WHERE m.slug = 'con_sentido' AND mc.tipo = 'ingreso'
+       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
 export async function getIngresosConSentido(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto), 0) AS total

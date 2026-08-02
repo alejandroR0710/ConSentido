@@ -219,4 +219,12 @@ export const cajaApi = {
     apiFetch<MovimientoCaja>(`/caja/movimientos/${movimientoId}/historico`, { method: "PATCH", body: input }),
   listarEdicionesDelDia: (fecha: string) =>
     apiFetch<EdicionHistorialCaja[]>(`/caja/historial/${fecha}/ediciones`),
+  // Anula una venta (Migao o Con Sentido) desde cualquier día del historial —
+  // Root o Super Root. Nunca borra la venta de verdad, solo sus
+  // pagos/movimientos de Caja (ver caja.service.ts::anularVenta).
+  anularVenta: (movimientoId: number | string, nota: string) =>
+    apiFetch<{ movimientosAnulados: number }>(`/caja/movimientos/${movimientoId}/anular-venta`, {
+      method: "POST",
+      body: { nota, confirmacion: "ANULAR VENTA" },
+    }),
 };

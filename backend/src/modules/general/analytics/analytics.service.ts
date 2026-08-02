@@ -89,12 +89,15 @@ export async function obtenerAnalyticsMigao(desde: string, hasta: string) {
 }
 
 export async function obtenerAnalyticsConSentido(desde: string, hasta: string): Promise<AnalyticsConSentido> {
-  const [ingresos, ventasPorCategoria, productosTop, clientes] = await Promise.all([
-    repo.getIngresosModulo(4, desde, hasta),
-    repo.getVentasPorCategoria(4, desde, hasta),
-    repo.getProductosTopVendidos(4, desde, hasta, 5),
-    repo.getClientesFrecuentes(4, desde, hasta, 5),
+  const [ingresos, ventasPorCategoria, productosTop] = await Promise.all([
+    repo.getIngresosConSentido(desde, hasta),
+    repo.getVentasPorCategoriaConSentido(desde, hasta),
+    repo.getProductosTopConSentido(desde, hasta, 5),
   ]);
+  // Con Sentido no vincula sus ventas a un cliente (son ventas de mostrador,
+  // ver con_sentido_venta_items) — no hay de dónde sacar "clientes frecuentes"
+  // reales todavía, así que queda vacío en vez de inventar datos.
+  const clientes: { cliente_nombre: string; compras: string; total: string }[] = [];
 
   return {
     ingresos: Number(ingresos.total || 0),

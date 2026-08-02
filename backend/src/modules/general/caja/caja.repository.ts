@@ -200,6 +200,51 @@ export async function borrarMovimiento(client: PoolClient, movimientoId: number)
   await client.query(`DELETE FROM movimientos_caja WHERE id = $1`, [movimientoId]);
 }
 
+/**
+ * Anular venta (Root/Super Root, cualquier día): un pago dividido en mixto
+ * puede generar 2 filas en movimientos_caja con el mismo referencia_id, así
+ * que estas funciones operan sobre TODAS las que compartan esa referencia,
+ * no sobre un movimiento suelto.
+ */
+export async function listMovimientosPorReferencia(referenciaEntidad: string, referenciaId: string) {
+  const result = await pool.query(
+    `SELECT * FROM movimientos_caja WHERE referencia_entidad = $1 AND referencia_id = $2`,
+    [referenciaEntidad, referenciaId],
+  );
+  return result.rows;
+}
+
+export async function borrarMovimientosPorReferencia(
+  client: PoolClient,
+  referenciaEntidad: string,
+  referenciaId: string,
+) {
+  await client.query(`DELETE FROM movimientos_caja WHERE referencia_entidad = $1 AND referencia_id = $2`, [
+    referenciaEntidad,
+    referenciaId,
+  ]);
+}
+
+/** Venta genérica (Migao y otros módulos que usan `ventas`/`pagos`) — ya
+ *  tenía el estado 'anulada' en el schema, nunca se había usado. */
+export async function anularVentaGenerica(client: PoolClient, ventaId: string) {
+  const result = await client.query(
+    `UPDATE ventas SET estado = 'anulada' WHERE id = $1 AND estado != 'anulada' RETURNING *`,
+    [ventaId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Venta de Con Sentido (con_sentido_ventas no usa `pagos`, el ingreso vive
+ *  directo en movimientos_caja). */
+export async function anularVentaConSentido(client: PoolClient, ventaId: string) {
+  const result = await client.query(
+    `UPDATE con_sentido_ventas SET estado = 'anulada' WHERE id = $1 AND estado != 'anulada' RETURNING *`,
+    [ventaId],
+  );
+  return result.rows[0] ?? null;
+}
+
 /** Recrea un movimiento con los mismos datos del original pero método/monto
  *  distintos — usado al convertir un pago simple en "mixto" (una línea se
  *  actualiza in-place, la otra se inserta con esta función). Si se manda
@@ -433,7 +478,7 @@ export interface EdicionHistorialCaja {
   id: number;
   movimientoId: number | null;
   fecha: string;
-  accion: "creado" | "editado";
+  accion: "creado" | "editado" | "anulado";
   datosAntes: unknown;
   datosDespues: unknown;
   nota: string;
@@ -442,16 +487,24 @@ export interface EdicionHistorialCaja {
   createdAt: string;
 }
 
-export async function insertEdicionHistorial(params: {
-  movimientoId: number;
-  fecha: string;
-  accion: "creado" | "editado";
-  datosAntes: unknown;
-  datosDespues: unknown;
-  nota: string;
-  usuarioId: string;
-}) {
-  await pool.query(
+export async function insertEdicionHistorial(
+  params: {
+    movimientoId: number;
+    fecha: string;
+    accion: "creado" | "editado" | "anulado";
+    datosAntes: unknown;
+    datosDespues: unknown;
+    nota: string;
+    usuarioId: string;
+  },
+  // Acepta un `client` de una transacción en curso — usar `pool` (una conexión
+  // aparte) mientras esa transacción todavía tiene sin comitear un DELETE/UPDATE
+  // sobre la fila referenciada (movimientos_caja.id) causa un deadlock: esta
+  // conexión espera el lock de la fila, la otra espera a que esta termine para
+  // poder hacer COMMIT (ver anularVenta en caja.service.ts, donde se descubrió).
+  executor: Executor = pool,
+) {
+  await executor.query(
     `INSERT INTO movimientos_caja_ediciones
        (movimiento_id, fecha, accion, datos_antes, datos_despues, nota, usuario_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,

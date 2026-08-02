@@ -91,6 +91,25 @@ ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS proveedor_id UUID REFERENC
 
 
 -- ========================================================================
+-- SECCIÓN 1C: ANULAR VENTA (Root/Super Root, desde Caja General → Historial)
+-- ========================================================================
+-- Mismo patrón que la tabla genérica `ventas` (que ya tenía 'anulada' sin
+-- usar): se conserva el registro para auditoría, solo deja de contar en
+-- analíticas y pierde sus pagos/movimientos de Caja asociados.
+ALTER TABLE con_sentido_ventas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'completada';
+DO $$ BEGIN
+  ALTER TABLE con_sentido_ventas ADD CONSTRAINT con_sentido_ventas_estado_check CHECK (estado IN ('completada', 'anulada'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Permite registrar la anulación de una venta en el mismo historial de
+-- cambios que ya usa "editar movimiento histórico".
+ALTER TABLE movimientos_caja_ediciones DROP CONSTRAINT IF EXISTS movimientos_caja_ediciones_accion_check;
+ALTER TABLE movimientos_caja_ediciones
+  ADD CONSTRAINT movimientos_caja_ediciones_accion_check CHECK (accion IN ('creado', 'editado', 'anulado'));
+
+
+-- ========================================================================
 -- SECCIÓN 2: CATEGORÍAS DE GASTO (Solo crear si NO EXISTEN)
 -- ========================================================================
 INSERT INTO categorias_gasto (nombre, activo) VALUES

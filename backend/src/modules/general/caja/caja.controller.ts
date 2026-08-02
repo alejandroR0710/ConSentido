@@ -3,6 +3,7 @@ import { created, ok } from "../../../shared/utils/response";
 import {
   abrirTurnoSchema,
   agregarMovimientoHistoricoSchema,
+  anularVentaSchema,
   borrarHistorialDiaSchema,
   borrarTurnoSchema,
   cerrarTurnoSchema,
@@ -128,6 +129,12 @@ export async function listarEdicionesDelDiaController(req: Request, res: Respons
   const { fecha } = fechaParamSchema.parse(req.params);
   const ediciones = await service.listarEdicionesDelDia(fecha);
   return ok(res, ediciones);
+}
+
+export async function anularVentaController(req: Request, res: Response) {
+  const data = anularVentaSchema.parse(req.body);
+  const resultado = await service.anularVenta(Number(req.params.id), data, req.auth!.usuarioId);
+  return ok(res, resultado);
 }
 
 export async function listarProveedoresController(_req: Request, res: Response) {

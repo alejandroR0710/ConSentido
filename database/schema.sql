@@ -170,7 +170,7 @@ CREATE TABLE movimientos_caja_ediciones (
   id            BIGSERIAL PRIMARY KEY,
   movimiento_id BIGINT REFERENCES movimientos_caja(id) ON DELETE SET NULL,
   fecha         VARCHAR(10) NOT NULL, -- día calendario (Bogotá) afectado, 'YYYY-MM-DD'
-  accion        VARCHAR(20) NOT NULL CHECK (accion IN ('creado', 'editado')),
+  accion        VARCHAR(20) NOT NULL CHECK (accion IN ('creado', 'editado', 'anulado')),
   datos_antes   JSONB, -- null si accion = 'creado'
   datos_despues JSONB NOT NULL,
   nota          VARCHAR(300) NOT NULL,
@@ -409,6 +409,10 @@ CREATE TABLE con_sentido_ventas (
   metodo_pago    VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco', 'mixto')),
   monto_efectivo NUMERIC(12,2),
   monto_banco    NUMERIC(12,2),
+  -- 'anulada' = Root/Super Root eliminó la venta desde Caja General: se
+  -- conserva el registro (auditoría), pero deja de contar en analíticas y ya
+  -- no tiene pagos/movimientos de Caja asociados (ver caja.service.ts::anularVenta).
+  estado         VARCHAR(20) NOT NULL DEFAULT 'completada' CHECK (estado IN ('completada', 'anulada')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );

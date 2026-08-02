@@ -16,6 +16,7 @@ import {
   type TurnoCaja,
 } from "../api";
 import { AgregarMovimientoHistoricoModal } from "../components/AgregarMovimientoHistoricoModal";
+import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
@@ -188,6 +189,7 @@ export function CajaHistorialPage() {
   const [edicionesDelDia, setEdicionesDelDia] = useState<EdicionHistorialCaja[]>([]);
   const [agregarAbierto, setAgregarAbierto] = useState(false);
   const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoCaja | null>(null);
+  const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
 
   // No pone loading=true en cada llamada (solo el estado inicial ya lo es):
   // así el sondeo de fondo actualiza los datos sin ocultar la pantalla con
@@ -427,6 +429,9 @@ export function CajaHistorialPage() {
                     <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
                       {movimientosDelDia.map((m) => {
                         const puedeEditar = m.tipo === "egreso" || !m.referencia_entidad;
+                        const puedeAnular =
+                          m.tipo === "ingreso" &&
+                          (m.referencia_entidad === "ventas" || m.referencia_entidad === "con_sentido_ventas");
                         return (
                           <div
                             key={m.id}
@@ -468,6 +473,14 @@ export function CajaHistorialPage() {
                                   className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                 >
                                   Editar
+                                </button>
+                              )}
+                              {puedeAnular && (
+                                <button
+                                  onClick={() => setMovimientoAAnular(m)}
+                                  className="rounded border border-red-300 px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+                                >
+                                  Anular
                                 </button>
                               )}
                             </div>
@@ -586,6 +599,14 @@ export function CajaHistorialPage() {
           categorias={categorias}
           onCerrar={() => setMovimientoAEditar(null)}
           onGuardado={refrescarTrasAjuste}
+        />
+      )}
+
+      {movimientoAAnular && (
+        <AnularVentaModal
+          movimiento={movimientoAAnular}
+          onCerrar={() => setMovimientoAAnular(null)}
+          onAnulado={refrescarTrasAjuste}
         />
       )}
 

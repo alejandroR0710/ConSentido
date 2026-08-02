@@ -6,6 +6,7 @@ import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
   AgregarMovimientoHistoricoInput,
+  AnularVentaInput,
   CerrarTurnoInput,
   EditarMetodoPagoMovimientoInput,
   EditarMovimientoHistoricoInput,
@@ -485,4 +486,95 @@ export async function editarMovimientoHistorico(
 
 export async function listarEdicionesDelDia(fecha: string) {
   return repo.listEdicionesDelDia(fecha);
+}
+
+/**
+ * Anula una venta (Migao o Con Sentido) desde cualquier día del historial de
+ * Caja — Root o Super Root, ver general.caja.editar_movimiento. A diferencia
+ * de editarMetodoPagoMovimiento (turno abierto) y editarMovimientoHistorico
+ * (turno cerrado, nunca ventas), esta es la única vía para tocar un ingreso
+ * ligado a una venta sin importar si el turno ya cerró.
+ *
+ * "Anular" nunca borra la venta de verdad (queda para auditoría, con
+ * estado='anulada'): solo borra sus pagos/movimientos de Caja, así que deja
+ * de sumar en los totales pero el registro de qué se vendió sigue existiendo.
+ */
+export async function anularVenta(movimientoId: number, input: AnularVentaInput, usuarioId: string) {
+  const movimiento = await repo.getMovimientoById(movimientoId);
+  if (!movimiento) throw Errors.notFound("Movimiento no encontrado");
+
+  if (movimiento.tipo !== "ingreso" || !movimiento.referenciaEntidad || !movimiento.referenciaId) {
+    throw Errors.conflict("Este movimiento no corresponde a una venta.");
+  }
+  if (!["ventas", "con_sentido_ventas"].includes(movimiento.referenciaEntidad)) {
+    throw Errors.conflict("Este tipo de movimiento no se puede anular desde aquí.");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Un pago "mixto" pudo dividirse en 2 líneas (efectivo + banco) con el
+    // mismo referencia_id — hay que anularlas juntas, no solo la que se clickeó.
+    const movimientos = await repo.listMovimientosPorReferencia(movimiento.referenciaEntidad, movimiento.referenciaId);
+    if (movimientos.length === 0) throw Errors.notFound("Movimiento no encontrado");
+
+    const ventaAnulada =
+      movimiento.referenciaEntidad === "ventas"
+        ? await repo.anularVentaGenerica(client, movimiento.referenciaId)
+        : await repo.anularVentaConSentido(client, movimiento.referenciaId);
+    if (!ventaAnulada) {
+      throw Errors.conflict("Esta venta ya está anulada o ya no existe.");
+    }
+
+    if (movimiento.referenciaEntidad === "ventas") {
+      const pagos = await repo.listPagosPorVenta(client, movimiento.referenciaId);
+      for (const pago of pagos) {
+        await repo.borrarPago(client, pago.id);
+      }
+    }
+
+    // La auditoría se inserta ANTES de borrar: movimientos_caja_ediciones
+    // exige que movimiento_id exista en movimientos_caja al momento del
+    // INSERT (la FK se valida contra el estado actual de la transacción, no
+    // contra el de antes) — insertarla después del DELETE la rechaza.
+    for (const m of movimientos) {
+      const fecha = new Date(m.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+      await repo.insertEdicionHistorial(
+        {
+          movimientoId: m.id,
+          fecha,
+          accion: "anulado",
+          datosAntes: m,
+          datosDespues: {
+            estado: "anulada",
+            referencia_entidad: movimiento.referenciaEntidad,
+            referencia_id: movimiento.referenciaId,
+          },
+          nota: input.nota,
+          usuarioId,
+        },
+        client,
+      );
+    }
+
+    await repo.borrarMovimientosPorReferencia(client, movimiento.referenciaEntidad, movimiento.referenciaId);
+
+    await client.query("COMMIT");
+
+    // Solo hace falta recalcular el cierre de turnos que ya estén cerrados
+    // (uno abierto calcula sus saldos en vivo, sin nada guardado que arreglar).
+    const turnoIds = [...new Set(movimientos.map((m) => m.turno_id as string))];
+    for (const turnoId of turnoIds) {
+      const turno = await repo.getTurnoById(turnoId);
+      if (turno?.estado === "cerrado") await recalcularCierreTurno(turnoId);
+    }
+
+    return { venta: ventaAnulada, movimientosAnulados: movimientos.length };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }

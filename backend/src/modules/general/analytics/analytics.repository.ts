@@ -32,6 +32,56 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
   return result.rows;
 }
 
+/**
+ * Con Sentido NO usa las tablas genéricas `ventas`/`venta_items` (esas son
+ * para Migao/Insumos, ligadas a un producto real del catálogo): sus ventas
+ * viven en `con_sentido_ventas`/`con_sentido_venta_items`, con "producto" y
+ * "categoria" como texto libre capturado al momento de vender (soporta
+ * "+ Otro producto", no exige que exista en el catálogo) — ver
+ * con_sentido.service.ts. Por eso necesita sus propias consultas en vez de
+ * las genéricas de arriba con moduloId=4, que siempre daban cero.
+ */
+export async function getIngresosConSentido(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto), 0) AS total
+       FROM con_sentido_ventas
+      WHERE to_char(created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        AND estado != 'anulada'`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
+export async function getVentasPorCategoriaConSentido(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT COALESCE(cvi.categoria, 'Sin categoría') AS categoria,
+            COUNT(*) AS cantidad, COALESCE(SUM(cvi.subtotal), 0) AS total
+       FROM con_sentido_venta_items cvi
+       JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
+      WHERE to_char(cv.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        AND cv.estado != 'anulada'
+      GROUP BY cvi.categoria
+      ORDER BY total DESC`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
+export async function getProductosTopConSentido(desde: string, hasta: string, limit: number) {
+  const result = await pool.query(
+    `SELECT cvi.producto AS producto_nombre, COUNT(*) AS cantidad, COALESCE(SUM(cvi.subtotal), 0) AS total
+       FROM con_sentido_venta_items cvi
+       JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
+      WHERE to_char(cv.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        AND cv.estado != 'anulada'
+      GROUP BY cvi.producto
+      ORDER BY cantidad DESC
+      LIMIT $3`,
+    [desde, hasta, limit],
+  );
+  return result.rows;
+}
+
 export async function getIngresosModulo(moduloId: number, desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT

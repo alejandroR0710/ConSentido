@@ -7,6 +7,7 @@ import {
   actualizarCategoriaGastoController,
   actualizarProveedorController,
   agregarMovimientoHistoricoController,
+  anularVentaController,
   borrarHistorialDiaController,
   borrarTurnoController,
   cerrarTurnoController,
@@ -143,4 +144,12 @@ cajaRouter.get(
   "/historial/:fecha/ediciones",
   requirePermission("general.caja.ver"),
   asyncHandler(listarEdicionesDelDiaController),
+);
+
+// Anular una venta (Migao o Con Sentido) desde cualquier día del historial —
+// Root o Super Root (ver caja.service.ts::anularVenta).
+cajaRouter.post(
+  "/movimientos/:id/anular-venta",
+  requirePermission("general.caja.editar_movimiento"),
+  asyncHandler(anularVentaController),
 );

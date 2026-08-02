@@ -161,6 +161,15 @@ export const editarMovimientoHistoricoSchema = z
   });
 export type EditarMovimientoHistoricoInput = z.infer<typeof editarMovimientoHistoricoSchema>;
 
+// Anular una venta (Migao o Con Sentido) desde cualquier día del historial —
+// misma frase de confirmación escrita que el resto de acciones sensibles.
+// Root y Super Root (general.caja.editar_movimiento), no exclusivo de Super Root.
+export const anularVentaSchema = z.object({
+  nota: z.string().trim().min(3).max(300),
+  confirmacion: z.literal("ANULAR VENTA"),
+});
+export type AnularVentaInput = z.infer<typeof anularVentaSchema>;
+
 export const fechaParamSchema = z.object({
   fecha: z.string().regex(FECHA_REGEX, "Formato de fecha inválido (YYYY-MM-DD)"),
 });

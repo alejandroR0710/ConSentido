@@ -4,6 +4,7 @@ import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type OrdenHistorialResumen } from "../api";
+import { labelArea } from "../areas";
 
 const POLL_MS = 15000;
 
@@ -97,7 +98,7 @@ export function MeseroHistorialPage() {
                   <td className="px-3 py-2">
                     {o.mesa_numero ?? "—"}
                     {o.mesa_piso && (
-                      <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> (salón {o.mesa_piso})</span>
+                      <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> ({labelArea(o.mesa_piso)})</span>
                     )}
                   </td>
                   <td className="px-3 py-2">

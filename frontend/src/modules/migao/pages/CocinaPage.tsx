@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
+import { labelArea } from "../areas";
 import { audioDesbloqueado, desbloquearAudio, reproducirAlerta, reproducirPedidoNuevo } from "../beep";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { formatCantidad } from "../format";
@@ -239,7 +240,7 @@ export function CocinaPage() {
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-3xl font-extrabold text-brand-green-700 dark:text-brand-vanilla">
                     Mesa {ticket.mesaNumero}
-                    {ticket.mesaPiso && <span className="text-lg font-semibold"> (salón {ticket.mesaPiso})</span>}
+                    {ticket.mesaPiso && <span className="text-lg font-semibold"> ({labelArea(ticket.mesaPiso)})</span>}
                     {vencido && (
                       <span className="rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">
                         +{MINUTOS_ALERTA} min

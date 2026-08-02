@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../../../shared/components/Modal";
+import { AREAS_MESA } from "../areas";
 
 interface CambiarMesaModalProps {
   mesaActual: string | null;
@@ -13,7 +14,7 @@ interface CambiarMesaModalProps {
  *  al crear la orden, así que no hace falta que ya exista. */
 export function CambiarMesaModal({ mesaActual, pisoActual, onCerrar, onGuardar }: CambiarMesaModalProps) {
   const [mesaNumero, setMesaNumero] = useState(mesaActual ?? "");
-  const [piso, setPiso] = useState<1 | 2>(pisoActual === 2 ? 2 : 1);
+  const [piso, setPiso] = useState<1 | 2 | 3>(pisoActual === 2 ? 2 : pisoActual === 3 ? 3 : 1);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,30 +34,33 @@ export function CambiarMesaModal({ mesaActual, pisoActual, onCerrar, onGuardar }
 
   return (
     <Modal titulo="Cambiar mesa" onCerrar={onCerrar}>
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium">Número de mesa</label>
-          <input
-            autoFocus
-            inputMode="numeric"
-            value={mesaNumero}
-            onChange={(e) => setMesaNumero(e.target.value)}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-            placeholder="Ej. 7"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Salón</label>
-          <select
-            value={piso}
-            onChange={(e) => setPiso(Number(e.target.value) as 1 | 2)}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      <label className="mb-1 block text-xs font-medium">Área</label>
+      <div className="mb-4 flex gap-2">
+        {AREAS_MESA.map((a) => (
+          <button
+            key={a.valor}
+            type="button"
+            onClick={() => setPiso(a.valor)}
+            className={`flex-1 rounded-md border-2 px-2 py-2 text-sm font-medium transition ${
+              piso === a.valor
+                ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:border-brand-green-500 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+            }`}
           >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-          </select>
-        </div>
+            <span aria-hidden>{a.icon}</span> {a.label}
+          </button>
+        ))}
       </div>
+
+      <label className="mb-1 block text-xs font-medium">Número de mesa</label>
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={mesaNumero}
+        onChange={(e) => setMesaNumero(e.target.value)}
+        className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        placeholder="Ej. 7"
+      />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
+import { AREAS_MESA, labelArea } from "../areas";
 import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
 import { CambiarMesaModal } from "../components/CambiarMesaModal";
@@ -33,6 +34,11 @@ interface ItemBorrador {
 }
 
 type Vista = "lista" | "detalle" | "nueva";
+// Asistente paso a paso al crear una orden: primero el área, luego la mesa,
+// luego los comensales, y recién ahí el pedido — separado en pasos (en vez de
+// un formulario largo) porque el mesero lo llena parado, desde el celular,
+// con el cliente esperando.
+type PasoNuevaOrden = "area" | "mesa" | "personas" | "pedido";
 
 export function MeseroPage() {
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
@@ -41,9 +47,10 @@ export function MeseroPage() {
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
 
+  const [pasoNuevaOrden, setPasoNuevaOrden] = useState<PasoNuevaOrden>("area");
   const [borradorMesaNumero, setBorradorMesaNumero] = useState("");
   const [borradorPersonas, setBorradorPersonas] = useState("");
-  const [borradorPiso, setBorradorPiso] = useState<1 | 2>(1);
+  const [borradorPiso, setBorradorPiso] = useState<1 | 2 | 3>(1);
   const [borradorItems, setBorradorItems] = useState<ItemBorrador[]>([]);
   const [creandoOrden, setCreandoOrden] = useState(false);
 
@@ -175,12 +182,17 @@ export function MeseroPage() {
 
   function iniciarNuevaOrden() {
     setVista("nueva");
+    setPasoNuevaOrden("area");
     setBorradorMesaNumero("");
     setBorradorPersonas("");
     setBorradorPiso(1);
     setBorradorItems([]);
     setError(null);
     setMensaje(null);
+  }
+
+  function retrocederPasoNuevaOrden() {
+    setPasoNuevaOrden((actual) => (actual === "pedido" ? "personas" : actual === "personas" ? "mesa" : "area"));
   }
 
   function quitarDelBorrador(index: number) {
@@ -205,7 +217,7 @@ export function MeseroPage() {
         personas,
         borradorPiso,
       );
-      setMensaje(`Orden creada — Mesa ${borradorMesaNumero} (salón ${borradorPiso}) · Comensal ${orden.comensal_numero}`);
+      setMensaje(`Orden creada — Mesa ${borradorMesaNumero} (${labelArea(borradorPiso)}) · Comensal ${orden.comensal_numero}`);
       setAlertaInventario(orden.alertasInventario.length > 0 ? orden.alertasInventario.join(" ") : null);
       setBorradorMesaNumero("");
       setBorradorPersonas("");
@@ -423,107 +435,148 @@ export function MeseroPage() {
 
       {vista === "nueva" && (
         <div className="flex flex-col gap-4">
-          <button onClick={irALista} className="self-start text-sm text-brand-green-700 dark:text-brand-vanilla">
-            ← Volver
+          <button
+            onClick={pasoNuevaOrden === "area" ? irALista : retrocederPasoNuevaOrden}
+            className="self-start text-sm text-brand-green-700 dark:text-brand-vanilla"
+          >
+            ← {pasoNuevaOrden === "area" ? "Volver" : "Atrás"}
           </button>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium">Número de mesa</label>
+          {pasoNuevaOrden === "area" && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold text-brand-ink dark:text-brand-vanilla">¿En qué área está la mesa?</h2>
+              <div className="flex flex-col gap-2">
+                {AREAS_MESA.map((a) => (
+                  <button
+                    key={a.valor}
+                    type="button"
+                    onClick={() => {
+                      setBorradorPiso(a.valor);
+                      setPasoNuevaOrden("mesa");
+                    }}
+                    className="flex items-center gap-3 rounded-lg border-2 border-brand-vanilla-dark px-4 py-4 text-left text-base font-semibold text-brand-ink hover:border-brand-green-600 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
+                  >
+                    <span className="text-2xl" aria-hidden>
+                      {a.icon}
+                    </span>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {pasoNuevaOrden === "mesa" && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
+                {labelArea(borradorPiso)} · ¿Cuál es el número de mesa?
+              </h2>
               <input
                 autoFocus
                 inputMode="numeric"
                 value={borradorMesaNumero}
                 onChange={(e) => setBorradorMesaNumero(e.target.value)}
-                className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && borradorMesaNumero.trim()) setPasoNuevaOrden("personas");
+                }}
+                className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-3 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 placeholder="Ej. 7"
               />
+              <button
+                onClick={() => setPasoNuevaOrden("personas")}
+                disabled={!borradorMesaNumero.trim()}
+                className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+              >
+                Siguiente
+              </button>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium">Salón</label>
-              <div className="flex overflow-hidden rounded-md border border-brand-vanilla-dark dark:border-brand-green-700">
-                {([1, 2] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setBorradorPiso(p)}
-                    className={`flex-1 py-2 text-sm font-semibold ${
-                      borradorPiso === p
-                        ? "bg-brand-green-700 text-brand-vanilla"
-                        : "bg-brand-vanilla text-brand-ink hover:bg-brand-green-50 dark:bg-brand-green-900 dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
-                    }`}
-                  >
-                    Salón {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium">Personas (opcional)</label>
+          {pasoNuevaOrden === "personas" && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
+                Mesa {borradorMesaNumero} · {labelArea(borradorPiso)} · ¿Cuántos comensales?
+              </h2>
               <input
+                autoFocus
                 inputMode="numeric"
                 value={borradorPersonas}
                 onChange={(e) => setBorradorPersonas(e.target.value.replace(/\D/g, ""))}
-                className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                placeholder="Ej. 4"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setPasoNuevaOrden("pedido");
+                }}
+                className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-3 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                placeholder="Ej. 4 (opcional)"
               />
+              <button
+                onClick={() => setPasoNuevaOrden("pedido")}
+                className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600"
+              >
+                {borradorPersonas.trim() ? "Siguiente" : "Continuar sin indicar comensales"}
+              </button>
             </div>
-          </div>
-
-          <button
-            onClick={() => setSelectorAbierto(true)}
-            className="w-full rounded-md border-2 border-brand-green-700 px-4 py-3 text-base font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
-          >
-            + Agregar producto
-          </button>
-
-          {borradorItems.length === 0 ? (
-            <p className="text-sm text-brand-ink/60">Aún no has agregado productos.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {borradorItems.map((i, idx) => (
-                <li
-                  key={`${i.producto.id}-${idx}`}
-                  className="flex items-center justify-between rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
-                >
-                  <div>
-                    <span className="font-medium text-brand-ink dark:text-brand-vanilla">
-                      {i.cantidad}× {i.producto.nombre}
-                    </span>
-                    {i.observaciones && (
-                      <div className="text-xs italic text-brand-ink/60 dark:text-brand-vanilla/60">
-                        {i.observaciones}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-                      {formatMoney(i.cantidad * Number(i.producto.precio))}
-                    </span>
-                    <button onClick={() => quitarDelBorrador(idx)} className="text-xs text-red-600 hover:underline">
-                      Quitar
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
           )}
 
-          <div className="flex items-center justify-between border-t border-brand-vanilla-dark pt-3 text-base font-semibold dark:border-brand-green-700">
-            <span>Total</span>
-            <span>{formatMoney(totalBorrador)}</span>
-          </div>
+          {pasoNuevaOrden === "pedido" && (
+            <>
+              <div className="rounded-lg bg-brand-green-50 px-3 py-2 text-sm font-medium text-brand-green-700 dark:bg-brand-green-700/20 dark:text-brand-vanilla">
+                Mesa {borradorMesaNumero} · {labelArea(borradorPiso)}
+                {borradorPersonas.trim() && ` · ${borradorPersonas} comensales`}
+              </div>
 
-          <button
-            onClick={confirmarCrearOrden}
-            disabled={creandoOrden || !borradorMesaNumero.trim() || borradorItems.length === 0}
-            className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-          >
-            {creandoOrden ? "Creando..." : "Crear orden"}
-          </button>
+              <button
+                onClick={() => setSelectorAbierto(true)}
+                className="w-full rounded-md border-2 border-brand-green-700 px-4 py-3 text-base font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
+              >
+                + Agregar producto
+              </button>
+
+              {borradorItems.length === 0 ? (
+                <p className="text-sm text-brand-ink/60">Aún no has agregado productos.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {borradorItems.map((i, idx) => (
+                    <li
+                      key={`${i.producto.id}-${idx}`}
+                      className="flex items-center justify-between rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
+                    >
+                      <div>
+                        <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                          {i.cantidad}× {i.producto.nombre}
+                        </span>
+                        {i.observaciones && (
+                          <div className="text-xs italic text-brand-ink/60 dark:text-brand-vanilla/60">
+                            {i.observaciones}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                          {formatMoney(i.cantidad * Number(i.producto.precio))}
+                        </span>
+                        <button onClick={() => quitarDelBorrador(idx)} className="text-xs text-red-600 hover:underline">
+                          Quitar
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="flex items-center justify-between border-t border-brand-vanilla-dark pt-3 text-base font-semibold dark:border-brand-green-700">
+                <span>Total</span>
+                <span>{formatMoney(totalBorrador)}</span>
+              </div>
+
+              <button
+                onClick={confirmarCrearOrden}
+                disabled={creandoOrden || !borradorMesaNumero.trim() || borradorItems.length === 0}
+                className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+              >
+                {creandoOrden ? "Creando..." : "Crear orden"}
+              </button>
+            </>
+          )}
         </div>
       )}
 

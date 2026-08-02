@@ -50,8 +50,9 @@ export const crearOrdenSchema = z.object({
   mesaNumero: z.string().trim().min(1).max(10),
   clienteId: z.string().uuid().optional(),
   numeroPersonas: z.number().int().positive().max(999).optional(),
-  // Solo existen 2 pisos por ahora; por defecto 1, el mesero lo ajusta si la mesa está en el 2.
-  piso: z.number().int().min(1).max(2).default(1),
+  // 3 áreas por ahora: 1 = Salón 1, 2 = Salón 2, 3 = Jardín (ver frontend/areas.ts
+  // para las etiquetas — acá solo se guarda el número, igual que antes).
+  piso: z.number().int().min(1).max(3).default(1),
   items: z.array(agregarItemSchema).min(1, "Agrega al menos un producto antes de crear la orden"),
 });
 export type CrearOrdenInput = z.infer<typeof crearOrdenSchema>;

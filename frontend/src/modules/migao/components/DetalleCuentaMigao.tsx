@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatMoney } from "../../../shared/format/money";
 import { migaoApi, type OrdenItem } from "../api";
+import { labelArea } from "../areas";
 import { formatCantidad } from "../format";
 
 interface DetalleCuentaMigaoProps {
@@ -47,7 +48,7 @@ export function DetalleCuentaMigao({
       <div className="mb-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
         <div>
           <span className="font-medium">Mesa:</span> {mesaNumero ?? "—"}
-          {mesaPiso ? ` (salón ${mesaPiso})` : ""}
+          {mesaPiso ? ` (${labelArea(mesaPiso)})` : ""}
         </div>
         <div>
           <span className="font-medium">Mesero:</span> {meseroNombre ?? "—"}

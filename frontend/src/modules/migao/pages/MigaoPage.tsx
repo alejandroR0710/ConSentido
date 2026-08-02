@@ -8,6 +8,7 @@ import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/compon
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
+import { labelArea } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
@@ -369,7 +370,7 @@ export function MigaoPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                         Mesa {o.mesa_numero ?? "—"}
-                        {o.mesa_piso && <span className="text-sm font-normal"> (salón {o.mesa_piso})</span>}
+                        {o.mesa_piso && <span className="text-sm font-normal"> ({labelArea(o.mesa_piso)})</span>}
                       </div>
                       {estadoCocina && (
                         <span

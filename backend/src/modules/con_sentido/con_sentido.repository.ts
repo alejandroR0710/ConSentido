@@ -260,3 +260,25 @@ export async function getVentaById(id: string) {
   const result = await pool.query(`${SELECT_VENTA_CON_ITEMS} WHERE cv.id = $1 GROUP BY cv.id`, [id]);
   return result.rows[0] ?? null;
 }
+
+/**
+ * Ingresos registrados a mano desde Caja General con origen "Con Sentido" (ej.
+ * alguien cobró por fuera del flujo de "Nueva venta" y lo registró directo en
+ * Caja) — se excluyen los que ya tienen referencia_entidad='con_sentido_ventas'
+ * porque esos SÍ vienen de una venta registrada normal y ya aparecen en
+ * listVentas; si no se excluyeran, la misma venta se vería duplicada. Mismo
+ * patrón que listIngresosManualesMigao en migao.repository.ts.
+ */
+export async function listIngresosManualesConSentido() {
+  const result = await pool.query(
+    `SELECT mc.id, mc.monto, mc.motivo, mc.metodo_pago, mc.created_at, u.nombre AS usuario_nombre
+       FROM movimientos_caja mc
+       JOIN modulos m ON m.id = mc.modulo_origen_id
+       LEFT JOIN usuarios u ON u.id = mc.usuario_id
+      WHERE m.slug = 'con_sentido' AND mc.tipo = 'ingreso'
+        AND mc.referencia_entidad IS DISTINCT FROM 'con_sentido_ventas'
+      ORDER BY mc.created_at DESC
+      LIMIT 200`,
+  );
+  return result.rows;
+}

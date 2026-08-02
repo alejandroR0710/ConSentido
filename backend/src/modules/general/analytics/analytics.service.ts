@@ -100,10 +100,18 @@ export async function obtenerAnalyticsConSentido(desde: string, hasta: string): 
   // reales todavía, así que queda vacío en vez de inventar datos.
   const clientes: { cliente_nombre: string; compras: string; total: string }[] = [];
 
+  // "ingresos" sale de movimientos_caja (efectivo+banco), no de sumar
+  // con_sentido_ventas.monto: así incluye también los ingresos que alguien
+  // registró a mano desde Caja General con área "Con Sentido" (mismo
+  // criterio que ganancias.ingresos en Migao) — ventasCount/categoría/top sí
+  // se quedan acotados a ventas reales con ítems, un ingreso manual no los tiene.
+  const efectivo = Number(ingresosPorMetodo.efectivo || 0);
+  const banco = Number(ingresosPorMetodo.banco || 0);
+
   return {
-    ingresos: Number(ingresos.total || 0),
-    efectivo: Number(ingresosPorMetodo.efectivo || 0),
-    banco: Number(ingresosPorMetodo.banco || 0),
+    ingresos: efectivo + banco,
+    efectivo,
+    banco,
     ventasCount: Number(ingresos.cantidad || 0),
     ventasPorCategoria: ventasPorCategoria.map((v) => ({
       categoria: v.categoria,

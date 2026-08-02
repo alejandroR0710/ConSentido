@@ -103,8 +103,40 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
   }
 }
 
+/**
+ * El historial de "ventas" que ve Con Sentido combina dos orígenes: las
+ * ventas registradas por su propio flujo ("Nueva venta") y los ingresos que
+ * alguien registró a mano desde Caja General con área "Con Sentido" (ej. un
+ * cobro que no pasó por el flujo normal) — mismo patrón que el historial de
+ * Migao (ver migao.service.ts::listarHistorialOrdenes).
+ */
 export async function listarVentas(skip: number, limit: number, fecha?: string) {
-  return repo.listVentas(skip, limit, fecha);
+  const [ventas, ingresosManuales] = await Promise.all([
+    repo.listVentas(skip, limit, fecha),
+    repo.listIngresosManualesConSentido(),
+  ]);
+
+  const entradasVentas = ventas.map((v) => ({ tipo: "venta" as const, ...v }));
+  const entradasManuales = ingresosManuales
+    .filter(
+      (i) => !fecha || new Date(i.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" }) === fecha,
+    )
+    .map((i) => ({
+      tipo: "ingreso_manual" as const,
+      id: i.id,
+      created_at: i.created_at,
+      monto: i.monto,
+      metodo_pago: i.metodo_pago,
+      monto_efectivo: null,
+      monto_banco: null,
+      motivo: i.motivo,
+      usuario_nombre: i.usuario_nombre,
+      items: [],
+    }));
+
+  return [...entradasVentas, ...entradasManuales].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 }
 
 export async function obtenerVenta(id: string) {

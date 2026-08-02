@@ -87,12 +87,19 @@ export function VentasPage() {
   const cargarVentasActuales = async () => {
     try {
       const ventasApi = await conSentidoApi.listarVentas();
+      // El backend combina dos orígenes: ventas registradas por "Nueva venta"
+      // y los ingresos que alguien registró a mano desde Caja General con
+      // área "Con Sentido" (mismo patrón que el historial de Migao) — estos
+      // últimos no tienen ítems, solo motivo/usuario.
       const ventasMapeadas = ventasApi.map((v: any) => ({
+        tipo: v.tipo as "venta" | "ingreso_manual",
         id: v.id,
         monto: parseFloat(v.monto),
         metodoPago: v.metodo_pago,
         fecha: v.created_at,
-        items: v.items.map((item: any) => ({
+        motivo: v.motivo,
+        usuarioNombre: v.usuario_nombre,
+        items: (v.items || []).map((item: any) => ({
           producto: item.producto,
           descripcion: item.descripcion,
           categoria: item.categoria,
@@ -223,13 +230,20 @@ export function VentasPage() {
               className="rounded-lg border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900/20"
             >
               <button
-                onClick={() => alternarVenta(venta.id.toString())}
+                onClick={() => venta.tipo === "venta" && alternarVenta(venta.id.toString())}
                 className="w-full text-left"
               >
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <div className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                      Venta #{venta.id.toString().slice(-6)}
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                        {venta.tipo === "ingreso_manual" ? "Ingreso manual" : `Venta #${venta.id.toString().slice(-6)}`}
+                      </span>
+                      {venta.tipo === "ingreso_manual" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                          Caja General
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                       {new Date(venta.fecha).toLocaleDateString("es", {
@@ -242,6 +256,11 @@ export function VentasPage() {
                         second: "2-digit",
                       })}
                     </div>
+                    {venta.tipo === "ingreso_manual" && (venta.motivo || venta.usuarioNombre) && (
+                      <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                        {[venta.motivo, venta.usuarioNombre].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
@@ -260,14 +279,16 @@ export function VentasPage() {
                         {venta.metodoPago}
                       </span>
                     </div>
-                    <div className="text-xl text-brand-green-700 dark:text-brand-vanilla">
-                      {ventasExpandidas.has(venta.id.toString()) ? "▼" : "▶"}
-                    </div>
+                    {venta.tipo === "venta" && (
+                      <div className="text-xl text-brand-green-700 dark:text-brand-vanilla">
+                        {ventasExpandidas.has(venta.id.toString()) ? "▼" : "▶"}
+                      </div>
+                    )}
                   </div>
                 </div>
               </button>
 
-              {ventasExpandidas.has(venta.id.toString()) && (
+              {venta.tipo === "venta" && ventasExpandidas.has(venta.id.toString()) && (
                 <div className="border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
                   <div className="space-y-2">
                     {venta.items.map((item: any, idx: number) => (

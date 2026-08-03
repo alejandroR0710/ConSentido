@@ -15,8 +15,8 @@ interface FloorPlanCanvasProps {
    *  bloquea agregar una más). "ver": abrir una de las cuentas abiertas de esa
    *  mesa (si hay más de una, primero se elige cuál). */
   onSeleccionar?: (mesa: MesaConOcupacion, orden?: OrdenResumen) => void;
-  onMover?: (mesaId: number, posX: number, posY: number) => void;
-  onRedimensionar?: (mesaId: number, ancho: number, alto: number) => void;
+  onMover?: (mesaId: number, posX: number, posY: number) => void | Promise<void>;
+  onRedimensionar?: (mesaId: number, ancho: number, alto: number) => void | Promise<void>;
   onEditarDetalle?: (mesa: MesaConOcupacion) => void;
 }
 
@@ -151,19 +151,32 @@ export function FloorPlanCanvas({
     }
   }
 
-  function soltarGesto(mesa: MesaConOcupacion) {
+  async function soltarGesto(mesa: MesaConOcupacion) {
     const gesto = gestoRef.current;
     const actual = arrastre;
     gestoRef.current = null;
-    setArrastre(null);
-    if (!gesto || !actual || actual.mesaId !== mesa.id) return;
+    if (!gesto || !actual || actual.mesaId !== mesa.id) {
+      setArrastre(null);
+      return;
+    }
 
     if (gesto.movimientoTotal < UMBRAL_CLICK_PX) {
+      setArrastre(null);
       onEditarDetalle?.(mesa);
       return;
     }
-    if (actual.tipo === "mover") onMover?.(mesa.id, actual.posX, actual.posY);
-    else onRedimensionar?.(mesa.id, actual.ancho, actual.alto);
+
+    // No se limpia el arrastre optimista hasta que el PATCH + refetch del
+    // padre terminen: si se limpiara antes, por un instante se vuelve a
+    // pintar con la posición vieja (la que trae `mesas` todavía) y luego
+    // "salta" a la nueva en cuanto llega la respuesta — el efecto de
+    // "se devuelve y de un salto se acomoda" que se veía antes.
+    try {
+      if (actual.tipo === "mover") await onMover?.(mesa.id, actual.posX, actual.posY);
+      else await onRedimensionar?.(mesa.id, actual.ancho, actual.alto);
+    } finally {
+      setArrastre(null);
+    }
   }
 
   function clickMesa(mesa: MesaConOcupacion) {

@@ -259,7 +259,7 @@ export function FloorPlanCanvas({
                   ? "z-10 scale-105 border-brand-green-700 bg-brand-green-600 text-white shadow-lg ring-4 ring-brand-green-400 ring-offset-2 ring-offset-brand-vanilla dark:ring-offset-brand-green-900"
                   : ocupada
                     ? "border-amber-500 bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                    : "border-brand-green-700 bg-brand-vanilla text-brand-ink dark:border-brand-vanilla dark:bg-brand-green-800 dark:text-brand-vanilla"
+                    : "border-brand-green-700 bg-brand-vanilla text-brand-ink dark:border-brand-vanilla dark:bg-brand-green-700 dark:text-brand-vanilla"
               }`}
             >
               {seleccionada && (

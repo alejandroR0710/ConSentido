@@ -10,8 +10,8 @@ export interface AreaMesa {
 
 export const AREAS_MESA: AreaMesa[] = [
   { valor: 1, label: "Salón 1", icon: "🏛️" },
-  { valor: 2, label: "Salón 2", icon: "🏛️" },
   { valor: 3, label: "Jardín", icon: "🌿" },
+  { valor: 2, label: "Salón 2", icon: "🏛️" },
 ];
 
 export function labelArea(piso: number | null | undefined): string {

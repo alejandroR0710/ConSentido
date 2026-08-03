@@ -20,10 +20,13 @@ import {
   cancelarOrdenController,
   cerrarOrdenController,
   crearCategoriaController,
+  crearMesaController,
   crearOrdenController,
   crearProductoController,
   editarItemController,
+  editarMesaController,
   editarProductoController,
+  eliminarMesaController,
   empezarPrepararController,
   entregarItemController,
   listarCategoriasController,
@@ -40,6 +43,7 @@ import {
   listarProductosParaLlevarController,
   marcarCheckItemController,
   marcarOrdenListaController,
+  moverMesaController,
   obtenerDetalleOrdenController,
   obtenerResumenDiarioIngresosController,
   reiniciarTodoController,
@@ -52,7 +56,15 @@ const subirImagenProducto = crearUploaderImagen("productos");
 
 migaoRouter.use(authMiddleware);
 
-migaoRouter.get("/mesas", requirePermission("migao.ordenes.ver"), asyncHandler(listarMesasController));
+migaoRouter.get("/mesas", requirePermission("migao.mesas.ver"), asyncHandler(listarMesasController));
+migaoRouter.post("/mesas", requirePermission("migao.mesas.administrar"), asyncHandler(crearMesaController));
+migaoRouter.patch("/mesas/:id", requirePermission("migao.mesas.administrar"), asyncHandler(editarMesaController));
+migaoRouter.patch(
+  "/mesas/:id/posicion",
+  requirePermission("migao.mesas.administrar"),
+  asyncHandler(moverMesaController),
+);
+migaoRouter.delete("/mesas/:id", requirePermission("migao.mesas.administrar"), asyncHandler(eliminarMesaController));
 // Ver el catálogo es un permiso propio (migao.productos.ver): lo necesita el mesero
 // para buscar productos al armar un pedido, y también el Administrador del menú,
 // que no necesariamente tiene acceso a órdenes.

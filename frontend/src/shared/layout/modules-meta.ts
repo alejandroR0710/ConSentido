@@ -40,6 +40,9 @@ export const MODULES_META: ModuloMeta[] = [
   // Administra stock (Root/Super Root/Cocina) — el Administrador no lo ve acá,
   // solo consulta el catálogo desde dentro del modal de producto del Menú.
   { slug: "migao", label: "Inventario", path: "/migao/inventario", icon: "📦", roles: ["Cocina"] },
+  // Editor del plano visual de mesas por área — exclusivo de Root/Super Root
+  // (migao.mesas.administrar); Mesero/Cajero solo lo usan/ven, no lo editan.
+  { slug: "migao", label: "Editor de mesas", path: "/migao/editor-mesas", icon: "🗺️", roles: ["Super Root", "Root"] },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
   // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
   // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
@@ -92,7 +95,15 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "migao-grupo",
     label: "Migao",
     icon: "🍽️",
-    paths: ["/migao", "/cocina", "/menu", "/mesero", "/migao/inventario", "/migao/historial-administrativo"],
+    paths: [
+      "/migao",
+      "/cocina",
+      "/menu",
+      "/mesero",
+      "/migao/inventario",
+      "/migao/editor-mesas",
+      "/migao/historial-administrativo",
+    ],
   },
   {
     slug: "con-sentido-grupo",

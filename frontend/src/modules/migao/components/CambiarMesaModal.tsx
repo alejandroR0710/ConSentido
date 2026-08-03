@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { Modal } from "../../../shared/components/Modal";
+import type { Mesa, OrdenResumen } from "../api";
 import { AREAS_MESA } from "../areas";
+import { combinarMesasConOrdenes } from "../ocupacionMesas";
+import { FloorPlanCanvas } from "./FloorPlanCanvas";
 
 interface CambiarMesaModalProps {
   mesaActual: string | null;
   pisoActual: number | null;
+  mesasLayout: Mesa[];
+  ordenes: OrdenResumen[];
   onCerrar: () => void;
   onGuardar: (mesaNumero: string, piso: number) => Promise<void>;
 }
@@ -12,7 +17,7 @@ interface CambiarMesaModalProps {
 /** Cambiar la mesa de una orden ya abierta — ej. los comensales se cambiaron
  *  de mesa a mitad del pedido. La mesa se resuelve/crea por número, igual que
  *  al crear la orden, así que no hace falta que ya exista. */
-export function CambiarMesaModal({ mesaActual, pisoActual, onCerrar, onGuardar }: CambiarMesaModalProps) {
+export function CambiarMesaModal({ mesaActual, pisoActual, mesasLayout, ordenes, onCerrar, onGuardar }: CambiarMesaModalProps) {
   const [mesaNumero, setMesaNumero] = useState(mesaActual ?? "");
   const [piso, setPiso] = useState<1 | 2 | 3>(pisoActual === 2 ? 2 : pisoActual === 3 ? 3 : 1);
   const [guardando, setGuardando] = useState(false);
@@ -50,6 +55,17 @@ export function CambiarMesaModal({ mesaActual, pisoActual, onCerrar, onGuardar }
             <span aria-hidden>{a.icon}</span> {a.label}
           </button>
         ))}
+      </div>
+
+      <div className="mb-4">
+        <FloorPlanCanvas
+          mesas={combinarMesasConOrdenes(
+            mesasLayout.filter((m) => m.piso === piso && m.activo),
+            ordenes,
+          )}
+          modo="seleccionar"
+          onSeleccionar={(mesa) => setMesaNumero(mesa.numero)}
+        />
       </div>
 
       <label className="mb-1 block text-xs font-medium">Número de mesa</label>

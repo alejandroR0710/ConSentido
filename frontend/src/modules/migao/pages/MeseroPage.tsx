@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
-import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
+import { migaoApi, type ItemActivo, type Mesa, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
 import { AREAS_MESA, labelArea } from "../areas";
 import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
 import { CambiarMesaModal } from "../components/CambiarMesaModal";
 import { EditarItemModal } from "../components/EditarItemModal";
 import { EstadoBadge } from "../components/EstadoBadge";
+import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
 import { HistorialOrden } from "../components/HistorialOrden";
 import { SelectorProductoModal } from "../components/SelectorProductoModal";
 import { BORDE_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { formatCantidad } from "../format";
+import { combinarMesasConOrdenes } from "../ocupacionMesas";
 import { Modal } from "../../../shared/components/Modal";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -38,10 +40,12 @@ type Vista = "lista" | "detalle" | "nueva";
 export function MeseroPage() {
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [mesasLayout, setMesasLayout] = useState<Mesa[]>([]);
   const [vista, setVista] = useState<Vista>("lista");
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
 
+  const [mesaLayoutSeleccionadaId, setMesaLayoutSeleccionadaId] = useState<number | null>(null);
   const [borradorMesaNumero, setBorradorMesaNumero] = useState("");
   const [borradorPersonas, setBorradorPersonas] = useState("");
   const [borradorPiso, setBorradorPiso] = useState<1 | 2 | 3>(1);
@@ -84,6 +88,14 @@ export function MeseroPage() {
       setProductos(await migaoApi.listarProductos());
     } catch {
       /* el buscador de productos simplemente queda vacío */
+    }
+  }
+
+  async function cargarMesas() {
+    try {
+      setMesasLayout(await migaoApi.listarMesas());
+    } catch {
+      /* el plano visual simplemente no aparece — el número a mano sigue funcionando */
     }
   }
 
@@ -149,6 +161,7 @@ export function MeseroPage() {
 
   useEffect(() => {
     cargarProductos();
+    cargarMesas();
     cargarOrdenes();
     revisarNotificaciones();
     const intervalo = setInterval(() => {
@@ -156,7 +169,12 @@ export function MeseroPage() {
       revisarNotificaciones();
       if (ordenSeleccionadaRef.current) cargarDetalle(ordenSeleccionadaRef.current);
     }, POLL_MS);
-    const intervaloProductos = setInterval(cargarProductos, POLL_PRODUCTOS_MS);
+    // Las mesas del plano cambian tan poco como el menú (Root las dibuja una
+    // vez y ya) — se refresca en el mismo ciclo lento que los productos.
+    const intervaloProductos = setInterval(() => {
+      cargarProductos();
+      cargarMesas();
+    }, POLL_PRODUCTOS_MS);
     return () => {
       clearInterval(intervalo);
       clearInterval(intervaloProductos);
@@ -164,7 +182,7 @@ export function MeseroPage() {
   }, []);
 
   useRegistrarRefresco(async () => {
-    await Promise.all([cargarProductos(), cargarOrdenes(), revisarNotificaciones()]);
+    await Promise.all([cargarProductos(), cargarMesas(), cargarOrdenes(), revisarNotificaciones()]);
     if (ordenSeleccionadaRef.current) await cargarDetalle(ordenSeleccionadaRef.current);
   });
 
@@ -180,6 +198,7 @@ export function MeseroPage() {
     setBorradorPersonas("");
     setBorradorPiso(1);
     setBorradorItems([]);
+    setMesaLayoutSeleccionadaId(null);
     setError(null);
     setMensaje(null);
   }
@@ -451,13 +470,29 @@ export function MeseroPage() {
             </div>
           </div>
 
+          <FloorPlanCanvas
+            mesas={combinarMesasConOrdenes(
+              mesasLayout.filter((m) => m.piso === borradorPiso && m.activo),
+              ordenes,
+            )}
+            modo="seleccionar"
+            mesaSeleccionadaId={mesaLayoutSeleccionadaId}
+            onSeleccionar={(mesa) => {
+              setBorradorMesaNumero(mesa.numero);
+              setMesaLayoutSeleccionadaId(mesa.id);
+            }}
+          />
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">Mesa</label>
               <input
                 inputMode="numeric"
                 value={borradorMesaNumero}
-                onChange={(e) => setBorradorMesaNumero(e.target.value)}
+                onChange={(e) => {
+                  setBorradorMesaNumero(e.target.value);
+                  setMesaLayoutSeleccionadaId(null);
+                }}
                 className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-3 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 placeholder="Ej. 7"
               />
@@ -641,6 +676,8 @@ export function MeseroPage() {
         <CambiarMesaModal
           mesaActual={ordenActual?.mesa_numero ?? null}
           pisoActual={ordenActual?.mesa_piso ?? null}
+          mesasLayout={mesasLayout}
+          ordenes={ordenes}
           onCerrar={() => setCambiarMesaAbierto(false)}
           onGuardar={guardarNuevaMesa}
         />

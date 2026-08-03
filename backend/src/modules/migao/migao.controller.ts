@@ -8,10 +8,13 @@ import {
   cerrarOrdenSchema,
   checkItemSchema,
   crearCategoriaProductoSchema,
+  crearMesaSchema,
   crearOrdenSchema,
   crearProductoSchema,
   editarItemSchema,
+  editarMesaSchema,
   editarProductoSchema,
+  posicionMesaSchema,
   reiniciarTodoSchema,
   resetearOrdenesSchema,
 } from "./migao.schema";
@@ -31,6 +34,29 @@ export async function crearCategoriaController(req: Request, res: Response) {
 export async function listarMesasController(_req: Request, res: Response) {
   const mesas = await service.listarMesas();
   return ok(res, mesas);
+}
+
+export async function crearMesaController(req: Request, res: Response) {
+  const data = crearMesaSchema.parse(req.body);
+  const mesa = await service.crearMesa(data);
+  return created(res, mesa);
+}
+
+export async function moverMesaController(req: Request, res: Response) {
+  const data = posicionMesaSchema.parse(req.body);
+  const mesa = await service.moverMesa(Number(req.params.id), data);
+  return ok(res, mesa);
+}
+
+export async function editarMesaController(req: Request, res: Response) {
+  const data = editarMesaSchema.parse(req.body);
+  const mesa = await service.editarMesa(Number(req.params.id), data);
+  return ok(res, mesa);
+}
+
+export async function eliminarMesaController(req: Request, res: Response) {
+  await service.eliminarMesa(Number(req.params.id));
+  return ok(res, { eliminada: true });
 }
 
 export async function listarOrdenesAbiertasController(_req: Request, res: Response) {

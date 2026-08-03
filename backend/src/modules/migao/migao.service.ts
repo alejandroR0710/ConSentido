@@ -11,10 +11,13 @@ import {
   CambiarMesaInput,
   CerrarOrdenInput,
   CheckItemInput,
+  CrearMesaInput,
   CrearOrdenInput,
   CrearProductoInput,
   EditarItemInput,
+  EditarMesaInput,
   EditarProductoInput,
+  PosicionMesaInput,
 } from "./migao.schema";
 
 export async function listarCategorias() {
@@ -27,6 +30,46 @@ export async function crearCategoria(nombre: string) {
 
 export async function listarMesas() {
   return repo.listMesas();
+}
+
+export async function crearMesa(input: CrearMesaInput) {
+  return repo.crearMesaConLayout(input);
+}
+
+export async function moverMesa(id: number, input: PosicionMesaInput) {
+  const actualizada = await repo.actualizarPosicionMesa(id, input);
+  if (!actualizada) throw Errors.notFound("Mesa no encontrada");
+  return actualizada;
+}
+
+export async function editarMesa(id: number, input: EditarMesaInput) {
+  try {
+    const actualizada = await repo.actualizarDetalleMesa(id, input);
+    if (!actualizada) throw Errors.notFound("Mesa no encontrada");
+    return actualizada;
+  } catch (err) {
+    if (err instanceof Error && (err as { code?: string }).code === "23505") {
+      throw Errors.conflict("Ya existe una mesa con ese número en esa área");
+    }
+    throw err;
+  }
+}
+
+/** Borrado real — solo funciona si la mesa nunca fue referenciada por ninguna
+ *  orden (abierta o histórica); si no, usa "Desactivar" (editarMesa con
+ *  activo:false) para ocultarla del plano sin romper el historial. */
+export async function eliminarMesa(id: number) {
+  try {
+    const borrada = await repo.eliminarMesa(id);
+    if (!borrada) throw Errors.notFound("Mesa no encontrada");
+  } catch (err) {
+    if (err instanceof Error && (err as { code?: string }).code === "23503") {
+      throw Errors.conflict(
+        'No se puede eliminar: ya tiene órdenes asociadas. Usa "Desactivar" en su lugar.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function listarOrdenesAbiertas() {

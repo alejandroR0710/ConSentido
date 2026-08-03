@@ -81,6 +81,27 @@ export function FloorPlanCanvas({
     return null;
   }
 
+  // En "seleccionar"/"ver" (Mesero/Caja) se recorta la vista al recuadro que
+  // realmente ocupan las mesas dibujadas, en vez de mostrar siempre el lienzo
+  // completo 0-100 — así en mobile no queda un montón de espacio vacío
+  // alrededor de 2-3 mesas agrupadas en una esquina. El editor sí necesita el
+  // lienzo completo (Root puede querer ubicar una mesa en cualquier parte).
+  const recuadro =
+    modo === "editor"
+      ? null
+      : (() => {
+          const PADDING = 5;
+          const xs = mesasDibujadas.map((m) => Number(m.pos_x));
+          const ys = mesasDibujadas.map((m) => Number(m.pos_y));
+          const xs2 = mesasDibujadas.map((m) => Number(m.pos_x) + Number(m.ancho));
+          const ys2 = mesasDibujadas.map((m) => Number(m.pos_y) + Number(m.alto));
+          const minX = clamp(Math.min(...xs) - PADDING, 0, 100);
+          const minY = clamp(Math.min(...ys) - PADDING, 0, 100);
+          const ancho = clamp(Math.max(...xs2) + PADDING, 0, 100) - minX || 100;
+          const alto = clamp(Math.max(...ys2) + PADDING, 0, 100) - minY || 100;
+          return { minX, minY, ancho, alto, relacion: clamp(ancho / alto, 0.5, 2.5) };
+        })();
+
   const mesaSeleccionada = mesas.find((m) => m.id === mesaSeleccionadaId);
   if (modo === "seleccionar" && colapsado && mesaSeleccionada) {
     return (
@@ -195,10 +216,25 @@ export function FloorPlanCanvas({
     <div className="flex flex-col gap-2">
       <div
         ref={canvasRef}
-        className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-brand-vanilla-dark bg-brand-vanilla/40 dark:border-brand-green-700 dark:bg-brand-green-900/20"
+        className={`relative overflow-hidden rounded-lg border border-brand-vanilla-dark bg-brand-green-50 dark:border-brand-green-700 dark:bg-brand-green-900/60 ${
+          recuadro ? "mx-auto w-full max-w-md" : "w-full aspect-[4/3]"
+        }`}
+        style={recuadro ? { aspectRatio: `${recuadro.relacion} / 1` } : undefined}
       >
         {mesasDibujadas.map((mesa) => {
-          const { posX, posY, ancho, alto } = valorDeMesa(mesa);
+          const base = valorDeMesa(mesa);
+          // Coordenadas siempre en % del lienzo absoluto (0-100); si hay
+          // recuadro (modo "seleccionar"/"ver"), se reexpresan en % de esa
+          // porción recortada para que la vista se ajuste solo al espacio que
+          // ocupan las mesas.
+          const { posX, posY, ancho, alto } = recuadro
+            ? {
+                posX: ((base.posX - recuadro.minX) / recuadro.ancho) * 100,
+                posY: ((base.posY - recuadro.minY) / recuadro.alto) * 100,
+                ancho: (base.ancho / recuadro.ancho) * 100,
+                alto: (base.alto / recuadro.alto) * 100,
+              }
+            : base;
           const ocupada = mesa.ordenes.length > 0;
           const seleccionada = mesaSeleccionadaId === mesa.id;
           const seleccionable = modo === "editor" || modo === "seleccionar" || (modo === "ver" && ocupada);

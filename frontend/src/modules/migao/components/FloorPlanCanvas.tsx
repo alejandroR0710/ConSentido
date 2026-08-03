@@ -18,7 +18,6 @@ interface FloorPlanCanvasProps {
   onMover?: (mesaId: number, posX: number, posY: number) => void;
   onRedimensionar?: (mesaId: number, ancho: number, alto: number) => void;
   onEditarDetalle?: (mesa: MesaConOcupacion) => void;
-  onCrear?: () => void;
 }
 
 const MIN_TAMANO = 4;
@@ -42,7 +41,6 @@ export function FloorPlanCanvas({
   onMover,
   onRedimensionar,
   onEditarDetalle,
-  onCrear,
 }: FloorPlanCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   // Estado local del arrastre/redimensión en curso, para que se sienta fluido
@@ -252,16 +250,6 @@ export function FloorPlanCanvas({
           </p>
         )}
       </div>
-
-      {modo === "editor" && (
-        <button
-          type="button"
-          onClick={onCrear}
-          className="self-start rounded-md border-2 border-brand-green-700 px-3 py-1.5 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
-        >
-          + Nueva mesa
-        </button>
-      )}
 
       {mesaEligiendoCuenta && (
         <Modal titulo={`Mesa ${mesaEligiendoCuenta.numero} — elige la cuenta`} onCerrar={() => setMesaEligiendoCuenta(null)}>

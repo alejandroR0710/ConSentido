@@ -11,10 +11,16 @@ import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
 import { NuevaMesaModal } from "../components/NuevaMesaModal";
 import type { MesaConOcupacion } from "../ocupacionMesas";
 
-// Rectángulo por defecto para una mesa recién creada — Root la arrastra a su
-// lugar y la redimensiona después, directo en el plano.
-const ANCHO_DEFECTO = 15;
-const ALTO_DEFECTO = 12;
+/** Tamaño inicial estimado según cuántas personas caben en la mesa — mientras
+ *  más grande la capacidad, más grande el rectángulo de arranque (Root igual
+ *  puede arrastrarla/redimensionarla después). En % del plano de su área. */
+function estimarTamanoMesa(capacidad: number): { ancho: number; alto: number } {
+  if (capacidad <= 2) return { ancho: 10, alto: 8 };
+  if (capacidad <= 4) return { ancho: 14, alto: 11 };
+  if (capacidad <= 6) return { ancho: 18, alto: 13 };
+  if (capacidad <= 8) return { ancho: 22, alto: 15 };
+  return { ancho: 26, alto: 18 };
+}
 
 /** Editor del plano visual de mesas por área — exclusivo de Root/Super Root
  *  (migao.mesas.administrar). Mesero/Cajero solo ven/usan el plano, nunca lo
@@ -56,14 +62,15 @@ export function EditorMesasPage() {
     // Apila mesas nuevas en diagonal para que no queden todas exactamente
     // superpuestas al crear varias seguidas — Root las reacomoda arrastrando.
     const offset = (mesasDelArea.length % 5) * 8;
+    const { ancho, alto } = estimarTamanoMesa(capacidad);
     await migaoApi.crearMesa({
       numero,
       piso,
       capacidad,
       posX: 5 + offset,
       posY: 5 + offset,
-      ancho: ANCHO_DEFECTO,
-      alto: ALTO_DEFECTO,
+      ancho,
+      alto,
     });
     await cargar();
   }
@@ -114,14 +121,23 @@ export function EditorMesasPage() {
           ))}
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-          <input
-            type="checkbox"
-            checked={mostrarInactivas}
-            onChange={(e) => setMostrarInactivas(e.target.checked)}
-          />
-          Mostrar inactivas
-        </label>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+            <input
+              type="checkbox"
+              checked={mostrarInactivas}
+              onChange={(e) => setMostrarInactivas(e.target.checked)}
+            />
+            Mostrar inactivas
+          </label>
+          <button
+            type="button"
+            onClick={() => setCreandoMesa(true)}
+            className="rounded-md border-2 border-brand-green-700 px-3 py-1.5 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
+          >
+            + Nueva mesa
+          </button>
+        </div>
       </div>
 
       <FloorPlanCanvas
@@ -130,7 +146,6 @@ export function EditorMesasPage() {
         onMover={moverMesa}
         onRedimensionar={redimensionarMesa}
         onEditarDetalle={(mesa) => setMesaEditando(mesa)}
-        onCrear={() => setCreandoMesa(true)}
       />
 
       {creandoMesa && <NuevaMesaModal onCerrar={() => setCreandoMesa(false)} onGuardar={crearMesa} />}

@@ -43,6 +43,8 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_inventario',         'migao.inventario.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_forzado_inventario', 'migao.inventario.eliminar_forzado'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_mesas',          'migao.mesas.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_mesas',  'migao.mesas.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_productos',   'con_sentido.productos.ver'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_producto',  'con_sentido.productos.crear'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'editar_producto', 'con_sentido.productos.editar'),
@@ -92,7 +94,8 @@ WHERE p.codigo IN (
   'migao.ordenes.ver',
   'migao.ordenes.cerrar',
   'migao.ordenes.cancelar',
-  'migao.ordenes.agregar_para_llevar'
+  'migao.ordenes.agregar_para_llevar',
+  'migao.mesas.ver'
 );
 
 -- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo.
@@ -120,7 +123,8 @@ WHERE p.codigo IN (
   'migao.ordenes.editar_item',
   'migao.ordenes.entregar_item',
   'migao.ordenes.cambiar_mesa',
-  'migao.productos.ver'
+  'migao.productos.ver',
+  'migao.mesas.ver'
 );
 
 -- Administrador: crea productos del menú de Migao y crea/edita insumos del

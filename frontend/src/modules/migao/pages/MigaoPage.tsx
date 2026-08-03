@@ -7,13 +7,15 @@ import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta"
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type ItemActivo, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
-import { labelArea } from "../areas";
+import { migaoApi, type ItemActivo, type Mesa, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
+import { AREAS_MESA, labelArea } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
+import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { formatCantidad } from "../format";
+import { combinarMesasConOrdenes } from "../ocupacionMesas";
 
 const POLL_MS = 8000;
 
@@ -34,6 +36,8 @@ export function MigaoPage() {
 
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
+  const [mesasLayout, setMesasLayout] = useState<Mesa[]>([]);
+  const [vistaOrdenes, setVistaOrdenes] = useState<"lista" | "plano">("lista");
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
@@ -110,13 +114,30 @@ export function MigaoPage() {
     }
   }
 
+  async function cargarMesas() {
+    try {
+      setMesasLayout(await migaoApi.listarMesas());
+    } catch {
+      /* el plano visual simplemente no aparece, la vista de lista sigue funcionando */
+    }
+  }
+
   useEffect(() => {
     cargarOrdenes();
+    cargarMesas();
     const intervalo = setInterval(cargarOrdenes, POLL_MS);
-    return () => clearInterval(intervalo);
+    // Las mesas del plano casi no cambian (Root las dibuja una sola vez) — un
+    // ciclo bastante más lento que el de las órdenes es suficiente.
+    const intervaloMesas = setInterval(cargarMesas, POLL_MS * 8);
+    return () => {
+      clearInterval(intervalo);
+      clearInterval(intervaloMesas);
+    };
   }, []);
 
-  useRegistrarRefresco(cargarOrdenes);
+  useRegistrarRefresco(async () => {
+    await Promise.all([cargarOrdenes(), cargarMesas()]);
+  });
 
   function reiniciarDivision() {
     setDividirCuenta(false);
@@ -341,14 +362,49 @@ export function MigaoPage() {
 
       {!mostrarCobro ? (
         <div className="flex flex-col gap-3">
-          <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
-            Órdenes abiertas {ordenes.length > 0 && <span className="text-brand-ink/50">({ordenes.length})</span>}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
+              Órdenes abiertas {ordenes.length > 0 && <span className="text-brand-ink/50">({ordenes.length})</span>}
+            </h2>
+            <div className="flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
+              {(["lista", "plano"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setVistaOrdenes(v)}
+                  className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition-colors ${
+                    vistaOrdenes === v
+                      ? "bg-brand-green-600 text-white"
+                      : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {loading ? (
             <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
               Cargando...
             </p>
+          ) : vistaOrdenes === "plano" ? (
+            <div className="flex flex-col gap-6">
+              {AREAS_MESA.map((area) => (
+                <div key={area.valor} className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+                    <span aria-hidden>{area.icon}</span> {area.label}
+                  </h3>
+                  <FloorPlanCanvas
+                    mesas={combinarMesasConOrdenes(
+                      mesasLayout.filter((m) => m.piso === area.valor && m.activo),
+                      ordenes,
+                    )}
+                    modo="ver"
+                    onSeleccionar={(_mesa, orden) => orden && seleccionarOrden(orden.id)}
+                  />
+                </div>
+              ))}
+            </div>
           ) : ordenes.length === 0 ? (
             <p className="rounded-lg border border-brand-vanilla-dark p-8 text-center text-brand-ink/60 dark:border-brand-green-700">
               No hay órdenes abiertas.

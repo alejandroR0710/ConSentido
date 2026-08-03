@@ -153,6 +153,47 @@ WHERE r.nombre IN ('Super Root', 'Root')
 
 
 -- ========================================================================
+-- SECCIÓN 4: PLANO VISUAL DE MESAS POR ÁREA (Migao)
+-- ========================================================================
+-- ⚠️ NO ejecutar esta sección contra Supabase todavía — se está probando en
+-- la rama feature/plano-mesas contra la base local. Queda preparada aquí
+-- para cuando el usuario decida aplicarla a producción.
+--
+-- Posición/tamaño en % (0-100) del plano de su área, nullable: toda mesa
+-- creada hoy vía el flujo "escribir el número a mano" (getOrCreateMesaPorNumero)
+-- sigue funcionando igual, simplemente no aparece en ningún plano hasta que
+-- Root la dibuje en el nuevo editor. `activo` permite "eliminar" una mesa sin
+-- romper la FK de ordenes.mesa_id cuando ya tiene historial.
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS pos_x  NUMERIC(5,2);
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS pos_y  NUMERIC(5,2);
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS ancho  NUMERIC(5,2);
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS alto   NUMERIC(5,2);
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
+
+-- migao.mesas.ver: ver el plano (Mesero/Cajero, además de Root/Super Root que
+-- ya reciben todos los permisos vía la consulta general de seed.sql).
+-- migao.mesas.administrar: crear/mover/redimensionar/eliminar mesas — solo
+-- Root/Super Root.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_mesas', 'migao.mesas.ver'),
+  ('administrar_mesas', 'migao.mesas.administrar')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE (
+    (r.nombre IN ('Super Root', 'Root') AND p.codigo IN ('migao.mesas.ver', 'migao.mesas.administrar'))
+    OR (r.nombre IN ('Cajero', 'Mesero') AND p.codigo = 'migao.mesas.ver')
+  )
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

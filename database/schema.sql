@@ -544,6 +544,18 @@ CREATE TABLE mesas (
   capacidad INT NOT NULL DEFAULT 4,
   estado    VARCHAR(20) NOT NULL DEFAULT 'libre'
             CHECK (estado IN ('libre','ocupada','reservada','en_limpieza')),
+  -- Ubicación/tamaño en el plano visual del área (piso), en % (0-100) del
+  -- lienzo — responsive sin depender de un tamaño de pantalla fijo. NULL =
+  -- la mesa todavía no se dibujó en el editor (sigue existiendo y se puede
+  -- seguir usando por número a mano, simplemente no aparece en ningún plano).
+  pos_x     NUMERIC(5,2),
+  pos_y     NUMERIC(5,2),
+  ancho     NUMERIC(5,2),
+  alto      NUMERIC(5,2),
+  -- Soft-hide: ordenes.mesa_id no tiene ON DELETE, así que una mesa referenciada
+  -- por cualquier orden (abierta o histórica) no se puede borrar de verdad —
+  -- "eliminar" desactiva en ese caso en vez de fallar con un error de FK.
+  activo    BOOLEAN NOT NULL DEFAULT true,
   UNIQUE (zona_id, numero, piso)
 );
 -- Permite "get or create" por número (y piso) sin depender de una zona: el mesero

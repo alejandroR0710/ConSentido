@@ -147,9 +147,53 @@ export type ReiniciarTodoInput = z.infer<typeof reiniciarTodoSchema>;
 // cambiaron de mesa). La mesa se resuelve/crea por número, igual que al crear la orden.
 export const cambiarMesaSchema = z.object({
   mesaNumero: z.string().trim().min(1).max(10),
-  piso: z.number().int().min(1).max(2).default(1),
+  // Antes tope en 2: no dejaba cambiar la mesa de una orden a Jardín (piso 3),
+  // aunque crearOrdenSchema sí lo permitía desde el inicio.
+  piso: z.number().int().min(1).max(3).default(1),
 });
 export type CambiarMesaInput = z.infer<typeof cambiarMesaSchema>;
+
+// Plano visual de mesas por área (editor, exclusivo de Root/Super Root vía
+// migao.mesas.administrar). Posición/tamaño en % (0-100) del lienzo de esa
+// área, para que el layout sea responsive sin depender de un tamaño de
+// pantalla fijo.
+const coordenadaMesaSchema = z.number().min(0).max(100);
+const tamanoMesaSchema = z.number().min(4).max(100);
+
+export const crearMesaSchema = z
+  .object({
+    numero: z.string().trim().min(1).max(10),
+    piso: z.number().int().min(1).max(3),
+    capacidad: z.number().int().positive().max(50).default(4),
+    posX: coordenadaMesaSchema,
+    posY: coordenadaMesaSchema,
+    ancho: tamanoMesaSchema,
+    alto: tamanoMesaSchema,
+  })
+  .refine((d) => d.posX + d.ancho <= 100.01, { message: "La mesa se sale del plano horizontalmente", path: ["ancho"] })
+  .refine((d) => d.posY + d.alto <= 100.01, { message: "La mesa se sale del plano verticalmente", path: ["alto"] });
+export type CrearMesaInput = z.infer<typeof crearMesaSchema>;
+
+export const posicionMesaSchema = z
+  .object({
+    posX: coordenadaMesaSchema,
+    posY: coordenadaMesaSchema,
+    ancho: tamanoMesaSchema,
+    alto: tamanoMesaSchema,
+  })
+  .refine((d) => d.posX + d.ancho <= 100.01, { message: "La mesa se sale del plano horizontalmente", path: ["ancho"] })
+  .refine((d) => d.posY + d.alto <= 100.01, { message: "La mesa se sale del plano verticalmente", path: ["alto"] });
+export type PosicionMesaInput = z.infer<typeof posicionMesaSchema>;
+
+// Renombrar/cambiar capacidad o área, y activar/desactivar ("eliminar" suave
+// cuando ya tiene historial) — reactivar es el mismo endpoint con activo:true.
+export const editarMesaSchema = z.object({
+  numero: z.string().trim().min(1).max(10).optional(),
+  piso: z.number().int().min(1).max(3).optional(),
+  capacidad: z.number().int().positive().max(50).optional(),
+  activo: z.boolean().optional(),
+});
+export type EditarMesaInput = z.infer<typeof editarMesaSchema>;
 
 // Cocina marca/desmarca el check de un producto individual mientras la orden
 // está en preparación. No cambia el estado del ítem, solo el check.

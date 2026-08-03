@@ -6,11 +6,31 @@ export interface OrdenResumen {
   created_at: string;
   comensal_numero: number;
   numero_personas: number | null;
+  mesa_id: number | null;
   mesa_numero: string | null;
   mesa_piso: number | null;
   cliente_nombre: string | null;
   mesero_nombre: string | null;
   total: string;
+}
+
+/** Mesa del plano visual — ubicación/tamaño en % (0-100) del lienzo de su
+ *  área (piso). `pos_x`/`pos_y`/`ancho`/`alto` son null si todavía no se
+ *  "dibujó" en el editor (creada solo por número, como antes). Postgres
+ *  NUMERIC vuelve como texto (igual que `precio` en Producto) — hay que
+ *  parsearlo con Number(...) antes de usarlo en cualquier cuenta. */
+export interface Mesa {
+  id: number;
+  zona_id: number | null;
+  numero: string;
+  piso: number;
+  capacidad: number;
+  estado: string;
+  pos_x: string | null;
+  pos_y: string | null;
+  ancho: string | null;
+  alto: string | null;
+  activo: boolean;
 }
 
 export interface OrdenHistorialResumen extends OrdenResumen {
@@ -396,4 +416,16 @@ export const migaoApi = {
     }),
   listarMovimientosInventario: (productoId: string) =>
     apiFetch<InventarioMovimiento[]>(`/migao/inventario/productos/${productoId}/movimientos`),
+
+  // Plano visual de mesas por área. Ver/seleccionar (Mesero, Cajero) solo usa
+  // listarMesas(); crear/mover/editar/eliminar es exclusivo del editor
+  // (Root/Super Root, migao.mesas.administrar).
+  listarMesas: () => apiFetch<Mesa[]>("/migao/mesas"),
+  crearMesa: (input: { numero: string; piso: number; capacidad: number; posX: number; posY: number; ancho: number; alto: number }) =>
+    apiFetch<Mesa>("/migao/mesas", { method: "POST", body: input }),
+  moverMesa: (id: number, input: { posX: number; posY: number; ancho: number; alto: number }) =>
+    apiFetch<Mesa>(`/migao/mesas/${id}/posicion`, { method: "PATCH", body: input }),
+  editarMesa: (id: number, input: { numero?: string; piso?: number; capacidad?: number; activo?: boolean }) =>
+    apiFetch<Mesa>(`/migao/mesas/${id}`, { method: "PATCH", body: input }),
+  eliminarMesa: (id: number) => apiFetch<{ eliminada: boolean }>(`/migao/mesas/${id}`, { method: "DELETE" }),
 };

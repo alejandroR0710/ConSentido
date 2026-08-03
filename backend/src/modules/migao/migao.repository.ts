@@ -5,9 +5,71 @@ type Executor = Pool | PoolClient;
 
 export async function listMesas() {
   const result = await pool.query(
-    `SELECT id, zona_id, numero, piso, capacidad, estado FROM mesas ORDER BY piso ASC, numero ASC`,
+    `SELECT id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo
+       FROM mesas ORDER BY piso ASC, numero ASC`,
   );
   return result.rows;
+}
+
+/** Crea o reubica una mesa en el plano visual — mismo índice único que ya usa
+ *  `getOrCreateMesaPorNumero` (numero+piso, sin zona), así que "dibujar" un
+ *  número que un mesero ya creó a mano solo le agrega las coordenadas en vez
+ *  de chocar con la restricción única. */
+export async function crearMesaConLayout(params: {
+  numero: string;
+  piso: number;
+  capacidad: number;
+  posX: number;
+  posY: number;
+  ancho: number;
+  alto: number;
+}) {
+  const result = await pool.query(
+    `INSERT INTO mesas (numero, piso, capacidad, pos_x, pos_y, ancho, alto, activo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+     ON CONFLICT (numero, piso) WHERE zona_id IS NULL
+     DO UPDATE SET capacidad = EXCLUDED.capacidad, pos_x = EXCLUDED.pos_x, pos_y = EXCLUDED.pos_y,
+                   ancho = EXCLUDED.ancho, alto = EXCLUDED.alto, activo = true
+     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
+    [params.numero, params.piso, params.capacidad, params.posX, params.posY, params.ancho, params.alto],
+  );
+  return result.rows[0];
+}
+
+export async function actualizarPosicionMesa(
+  id: number,
+  params: { posX: number; posY: number; ancho: number; alto: number },
+) {
+  const result = await pool.query(
+    `UPDATE mesas SET pos_x = $2, pos_y = $3, ancho = $4, alto = $5 WHERE id = $1
+     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
+    [id, params.posX, params.posY, params.ancho, params.alto],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+export async function actualizarDetalleMesa(
+  id: number,
+  params: { numero?: string; piso?: number; capacidad?: number; activo?: boolean },
+) {
+  const result = await pool.query(
+    `UPDATE mesas
+        SET numero = COALESCE($2, numero),
+            piso = COALESCE($3, piso),
+            capacidad = COALESCE($4, capacidad),
+            activo = COALESCE($5, activo)
+      WHERE id = $1
+      RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
+    [id, params.numero ?? null, params.piso ?? null, params.capacidad ?? null, params.activo ?? null],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+/** Borrado real — falla con FK (23503) si alguna orden (abierta o histórica)
+ *  ya referencia esta mesa; el servicio traduce eso a "usa Desactivar". */
+export async function eliminarMesa(id: number) {
+  const result = await pool.query(`DELETE FROM mesas WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
 }
 
 /** Get-or-create por número+piso: el mesero solo escribe el número (y opcionalmente
@@ -28,7 +90,7 @@ export async function getOrCreateMesaPorNumero(numero: string, piso = 1) {
 
 export async function listOrdenesAbiertas() {
   const result = await pool.query(
-    `SELECT o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas,
+    `SELECT o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
@@ -38,7 +100,7 @@ export async function listOrdenesAbiertas() {
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
       WHERE o.estado NOT IN ('cerrada', 'cancelada')
-      GROUP BY o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, m.numero, m.piso, c.nombre, u.nombre
+      GROUP BY o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id, m.numero, m.piso, c.nombre, u.nombre
       ORDER BY o.created_at ASC`,
   );
   return result.rows;

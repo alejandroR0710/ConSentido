@@ -404,6 +404,54 @@ export async function insertEgreso(params: {
   return result.rows[0];
 }
 
+/** Egreso contra el ACUMULADO TOTAL histórico (no un turno ni un día) —
+ *  vive aparte de movimientos_caja, nunca exige turno abierto. */
+export async function insertEgresoAcumulado(params: {
+  categoriaGastoId: number;
+  proveedorId?: string;
+  monto: number;
+  metodoPago: string;
+  motivo: string;
+  usuarioId: string;
+}) {
+  const result = await pool.query(
+    `INSERT INTO caja_egresos_acumulado (categoria_gasto_id, proveedor_id, monto, metodo_pago, motivo, usuario_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [params.categoriaGastoId, params.proveedorId || null, params.monto, params.metodoPago, params.motivo, params.usuarioId],
+  );
+  return result.rows[0];
+}
+
+/** Ingresos y egresos brutos de TODA la vida de movimientos_caja (sin
+ *  filtrar por turno ni fecha, desde la primera venta/movimiento que exista)
+ *  — la base del "acumulado total histórico"; el service resta encima el
+ *  SUM de caja_egresos_acumulado por método para el neto. */
+export async function getAcumuladoMovimientosCaja() {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'efectivo'), 0) AS ingresos_efectivo,
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso' AND metodo_pago = 'efectivo'), 0) AS egresos_efectivo,
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'banco'), 0) AS ingresos_banco,
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso' AND metodo_pago = 'banco'), 0) AS egresos_banco
+     FROM movimientos_caja`,
+  );
+  return result.rows[0];
+}
+
+export async function listEgresosAcumulado() {
+  const result = await pool.query(
+    `SELECT e.id, e.monto, e.metodo_pago, e.motivo, e.created_at,
+            cg.nombre AS categoria_nombre, p.nombre AS proveedor_nombre, u.nombre AS usuario_nombre
+       FROM caja_egresos_acumulado e
+       JOIN categorias_gasto cg ON cg.id = e.categoria_gasto_id
+       LEFT JOIN proveedores p ON p.id = e.proveedor_id
+       LEFT JOIN usuarios u ON u.id = e.usuario_id
+      ORDER BY e.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
+}
+
 /** Alta retroactiva de un ingreso/egreso en un día ya cerrado — a diferencia
  *  de insertIngreso/insertEgreso, fija `created_at` explícito (mediodía Bogotá
  *  de ese día) en vez de `now()`, para que caiga en el día correcto en todas
@@ -413,6 +461,7 @@ export async function insertMovimientoHistorico(params: {
   tipo: "ingreso" | "egreso";
   moduloOrigenSlug?: string;
   categoriaGastoId?: number;
+  proveedorId?: string;
   monto: number;
   metodoPago: string;
   motivo?: string;
@@ -421,14 +470,15 @@ export async function insertMovimientoHistorico(params: {
 }) {
   const result = await pool.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, created_at)
-     VALUES ($1, $2, (SELECT id FROM modulos WHERE slug = $3), $4, $5, $6, $7, $8, $9)
+       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, proveedor_id, monto, metodo_pago, motivo, usuario_id, created_at)
+     VALUES ($1, $2, (SELECT id FROM modulos WHERE slug = $3), $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       params.turnoId,
       params.tipo,
       params.moduloOrigenSlug ?? null,
       params.categoriaGastoId ?? null,
+      params.proveedorId ?? null,
       params.monto,
       params.metodoPago,
       params.motivo ?? null,
@@ -451,6 +501,7 @@ export async function actualizarMovimientoHistorico(
     motivo?: string;
     moduloOrigenSlug?: string;
     categoriaGastoId?: number;
+    proveedorId?: string;
   },
 ) {
   const result = await pool.query(
@@ -459,7 +510,8 @@ export async function actualizarMovimientoHistorico(
             metodo_pago = COALESCE($3, metodo_pago),
             motivo = COALESCE($4, motivo),
             modulo_origen_id = COALESCE((SELECT id FROM modulos WHERE slug = $5), modulo_origen_id),
-            categoria_gasto_id = COALESCE($6, categoria_gasto_id)
+            categoria_gasto_id = COALESCE($6, categoria_gasto_id),
+            proveedor_id = COALESCE($7, proveedor_id)
       WHERE id = $1
       RETURNING *`,
     [
@@ -469,6 +521,7 @@ export async function actualizarMovimientoHistorico(
       cambios.motivo ?? null,
       cambios.moduloOrigenSlug ?? null,
       cambios.categoriaGastoId ?? null,
+      cambios.proveedorId ?? null,
     ],
   );
   return result.rows[0];

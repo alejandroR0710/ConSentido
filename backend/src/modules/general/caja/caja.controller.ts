@@ -12,6 +12,7 @@ import {
   editarMovimientoHistoricoSchema,
   fechaParamSchema,
   historialCajaSchema,
+  registrarEgresoAcumuladoSchema,
   registrarEgresoSchema,
   registrarIngresoSchema,
   resetearCajaSchema,
@@ -51,6 +52,17 @@ export async function registrarEgresoController(req: Request, res: Response) {
   const data = registrarEgresoSchema.parse(req.body);
   const movimientos = await service.registrarEgreso(data, req.auth!.usuarioId);
   return created(res, movimientos);
+}
+
+export async function registrarEgresoAcumuladoController(req: Request, res: Response) {
+  const data = registrarEgresoAcumuladoSchema.parse(req.body);
+  const egreso = await service.registrarEgresoAcumulado(data, req.auth!.usuarioId);
+  return created(res, egreso);
+}
+
+export async function obtenerAcumuladoTotalController(_req: Request, res: Response) {
+  const acumulado = await service.obtenerAcumuladoTotal();
+  return ok(res, acumulado);
 }
 
 export async function listarCategoriasGastoController(_req: Request, res: Response) {

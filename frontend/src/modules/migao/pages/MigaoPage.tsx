@@ -48,6 +48,15 @@ export function MigaoPage() {
   // % de descuento sobre el total — solo aplica al cobro simple, no a cuenta
   // dividida (ver migao.schema.ts::cerrarOrdenSchema).
   const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(0);
+  // Propina opcional (5%/10%/valor voluntario) sobre el total de la cuenta —
+  // a diferencia de descuento, SÍ aplica también a cuenta dividida (se
+  // reparte entre las personas solo en pantalla, ver totalPropinaPorParte).
+  // 0 = sin propina, null = "otro valor" (propinaMontoCustom).
+  const [propinaPorcentaje, setPropinaPorcentaje] = useState<0 | 5 | 10 | null>(0);
+  const [propinaMontoCustom, setPropinaMontoCustom] = useState(0);
+  // En qué método se recibió la propina — determina de qué "pendiente por
+  // repartir" descuenta (ver HistorialPropinasPage, reparto por separado).
+  const [propinaMetodoPago, setPropinaMetodoPago] = useState<"efectivo" | "banco">("efectivo");
   // Cuánto dijo el cliente que entregaba en efectivo — solo para calcular la
   // vuelta en pantalla, no se envía al backend (ver CalculadoraVuelta).
   const [montoRecibido, setMontoRecibido] = useState(0);
@@ -155,6 +164,9 @@ export function MigaoPage() {
     setPago({ metodoPago: "efectivo" });
     setMontoRecibido(0);
     setDescuentoPorcentaje(0);
+    setPropinaPorcentaje(0);
+    setPropinaMontoCustom(0);
+    setPropinaMetodoPago("efectivo");
     setEsAdministrativo(false);
     reiniciarDivision();
     try {
@@ -186,6 +198,11 @@ export function MigaoPage() {
   // El descuento se aplica ANTES de elegir método de pago: el selector y la
   // calculadora de vuelta siempre trabajan contra el total ya descontado.
   const totalConDescuento = detalle ? detalle.total * (1 - descuentoPorcentaje / 100) : 0;
+  // Propina: un solo valor sobre el total de la cuenta (ya con descuento
+  // aplicado), sin importar si se divide o no — nunca entra a la validación
+  // de mixto ni al total que ve Caja General, es dinero aparte del mesero.
+  const propinaMonto =
+    propinaPorcentaje === 0 ? 0 : propinaPorcentaje === null ? propinaMontoCustom : totalConDescuento * (propinaPorcentaje / 100);
 
   const pagoMixtoInvalido =
     !esAdministrativo &&
@@ -203,6 +220,7 @@ export function MigaoPage() {
         ordenSeleccionadaId,
         esAdministrativo ? { metodoPago: "administrativo" } : pago,
         descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+        propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
       setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}`);
       setDetalle(null);
@@ -322,7 +340,11 @@ export function MigaoPage() {
     setError(null);
     setMensaje(null);
     try {
-      const resultado = await migaoApi.cerrarOrdenDividida(ordenSeleccionadaId, partes);
+      const resultado = await migaoApi.cerrarOrdenDividida(
+        ordenSeleccionadaId,
+        partes,
+        propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
+      );
       setMensaje(`Orden cobrada y cerrada (cuenta dividida en ${numPartes}). Total: ${formatMoney(resultado.total)}`);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
@@ -344,12 +366,20 @@ export function MigaoPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Caja Migao</h1>
           {puedeAdministrativo && !mostrarCobro && (
-            <Link
-              to="/migao/historial"
-              className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-            >
-              🧾 Historial
-            </Link>
+            <>
+              <Link
+                to="/migao/historial"
+                className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+              >
+                🧾 Historial
+              </Link>
+              <Link
+                to="/migao/propinas"
+                className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+              >
+                💵 Propinas
+              </Link>
+            </>
           )}
         </div>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
@@ -529,6 +559,22 @@ export function MigaoPage() {
                     {formatMoney(totalConDescuento)}
                   </span>
                 </div>
+                {propinaMonto > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-sm text-brand-green-700 dark:text-brand-vanilla">
+                      <span>+ Propina{propinaPorcentaje ? ` (${propinaPorcentaje}%)` : ""}</span>
+                      <span className="font-semibold">{formatMoney(propinaMonto)}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-brand-green-600/30 pt-2 dark:border-brand-vanilla/30">
+                      <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
+                        Total a cobrar
+                      </span>
+                      <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+                        {formatMoney(totalConDescuento + propinaMonto)}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {!dividirCuenta && (
@@ -546,6 +592,73 @@ export function MigaoPage() {
                   />
                 </div>
               )}
+
+              <div className="flex flex-col gap-2">
+                <span className="text-sm text-brand-ink dark:text-brand-vanilla">¿Agregar propina (servicio)?</span>
+                <div className="flex flex-wrap gap-2">
+                  {([0, 5, 10] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPropinaPorcentaje(p)}
+                      className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
+                        propinaPorcentaje === p
+                          ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                          : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                      }`}
+                    >
+                      {p === 0 ? "Sin propina" : `${p}%`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setPropinaPorcentaje(null)}
+                    className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
+                      propinaPorcentaje === null
+                        ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                        : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                    }`}
+                  >
+                    Otro valor
+                  </button>
+                </div>
+                {propinaPorcentaje === null && (
+                  <input
+                    type="number"
+                    min={0}
+                    step="100"
+                    autoFocus
+                    value={propinaMontoCustom || ""}
+                    onChange={(e) => setPropinaMontoCustom(Math.max(0, Number(e.target.value)))}
+                    placeholder="Valor de la propina"
+                    className="w-40 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                  />
+                )}
+                {dividirCuenta && propinaMonto > 0 && (
+                  <p className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                    ≈ {formatMoney(propinaMonto / numPartes)} de propina por persona
+                  </p>
+                )}
+                {propinaMonto > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Propina pagada en:</span>
+                    {(["efectivo", "banco"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPropinaMetodoPago(m)}
+                        className={`rounded-md border-2 px-2 py-1 text-xs font-medium capitalize ${
+                          propinaMetodoPago === m
+                            ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                            : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
                 <input
@@ -589,7 +702,7 @@ export function MigaoPage() {
 
                       {pago.metodoPago !== "banco" && (
                         <CalculadoraVuelta
-                          aPagar={montoEfectivoRequerido(pago, totalConDescuento)}
+                          aPagar={montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto}
                           recibido={montoRecibido}
                           onChange={setMontoRecibido}
                         />
@@ -671,7 +784,17 @@ export function MigaoPage() {
                             Parte {idx + 1}
                           </span>
                           <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-                            {formatMoney(subtotalParte(idx))}
+                            {propinaMonto > 0 ? (
+                              <>
+                                {formatMoney(subtotalParte(idx))}
+                                <span className="ml-1 font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                                  + {formatMoney(propinaMonto / numPartes)} propina =
+                                </span>{" "}
+                                {formatMoney(subtotalParte(idx) + propinaMonto / numPartes)}
+                              </>
+                            ) : (
+                              formatMoney(subtotalParte(idx))
+                            )}
                           </span>
                         </div>
                         <SelectorMetodoPago
@@ -687,7 +810,7 @@ export function MigaoPage() {
                         />
                         {pagosPartes[idx].metodoPago !== "banco" && (
                           <CalculadoraVuelta
-                            aPagar={montoEfectivoRequerido(pagosPartes[idx], subtotalParte(idx))}
+                            aPagar={montoEfectivoRequerido(pagosPartes[idx], subtotalParte(idx)) + propinaMonto / numPartes}
                             recibido={montosRecibidosPartes[idx] ?? 0}
                             onChange={(valor) =>
                               setMontosRecibidosPartes((actual) => {

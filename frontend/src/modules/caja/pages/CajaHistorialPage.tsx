@@ -9,17 +9,20 @@ import { Modal } from "../../../shared/components/Modal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
   cajaApi,
+  type AcumuladoTotal,
   type CategoriaGasto,
   type DiaHistorialCaja,
   type EdicionHistorialCaja,
   type MovimientoCaja,
   type TurnoCaja,
 } from "../api";
+import { analyticsApi, type AnalyticsGeneral } from "../../general/api";
 import { AgregarMovimientoHistoricoModal } from "../components/AgregarMovimientoHistoricoModal";
 import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
+import { EgresoAcumuladoModal } from "../components/EgresoAcumuladoModal";
 import { LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
@@ -191,6 +194,21 @@ export function CajaHistorialPage() {
   const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoCaja | null>(null);
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
 
+  // Acumulado histórico total (desde la primera venta) — nunca un contador
+  // guardado, siempre recalculado en vivo (ver caja.service.ts::obtenerAcumuladoTotal).
+  const [acumulado, setAcumulado] = useState<AcumuladoTotal | null>(null);
+  const [egresoAcumuladoAbierto, setEgresoAcumuladoAbierto] = useState(false);
+  const [verEgresosAcumulado, setVerEgresosAcumulado] = useState(false);
+
+  // Resumen totalizado (ingresos/egresos + desglose por área) de un rango de
+  // fechas elegido a mano — reusa el mismo endpoint de analíticas generales
+  // que ya usa el Dashboard (analyticsApi.obtenerGeneral).
+  const [desdeRango, setDesdeRango] = useState(fechaISO(inicioDeSemana(new Date())));
+  const [hastaRango, setHastaRango] = useState(fechaISO(new Date()));
+  const [resumenRango, setResumenRango] = useState<AnalyticsGeneral | null>(null);
+  const [cargandoRango, setCargandoRango] = useState(false);
+  const [errorRango, setErrorRango] = useState<string | null>(null);
+
   // No pone loading=true en cada llamada (solo el estado inicial ya lo es):
   // así el sondeo de fondo actualiza los datos sin ocultar la pantalla con
   // "Cargando..." cada 15s — solo se ve ese mensaje en la carga inicial.
@@ -205,7 +223,17 @@ export function CajaHistorialPage() {
     }
   }
 
-  useRegistrarRefresco(cargarHistorial);
+  async function cargarAcumulado() {
+    try {
+      setAcumulado(await cajaApi.obtenerAcumuladoTotal());
+    } catch {
+      /* el cuadro de acumulado simplemente no se actualiza */
+    }
+  }
+
+  useRegistrarRefresco(async () => {
+    await Promise.all([cargarHistorial(), cargarAcumulado()]);
+  });
 
   useEffect(() => {
     cargarHistorial();
@@ -216,7 +244,21 @@ export function CajaHistorialPage() {
 
   useEffect(() => {
     cajaApi.listarCategoriasGasto().then(setCategorias).catch(() => {});
+    cargarAcumulado();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function consultarRango() {
+    setCargandoRango(true);
+    setErrorRango(null);
+    try {
+      setResumenRango(await analyticsApi.obtenerGeneral(desdeRango, hastaRango));
+    } catch (err) {
+      setErrorRango(err instanceof ApiError ? err.message : "No se pudo cargar el resumen del rango");
+    } finally {
+      setCargandoRango(false);
+    }
+  }
 
   function cargarEdicionesDelDia(fecha: string) {
     cajaApi
@@ -339,10 +381,150 @@ export function CajaHistorialPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
 
+      <div className="rounded-lg border-2 border-brand-green-600 bg-brand-green-50 p-4 dark:border-brand-green-500 dark:bg-brand-green-700/20">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
+              Acumulado histórico total (desde la primera venta)
+            </div>
+            <div className="mt-1 text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+              {acumulado ? formatMoney(acumulado.efectivo + acumulado.banco) : "…"}
+            </div>
+            <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Efectivo {acumulado ? formatMoney(acumulado.efectivo) : "…"} · Banco{" "}
+              {acumulado ? formatMoney(acumulado.banco) : "…"}
+            </div>
+            {acumulado && (
+              <div className="mt-2 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                Ingresos {formatMoney(acumulado.ingresosEfectivo + acumulado.ingresosBanco)} (Efectivo{" "}
+                {formatMoney(acumulado.ingresosEfectivo)} · Banco {formatMoney(acumulado.ingresosBanco)}) · Egresos{" "}
+                {formatMoney(acumulado.egresosEfectivo + acumulado.egresosBanco)} (Efectivo{" "}
+                {formatMoney(acumulado.egresosEfectivo)} · Banco {formatMoney(acumulado.egresosBanco)})
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setEgresoAcumuladoAbierto(true)}
+            className="shrink-0 rounded-md bg-brand-green-700 px-3 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+          >
+            − Egreso del acumulado
+          </button>
+        </div>
+
+        {acumulado && acumulado.egresos.length > 0 && (
+          <div className="mt-3 border-t border-brand-green-600/30 pt-2 dark:border-brand-vanilla/30">
+            <button
+              onClick={() => setVerEgresosAcumulado((v) => !v)}
+              className="text-xs font-medium text-brand-green-700 underline dark:text-brand-vanilla"
+            >
+              {verEgresosAcumulado ? "Ocultar" : "Ver"} egresos del acumulado ({acumulado.egresos.length})
+            </button>
+            {verEgresosAcumulado && (
+              <ul className="mt-2 flex flex-col gap-1 text-xs text-brand-ink dark:text-brand-vanilla">
+                {acumulado.egresos.map((e) => (
+                  <li key={e.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {new Date(e.created_at).toLocaleDateString("es")} · {e.categoria_nombre}
+                      {e.proveedor_nombre && ` · ${e.proveedor_nombre}`} · {e.motivo}
+                      {e.usuario_nombre && (
+                        <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> ({e.usuario_nombre})</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-semibold capitalize">
+                      {e.metodo_pago} {formatMoney(e.monto)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <ResumenCard titulo="Hoy" totales={totalHoy} />
         <ResumenCard titulo="Esta semana" totales={totalSemana} />
         <ResumenCard titulo="Este mes" totales={totalMes} />
+      </div>
+
+      <div className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
+        <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">
+          Resumen de un rango de fechas
+        </h2>
+        <div className="mb-3 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium">Desde</label>
+            <input
+              type="date"
+              value={desdeRango}
+              onChange={(e) => setDesdeRango(e.target.value)}
+              className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Hasta</label>
+            <input
+              type="date"
+              value={hastaRango}
+              onChange={(e) => setHastaRango(e.target.value)}
+              className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+          <button
+            onClick={consultarRango}
+            disabled={cargandoRango}
+            className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {cargandoRango ? "Consultando..." : "Ver resumen"}
+          </button>
+        </div>
+
+        {errorRango && <p className="mb-3 text-sm text-red-600">{errorRango}</p>}
+
+        {resumenRango && (
+          <>
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <ResumenCard
+                titulo="Rango seleccionado"
+                totales={{
+                  ingresos: resumenRango.resumenGeneral.ingresos_totales,
+                  egresos: resumenRango.resumenGeneral.egresos_totales,
+                  neto: resumenRango.resumenGeneral.saldo_neto,
+                }}
+              />
+            </div>
+
+            <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">Por área</h3>
+            {resumenRango.porModulo.length === 0 ? (
+              <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                Sin movimientos en este rango.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+                    <tr>
+                      <th className="px-3 py-2">Área</th>
+                      <th className="px-3 py-2 text-right">Ingresos</th>
+                      <th className="px-3 py-2 text-right">Egresos</th>
+                      <th className="px-3 py-2 text-right">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumenRango.porModulo.map((m) => (
+                      <tr key={m.modulo_id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
+                        <td className="px-3 py-2">{m.modulo_nombre}</td>
+                        <td className="px-3 py-2 text-right">{formatMoney(m.ingresos)}</td>
+                        <td className="px-3 py-2 text-right">{formatMoney(m.egresos)}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatMoney(m.saldo_neto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -631,6 +813,14 @@ export function CajaHistorialPage() {
             setDiaSeleccionado(null);
             await cargarHistorial();
           }}
+        />
+      )}
+
+      {egresoAcumuladoAbierto && (
+        <EgresoAcumuladoModal
+          categorias={categorias}
+          onCerrar={() => setEgresoAcumuladoAbierto(false)}
+          onRegistrado={cargarAcumulado}
         />
       )}
     </div>

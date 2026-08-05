@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { cajaApi, type CategoriaGasto, type MetodoPago } from "../api";
+import { cajaApi, type CategoriaGasto, type MetodoPago, type Proveedor } from "../api";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 const FRASE_CONFIRMACION = "AJUSTAR HISTORIAL";
@@ -29,6 +29,8 @@ export function AgregarMovimientoHistoricoModal({
   const [tipo, setTipo] = useState<"ingreso" | "egreso">("egreso");
   const [moduloOrigenSlug, setModuloOrigenSlug] = useState(MODULOS_ORIGEN[0].value);
   const [categoriaId, setCategoriaId] = useState<number | "">("");
+  const [proveedorId, setProveedorId] = useState<string>("");
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [monto, setMonto] = useState(0);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
   const [motivo, setMotivo] = useState("");
@@ -36,6 +38,15 @@ export function AgregarMovimientoHistoricoModal({
   const [frase, setFrase] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    cajaApi
+      .listarProveedores()
+      .then(setProveedores)
+      .catch(() => {
+        /* sin proveedores disponibles, el campo es opcional */
+      });
+  }, []);
 
   const puedeGuardar =
     monto > 0 &&
@@ -63,6 +74,7 @@ export function AgregarMovimientoHistoricoModal({
           : {
               tipo: "egreso",
               categoriaGastoId: Number(categoriaId),
+              proveedorId: proveedorId || undefined,
               monto,
               metodoPago,
               motivo: motivo.trim(),
@@ -142,6 +154,24 @@ export function AgregarMovimientoHistoricoModal({
               </option>
             ))}
           </select>
+
+          {proveedores.length > 0 && (
+            <>
+              <label className="mb-1 block text-xs font-medium">Proveedor (opcional)</label>
+              <select
+                value={proveedorId}
+                onChange={(e) => setProveedorId(e.target.value)}
+                className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              >
+                <option value="">Sin proveedor</option>
+                {proveedores.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </>
       )}
 

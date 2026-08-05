@@ -41,12 +41,14 @@ import {
   listarProductosAdminController,
   listarProductosController,
   listarProductosParaLlevarController,
+  listarPropinasController,
   marcarCheckItemController,
   marcarOrdenListaController,
   moverMesaController,
   obtenerDetalleOrdenController,
   obtenerResumenDiarioIngresosController,
   reiniciarTodoController,
+  repartirPropinasController,
   resetearOrdenesController,
   subirImagenProductoController,
 } from "./migao.controller";
@@ -136,6 +138,16 @@ migaoRouter.get(
   "/ordenes/historial-administrativo",
   requirePermission("migao.ordenes.pago_administrativo"),
   asyncHandler(listarHistorialAdministrativoController),
+);
+// Historial separado de propinas — dinero del mesero/personal, exclusivo de
+// Root/Super Root.
+migaoRouter.get("/propinas", requirePermission("migao.propinas.ver"), asyncHandler(listarPropinasController));
+// Repartir (liquidar) las propinas pendientes de un método — mismo permiso
+// que ver el historial, ya que esta pantalla ya es exclusiva de Root/Super Root.
+migaoRouter.post(
+  "/propinas/repartir",
+  requirePermission("migao.propinas.ver"),
+  asyncHandler(repartirPropinasController),
 );
 // Subtotal por día y método de pago (efectivo/banco), para agrupar el
 // historial de órdenes por día — mismo permiso que ver el historial.

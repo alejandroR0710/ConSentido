@@ -708,6 +708,86 @@ export async function crearPago(
   return result.rows[0];
 }
 
+/** Propina opcional al cobrar — dinero del mesero/personal, nunca toca
+ *  movimientos_caja/turnos_caja (ver comentario en schema.sql). */
+export async function crearPropina(
+  client: PoolClient,
+  params: {
+    ordenId: string;
+    ventaId: string;
+    meseroId: string | null;
+    usuarioId: string;
+    monto: number;
+    porcentaje: number | null;
+    metodoPago: "efectivo" | "banco";
+  },
+) {
+  const result = await client.query(
+    `INSERT INTO migao_propinas (orden_id, venta_id, mesero_id, usuario_id, monto, porcentaje, metodo_pago)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [
+      params.ordenId,
+      params.ventaId,
+      params.meseroId,
+      params.usuarioId,
+      params.monto,
+      params.porcentaje,
+      params.metodoPago,
+    ],
+  );
+  return result.rows[0];
+}
+
+export async function listPropinas() {
+  const result = await pool.query(
+    `SELECT p.id, p.orden_id, p.venta_id, p.monto, p.porcentaje, p.metodo_pago, p.created_at,
+            l.created_at AS liquidada_en,
+            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre
+       FROM migao_propinas p
+       LEFT JOIN ordenes o ON o.id = p.orden_id
+       LEFT JOIN mesas m ON m.id = o.mesa_id
+       LEFT JOIN usuarios u ON u.id = p.mesero_id
+       LEFT JOIN migao_propinas_liquidaciones l ON l.id = p.liquidacion_id
+      ORDER BY p.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
+}
+
+/** Cuánto hay pendiente de repartir de un método (efectivo/banco) — se
+ *  recalcula siempre en vivo, nunca se guarda aparte (ver migao_propinas.liquidacion_id). */
+export async function sumPropinasPendientes(client: PoolClient, metodoPago: "efectivo" | "banco") {
+  const result = await client.query(
+    `SELECT COALESCE(SUM(monto), 0) AS pendiente
+       FROM migao_propinas
+      WHERE metodo_pago = $1 AND liquidacion_id IS NULL`,
+    [metodoPago],
+  );
+  return Number(result.rows[0].pendiente);
+}
+
+export async function crearLiquidacionPropinas(
+  client: PoolClient,
+  params: { metodoPago: "efectivo" | "banco"; monto: number; nota?: string; usuarioId: string },
+) {
+  const result = await client.query(
+    `INSERT INTO migao_propinas_liquidaciones (metodo_pago, monto, nota, usuario_id)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [params.metodoPago, params.monto, params.nota ?? null, params.usuarioId],
+  );
+  return result.rows[0];
+}
+
+export async function marcarPropinasLiquidadas(
+  client: PoolClient,
+  params: { metodoPago: "efectivo" | "banco"; liquidacionId: string },
+) {
+  await client.query(
+    `UPDATE migao_propinas SET liquidacion_id = $1 WHERE metodo_pago = $2 AND liquidacion_id IS NULL`,
+    [params.liquidacionId, params.metodoPago],
+  );
+}
+
 /**
  * Borra por completo el historial de órdenes de Migao: pagos, movimientos de
  * Caja generados por esas ventas, las ventas mismas, las órdenes (con cascada

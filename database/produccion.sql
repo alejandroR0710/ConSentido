@@ -194,6 +194,90 @@ WHERE (
 
 
 -- ========================================================================
+-- SECCIÓN 5: PROPINA OPCIONAL AL COBRAR (Migao) + HISTORIAL APARTE
+-- ========================================================================
+-- Dinero del mesero/personal — NUNCA se mezcla con movimientos_caja/
+-- turnos_caja (no cuenta para el cuadre de turno del cajero).
+CREATE TABLE IF NOT EXISTS migao_propinas_liquidaciones (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  nota        VARCHAR(200),
+  usuario_id  UUID REFERENCES usuarios(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS migao_propinas (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  orden_id       UUID NOT NULL REFERENCES ordenes(id),
+  venta_id       UUID NOT NULL REFERENCES ventas(id),
+  mesero_id      UUID REFERENCES usuarios(id),
+  usuario_id     UUID REFERENCES usuarios(id),
+  monto          NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  porcentaje     NUMERIC(5,2),
+  metodo_pago    VARCHAR(20) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo','banco')),
+  liquidacion_id UUID REFERENCES migao_propinas_liquidaciones(id),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_migao_propinas_mesero ON migao_propinas(mesero_id);
+CREATE INDEX IF NOT EXISTS idx_migao_propinas_fecha ON migao_propinas(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_migao_propinas_liquidacion ON migao_propinas(liquidacion_id);
+
+-- migao.propinas.ver: solo Root/Super Root ven el historial aparte de propinas.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_propinas', 'migao.propinas.ver')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo = 'migao.propinas.ver'
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+
+-- ========================================================================
+-- SECCIÓN 6: EGRESO CONTRA EL ACUMULADO TOTAL HISTÓRICO (Caja General)
+-- ========================================================================
+-- ⚠️ NO ejecutar contra Supabase todavía — se está probando en local.
+-- Vive completamente aparte de movimientos_caja/turnos_caja (que exigen un
+-- turno_id) porque este egreso NO pertenece a ningún turno ni afecta su
+-- cuadre — descuenta directo del acumulado histórico total del negocio.
+CREATE TABLE IF NOT EXISTS caja_egresos_acumulado (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  categoria_gasto_id INT NOT NULL REFERENCES categorias_gasto(id),
+  proveedor_id       UUID REFERENCES proveedores(id),
+  monto              NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  motivo             VARCHAR(200) NOT NULL,
+  usuario_id         UUID NOT NULL REFERENCES usuarios(id),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- general.caja.registrar_egreso_acumulado: a diferencia del egreso normal,
+-- NO se le da al Cajero — afecta el acumulado histórico del negocio, no su
+-- turno del día. Ver el acumulado reusa el permiso ya existente general.caja.ver.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'general'), x.accion, x.codigo
+FROM (VALUES
+  ('registrar_egreso_acumulado', 'general.caja.registrar_egreso_acumulado')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo = 'general.caja.registrar_egreso_acumulado'
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

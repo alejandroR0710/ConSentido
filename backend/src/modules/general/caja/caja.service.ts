@@ -10,6 +10,7 @@ import {
   CerrarTurnoInput,
   EditarMetodoPagoMovimientoInput,
   EditarMovimientoHistoricoInput,
+  RegistrarEgresoAcumuladoInput,
   RegistrarEgresoInput,
   RegistrarIngresoInput,
 } from "./caja.schema";
@@ -138,6 +139,48 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
     );
   }
   return movimientos;
+}
+
+/** Egreso contra el ACUMULADO TOTAL histórico — a diferencia de
+ *  registrarEgreso, no exige ningún turno abierto ni lo toca. */
+export async function registrarEgresoAcumulado(input: RegistrarEgresoAcumuladoInput, usuarioId: string) {
+  return repo.insertEgresoAcumulado({
+    categoriaGastoId: input.categoriaGastoId,
+    proveedorId: input.proveedorId,
+    monto: input.monto,
+    metodoPago: input.metodoPago,
+    motivo: input.motivo,
+    usuarioId,
+  });
+}
+
+/** "Acumulado total": todo lo que ha entrado y salido de movimientos_caja
+ *  desde siempre (sin filtrar por turno ni fecha, desde la primera venta que
+ *  exista), menos los egresos registrados directo contra el acumulado —
+ *  nunca se guarda un contador aparte, siempre se recalcula en vivo. */
+export async function obtenerAcumuladoTotal() {
+  const [base, egresos] = await Promise.all([repo.getAcumuladoMovimientosCaja(), repo.listEgresosAcumulado()]);
+  const egresosAcumuladoEfectivo = egresos
+    .filter((e) => e.metodo_pago === "efectivo")
+    .reduce((acc, e) => acc + Number(e.monto), 0);
+  const egresosAcumuladoBanco = egresos
+    .filter((e) => e.metodo_pago === "banco")
+    .reduce((acc, e) => acc + Number(e.monto), 0);
+
+  const ingresosEfectivo = Number(base.ingresos_efectivo);
+  const ingresosBanco = Number(base.ingresos_banco);
+  const egresosEfectivo = Number(base.egresos_efectivo) + egresosAcumuladoEfectivo;
+  const egresosBanco = Number(base.egresos_banco) + egresosAcumuladoBanco;
+
+  return {
+    ingresosEfectivo,
+    ingresosBanco,
+    egresosEfectivo,
+    egresosBanco,
+    efectivo: ingresosEfectivo - egresosEfectivo,
+    banco: ingresosBanco - egresosBanco,
+    egresos,
+  };
 }
 
 /**
@@ -401,6 +444,7 @@ export async function agregarMovimientoHistorico(
     tipo: input.tipo,
     moduloOrigenSlug: input.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
     categoriaGastoId: input.tipo === "egreso" ? input.categoriaGastoId : undefined,
+    proveedorId: input.tipo === "egreso" ? input.proveedorId : undefined,
     monto: input.monto,
     metodoPago: input.metodoPago,
     motivo: input.motivo,
@@ -466,6 +510,7 @@ export async function editarMovimientoHistorico(
     motivo: input.motivo,
     moduloOrigenSlug: movimiento.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
     categoriaGastoId: movimiento.tipo === "egreso" ? input.categoriaGastoId : undefined,
+    proveedorId: movimiento.tipo === "egreso" ? input.proveedorId : undefined,
   });
 
   const fecha = new Date(actualizado.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });

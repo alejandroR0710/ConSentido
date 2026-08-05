@@ -16,6 +16,7 @@ import {
   editarProductoSchema,
   posicionMesaSchema,
   reiniciarTodoSchema,
+  repartirPropinasSchema,
   resetearOrdenesSchema,
 } from "./migao.schema";
 import * as service from "./migao.service";
@@ -81,6 +82,21 @@ export async function listarHistorialPropioController(req: Request, res: Respons
 export async function listarHistorialAdministrativoController(_req: Request, res: Response) {
   const ordenes = await service.listarHistorialAdministrativo();
   return ok(res, ordenes);
+}
+
+// Historial separado de propinas — dinero del mesero/personal, exclusivo de
+// Root/Super Root (migao.propinas.ver), ver migao.routes.ts.
+export async function listarPropinasController(_req: Request, res: Response) {
+  const propinas = await service.listarPropinas();
+  return ok(res, propinas);
+}
+
+// Reparte (liquida) las propinas pendientes de un método — efectivo y banco
+// por separado, ver migao.service.ts::repartirPropinas.
+export async function repartirPropinasController(req: Request, res: Response) {
+  const data = repartirPropinasSchema.parse(req.body);
+  const liquidacion = await service.repartirPropinas(req.auth!.usuarioId, data);
+  return ok(res, liquidacion);
 }
 
 export async function obtenerResumenDiarioIngresosController(_req: Request, res: Response) {

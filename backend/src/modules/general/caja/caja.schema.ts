@@ -61,6 +61,16 @@ export const registrarEgresoSchema = z.union([
 ]);
 export type RegistrarEgresoInput = z.infer<typeof registrarEgresoSchema>;
 
+// Egreso contra el ACUMULADO TOTAL histórico (no un turno ni un día) — sin
+// "mixto": es una reducción puntual de un solo método por vez, no hace
+// falta descomponerlo (ver caja.service.ts::registrarEgresoAcumulado).
+export const registrarEgresoAcumuladoSchema = z.object({
+  ...camposEgreso,
+  metodoPago: z.enum(["efectivo", "banco"]),
+  monto: z.number().positive(),
+});
+export type RegistrarEgresoAcumuladoInput = z.infer<typeof registrarEgresoAcumuladoSchema>;
+
 export const crearCategoriaGastoSchema = z.object({
   nombre: z.string().trim().min(2).max(80),
 });
@@ -139,6 +149,7 @@ export const agregarMovimientoHistoricoSchema = z.union([
     ...camposAjusteHistorico,
     tipo: z.literal("egreso"),
     categoriaGastoId: z.number().int().positive(),
+    proveedorId: z.string().uuid().optional(),
     monto: z.number().positive(),
     metodoPago: z.enum(METODOS_PAGO),
     motivo: z.string().max(200),
@@ -154,9 +165,10 @@ export const editarMovimientoHistoricoSchema = z
     motivo: z.string().max(200).optional(),
     moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
     categoriaGastoId: z.number().int().positive().optional(),
+    proveedorId: z.string().uuid().optional(),
   })
   .refine((d) => d.monto !== undefined || d.metodoPago !== undefined || d.motivo !== undefined
-    || d.moduloOrigenSlug !== undefined || d.categoriaGastoId !== undefined, {
+    || d.moduloOrigenSlug !== undefined || d.categoriaGastoId !== undefined || d.proveedorId !== undefined, {
     message: "Debes cambiar al menos un campo",
   });
 export type EditarMovimientoHistoricoInput = z.infer<typeof editarMovimientoHistoricoSchema>;

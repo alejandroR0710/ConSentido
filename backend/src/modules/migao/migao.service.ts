@@ -18,6 +18,7 @@ import {
   EditarMesaInput,
   EditarProductoInput,
   PosicionMesaInput,
+  RepartirPropinasInput,
 } from "./migao.schema";
 
 export async function listarCategorias() {
@@ -110,6 +111,40 @@ export async function listarHistorialOrdenes(meseroId?: string) {
  *  historial normal porque no representan dinero real en Caja General. */
 export async function listarHistorialAdministrativo() {
   return repo.listOrdenesHistorialAdministrativo();
+}
+
+export async function listarPropinas() {
+  return repo.listPropinas();
+}
+
+/** Reparte (liquida) todas las propinas pendientes de UN método de pago —
+ *  efectivo y banco se reparten por separado, cada uno con su propia
+ *  periodicidad. Nunca borra migao_propinas: las marca como liquidadas, así
+ *  el "pendiente por repartir" de ese método vuelve a 0 sin perder el
+ *  historial de cada propina individual. */
+export async function repartirPropinas(usuarioId: string, input: RepartirPropinasInput) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const pendiente = await repo.sumPropinasPendientes(client, input.metodoPago);
+    if (pendiente <= 0) {
+      throw Errors.conflict(`No hay propinas pendientes de ${input.metodoPago} por repartir`);
+    }
+    const liquidacion = await repo.crearLiquidacionPropinas(client, {
+      metodoPago: input.metodoPago,
+      monto: pendiente,
+      nota: input.nota,
+      usuarioId,
+    });
+    await repo.marcarPropinasLiquidadas(client, { metodoPago: input.metodoPago, liquidacionId: liquidacion.id });
+    await client.query("COMMIT");
+    return liquidacion;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /** Cuánto entró de Migao por día y método de pago (efectivo/banco) — para
@@ -671,6 +706,24 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
         precioUnitario: Number(i.precio_unitario),
       })),
     );
+
+    // Propina: un solo registro por orden/venta, sin importar si se dividió
+    // o no la cuenta (la división entre personas es solo informativa en
+    // pantalla) — dinero del mesero, nunca entra a cajaService.registrarIngreso
+    // ni a la validación de mixto de arriba.
+    if (input.propina && input.propina > 0) {
+      // El frontend siempre manda propinaMetodoPago cuando hay propina; el
+      // default acá es solo defensivo (clientes viejos/llamadas directas).
+      await repo.crearPropina(client, {
+        ordenId,
+        ventaId: venta.id,
+        meseroId: orden.mesero_id,
+        usuarioId,
+        monto: input.propina,
+        porcentaje: input.propinaPorcentaje ?? null,
+        metodoPago: input.propinaMetodoPago ?? "efectivo",
+      });
+    }
 
     if (input.dividir) {
       for (const [idx, parte] of input.partes.entries()) {

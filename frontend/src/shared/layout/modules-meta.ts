@@ -43,6 +43,9 @@ export const MODULES_META: ModuloMeta[] = [
   // Editor del plano visual de mesas por área — exclusivo de Root/Super Root
   // (migao.mesas.administrar); Mesero/Cajero solo lo usan/ven, no lo editan.
   { slug: "migao", label: "Editor de mesas", path: "/migao/editor-mesas", icon: "🗺️", roles: ["Super Root", "Root"] },
+  // Historial aparte de propinas (dinero del mesero, no cuenta en Caja
+  // General) — exclusivo de Root/Super Root.
+  { slug: "migao", label: "Historial de Propinas", path: "/migao/propinas", icon: "💵", roles: ["Super Root", "Root"] },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
   // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
   // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
@@ -103,6 +106,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
       "/migao/inventario",
       "/migao/editor-mesas",
       "/migao/historial-administrativo",
+      "/migao/propinas",
     ],
   },
   {

@@ -222,6 +222,42 @@ export interface IngredienteProducto {
   unidadMedida: string;
 }
 
+/** Propina opcional al cobrar — dinero del mesero/personal, nunca cuenta
+ *  para Caja General. `porcentaje` null = valor voluntario/personalizado.
+ *  `liquidada_en` null = todavía pendiente por repartir. */
+export interface PropinaEntrada {
+  id: string;
+  orden_id: string;
+  venta_id: string;
+  monto: string;
+  porcentaje: string | null;
+  metodo_pago: "efectivo" | "banco";
+  liquidada_en: string | null;
+  mesa_numero: string | null;
+  mesa_piso: number | null;
+  mesero_nombre: string | null;
+  created_at: string;
+}
+
+/** Propina opcional (5%/10%/valor voluntario), calculada una sola vez sobre
+ *  el valor de la cuenta — nunca entra a la validación de mixto ni a Caja
+ *  General (ver migao.service.ts::cerrarOrden). */
+export interface PropinaInput {
+  propina?: number;
+  propinaPorcentaje?: number | null;
+  propinaMetodoPago?: "efectivo" | "banco";
+}
+
+/** Reparto (liquidación) de las propinas pendientes de UN método — efectivo
+ *  y banco se reparten por separado. */
+export interface LiquidacionPropinas {
+  id: string;
+  metodo_pago: "efectivo" | "banco";
+  monto: string;
+  nota: string | null;
+  created_at: string;
+}
+
 export const migaoApi = {
   listarOrdenesAbiertas: () => apiFetch<OrdenResumen[]>("/migao/ordenes"),
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
@@ -229,25 +265,33 @@ export const migaoApi = {
   // Cuentas cerradas con pago "administrativo" — exclusivo de Root/Super Root.
   listarHistorialAdministrativo: () =>
     apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
+  // Historial aparte de propinas — exclusivo de Root/Super Root.
+  listarPropinas: () => apiFetch<PropinaEntrada[]>("/migao/propinas"),
+  // Reparte (liquida) las propinas pendientes de un método — efectivo y
+  // banco por separado, cada uno con su propia periodicidad.
+  repartirPropinas: (metodoPago: "efectivo" | "banco", nota?: string) =>
+    apiFetch<LiquidacionPropinas>("/migao/propinas/repartir", { method: "POST", body: { metodoPago, nota } }),
   obtenerResumenDiarioIngresos: () =>
     apiFetch<ResumenDiarioIngreso[]>("/migao/ordenes/historial-resumen-diario"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),
-  cerrarOrden: (ordenId: string, pago: PagoInput, descuentoPorcentaje?: number) =>
+  cerrarOrden: (ordenId: string, pago: PagoInput, descuentoPorcentaje?: number, propina?: PropinaInput) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
       method: "POST",
-      body: { dividir: false, ...pago, descuentoPorcentaje },
+      body: { dividir: false, ...pago, descuentoPorcentaje, ...propina },
     }),
   // Cuenta dividida: cada parte trae su propio método de pago (simple o mixto)
   // y las UNIDADES de producto que le corresponden — un ítem con cantidad 2
   // puede repartirse 1 unidad a cada parte (todas las unidades de la orden
-  // deben quedar asignadas, el backend lo valida).
+  // deben quedar asignadas, el backend lo valida). La propina, si hay, es
+  // un solo valor para toda la cuenta (no por parte) — ver PropinaInput.
   cerrarOrdenDividida: (
     ordenId: string,
     partes: (PagoInput & { unidades: { itemId: number; cantidad: number }[] })[],
+    propina?: PropinaInput,
   ) =>
     apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
       method: "POST",
-      body: { dividir: true, partes },
+      body: { dividir: true, partes, ...propina },
     }),
   cancelarOrden: (ordenId: string) =>
     apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),

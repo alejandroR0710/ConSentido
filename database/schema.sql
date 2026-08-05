@@ -240,6 +240,22 @@ CREATE TABLE proveedores (
 -- archivo.
 ALTER TABLE movimientos_caja ADD COLUMN proveedor_id UUID REFERENCES proveedores(id);
 
+-- Egreso contra el ACUMULADO TOTAL histórico del negocio (todo lo que ha
+-- entrado y salido desde siempre), no contra el turno activo ni un día
+-- puntual — por eso vive completamente aparte de movimientos_caja/
+-- turnos_caja (que exigen un turno_id) en vez de forzar un turno artificial.
+-- El "acumulado total" se calcula en vivo restando también estas filas.
+CREATE TABLE caja_egresos_acumulado (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  categoria_gasto_id INT NOT NULL REFERENCES categorias_gasto(id),
+  proveedor_id       UUID REFERENCES proveedores(id),
+  monto              NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  motivo             VARCHAR(200) NOT NULL,
+  usuario_id         UUID NOT NULL REFERENCES usuarios(id),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE almacenes (
   id        SERIAL PRIMARY KEY,
   nombre    VARCHAR(100) NOT NULL,
@@ -638,6 +654,41 @@ CREATE TABLE pagos (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (orden_id IS NOT NULL OR venta_id IS NOT NULL)
 );
+
+-- Reparto de propinas acumuladas al personal — por método de pago (efectivo/
+-- banco por separado, cada uno con su propia periodicidad). Nunca borra
+-- migao_propinas: las marca como liquidadas para que dejen de contar en el
+-- "pendiente por repartir" — el historial de cada propina individual queda
+-- intacto para siempre, solo se reinicia el acumulado pendiente.
+CREATE TABLE migao_propinas_liquidaciones (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  nota        VARCHAR(200),
+  usuario_id  UUID REFERENCES usuarios(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Propina opcional al cobrar una cuenta de Migao: dinero del mesero/personal,
+-- NUNCA se mezcla con movimientos_caja/turnos_caja (no cuenta para el cuadre
+-- de turno del cajero) — vive en su propia tabla e historial aparte.
+-- `porcentaje` NULL = valor voluntario/personalizado (no un 5%/10% fijo).
+-- `liquidacion_id` NULL = todavía pendiente por repartir.
+CREATE TABLE migao_propinas (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  orden_id       UUID NOT NULL REFERENCES ordenes(id),
+  venta_id       UUID NOT NULL REFERENCES ventas(id),
+  mesero_id      UUID REFERENCES usuarios(id),
+  usuario_id     UUID REFERENCES usuarios(id),
+  monto          NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  porcentaje     NUMERIC(5,2),
+  metodo_pago    VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
+  liquidacion_id UUID REFERENCES migao_propinas_liquidaciones(id),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_migao_propinas_mesero ON migao_propinas(mesero_id);
+CREATE INDEX idx_migao_propinas_fecha ON migao_propinas(created_at DESC);
+CREATE INDEX idx_migao_propinas_liquidacion ON migao_propinas(liquidacion_id);
 
 CREATE TABLE facturas (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

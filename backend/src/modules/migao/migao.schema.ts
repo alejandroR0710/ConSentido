@@ -81,6 +81,23 @@ const unidadesSchema = z
 // que se pidió.
 const descuentoSchema = { descuentoPorcentaje: z.number().min(0).max(100).optional() };
 
+// Propina opcional (5%/10%/valor voluntario) sobre el valor de la cuenta —
+// a diferencia de descuento/administrativo, SÍ existe en las 3 ramas
+// (incluida la dividida): se calcula una sola vez sobre el total y se
+// reparte entre las personas solo en pantalla (ver migao.service.ts —
+// nunca se fragmenta en la base de datos, ni entra en la validación de
+// mixto ni en cajaService.registrarIngreso, porque es dinero del mesero,
+// no de Caja General).
+const propinaSchema = {
+  propina: z.number().nonnegative().optional(),
+  // NULL/ausente = valor voluntario/personalizado (no un 5%/10% fijo) — solo
+  // se guarda para mostrarlo bonito en el historial de propinas.
+  propinaPorcentaje: z.number().nullable().optional(),
+  // En qué método se recibió la propina (efectivo/banco) — determina de qué
+  // "pendiente por repartir" descuenta (ver migao.service.ts::repartirPropinas).
+  propinaMetodoPago: z.enum(["efectivo", "banco"]).optional(),
+};
+
 // Cobro normal (un solo método, o mixto efectivo+banco) o dividido (varias
 // partes, cada una con sus propias unidades de producto y su propio método
 // de pago, también simple o mixto) — ej. dos comensales que pidieron junto en
@@ -94,6 +111,7 @@ export const cerrarOrdenSchema = z.union([
     metodoPago: z.enum(["efectivo", "banco", "administrativo"]),
     referencia: z.string().max(100).optional(),
     ...descuentoSchema,
+    ...propinaSchema,
   }),
   z
     .object({
@@ -103,6 +121,7 @@ export const cerrarOrdenSchema = z.union([
       montoBanco: z.number().nonnegative(),
       referencia: z.string().max(100).optional(),
       ...descuentoSchema,
+      ...propinaSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
   z.object({
@@ -125,9 +144,19 @@ export const cerrarOrdenSchema = z.union([
         ]),
       )
       .min(2, "Divide la cuenta entre al menos 2 partes"),
+    ...propinaSchema,
   }),
 ]);
 export type CerrarOrdenInput = z.infer<typeof cerrarOrdenSchema>;
+
+// Repartir las propinas pendientes de UN método (efectivo o banco) por
+// separado — cada uno con su propia periodicidad, ver
+// migao.service.ts::repartirPropinas.
+export const repartirPropinasSchema = z.object({
+  metodoPago: z.enum(["efectivo", "banco"]),
+  nota: z.string().max(200).optional(),
+});
+export type RepartirPropinasInput = z.infer<typeof repartirPropinasSchema>;
 
 // Reset exclusivo de Super Root: exige escribir la frase exacta como segunda
 // confirmación (además del permiso), igual que el reset de Caja.

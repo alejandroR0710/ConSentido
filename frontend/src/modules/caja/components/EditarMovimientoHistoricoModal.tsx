@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
-import { cajaApi, type CategoriaGasto, type MetodoPago, type ModuloOrigenSlug, type MovimientoCaja } from "../api";
+import {
+  cajaApi,
+  type CategoriaGasto,
+  type MetodoPago,
+  type ModuloOrigenSlug,
+  type MovimientoCaja,
+  type Proveedor,
+} from "../api";
 import { LABEL_POR_MODULO_SLUG, MODULOS_ORIGEN } from "../moduloOrigen";
 
 const FRASE_CONFIRMACION = "AJUSTAR HISTORIAL";
@@ -31,11 +38,22 @@ export function EditarMovimientoHistoricoModal({
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(movimiento.metodo_pago);
   const [motivo, setMotivo] = useState(movimiento.motivo ?? "");
   const [categoriaId, setCategoriaId] = useState<number | "">(movimiento.categoria_gasto_id ?? "");
+  const [proveedorId, setProveedorId] = useState<string>(movimiento.proveedor_id ?? "");
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [moduloOrigenSlug, setModuloOrigenSlug] = useState(movimiento.modulo_origen_slug ?? MODULOS_ORIGEN[0].value);
   const [nota, setNota] = useState("");
   const [frase, setFrase] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    cajaApi
+      .listarProveedores()
+      .then(setProveedores)
+      .catch(() => {
+        /* sin proveedores disponibles, el campo es opcional */
+      });
+  }, []);
 
   const puedeGuardar = monto > 0 && nota.trim().length >= 3 && frase === FRASE_CONFIRMACION;
   const etiquetaOrigen =
@@ -54,6 +72,7 @@ export function EditarMovimientoHistoricoModal({
         motivo: motivo.trim() || undefined,
         moduloOrigenSlug: movimiento.tipo === "ingreso" ? (moduloOrigenSlug as ModuloOrigenSlug) : undefined,
         categoriaGastoId: movimiento.tipo === "egreso" && categoriaId ? Number(categoriaId) : undefined,
+        proveedorId: movimiento.tipo === "egreso" ? proveedorId || undefined : undefined,
         nota: nota.trim(),
         confirmacion: FRASE_CONFIRMACION,
       });
@@ -105,6 +124,24 @@ export function EditarMovimientoHistoricoModal({
               </option>
             ))}
           </select>
+
+          {proveedores.length > 0 && (
+            <>
+              <label className="mb-1 block text-xs font-medium">Proveedor (opcional)</label>
+              <select
+                value={proveedorId}
+                onChange={(e) => setProveedorId(e.target.value)}
+                className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              >
+                <option value="">Sin proveedor</option>
+                {proveedores.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </>
       )}
 

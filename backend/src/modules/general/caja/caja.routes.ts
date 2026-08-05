@@ -23,7 +23,9 @@ import {
   obtenerMovimientosDelDiaController,
   obtenerResumenTurnoController,
   obtenerTurnoAbiertoController,
+  obtenerAcumuladoTotalController,
   obtenerTurnosPorFechaController,
+  registrarEgresoAcumuladoController,
   registrarEgresoController,
   registrarIngresoController,
   resetearCajaController,
@@ -51,6 +53,15 @@ cajaRouter.post(
   "/egresos",
   requirePermission("general.caja.registrar_egreso"),
   asyncHandler(registrarEgresoController),
+);
+
+// Egreso contra el ACUMULADO TOTAL histórico (no un turno ni un día) — no se
+// le da al Cajero, a diferencia del egreso normal de arriba.
+cajaRouter.get("/acumulado", requirePermission("general.caja.ver"), asyncHandler(obtenerAcumuladoTotalController));
+cajaRouter.post(
+  "/egresos-acumulado",
+  requirePermission("general.caja.registrar_egreso_acumulado"),
+  asyncHandler(registrarEgresoAcumuladoController),
 );
 
 cajaRouter.get(

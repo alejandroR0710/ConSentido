@@ -86,6 +86,28 @@ export interface CategoriaGasto {
   activo: boolean;
 }
 
+/** Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día. */
+export interface EgresoAcumulado {
+  id: string;
+  monto: string;
+  metodo_pago: "efectivo" | "banco";
+  motivo: string;
+  categoria_nombre: string;
+  proveedor_nombre: string | null;
+  usuario_nombre: string | null;
+  created_at: string;
+}
+
+export interface AcumuladoTotal {
+  ingresosEfectivo: number;
+  ingresosBanco: number;
+  egresosEfectivo: number;
+  egresosBanco: number;
+  efectivo: number;
+  banco: number;
+  egresos: EgresoAcumulado[];
+}
+
 export interface DiaHistorialCaja {
   fecha: string;
   ingresos: number;
@@ -115,6 +137,7 @@ export type AgregarMovimientoHistoricoInput =
   | {
       tipo: "egreso";
       categoriaGastoId: number;
+      proveedorId?: string;
       monto: number;
       metodoPago: MetodoPago;
       motivo: string;
@@ -128,6 +151,7 @@ export interface EditarMovimientoHistoricoInput {
   motivo?: string;
   moduloOrigenSlug?: ModuloOrigenSlug;
   categoriaGastoId?: number;
+  proveedorId?: string;
   nota: string;
   confirmacion: "AJUSTAR HISTORIAL";
 }
@@ -167,6 +191,16 @@ export const cajaApi = {
   ) => apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
   registrarEgreso: (input: { categoriaGastoId: number; motivo: string; proveedorId?: string } & PagoInput) =>
     apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
+  // Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día, y no
+  // requiere turno abierto (a diferencia de registrarEgreso de arriba).
+  registrarEgresoAcumulado: (input: {
+    categoriaGastoId: number;
+    motivo: string;
+    proveedorId?: string;
+    metodoPago: "efectivo" | "banco";
+    monto: number;
+  }) => apiFetch<EgresoAcumulado>("/caja/egresos-acumulado", { method: "POST", body: input }),
+  obtenerAcumuladoTotal: () => apiFetch<AcumuladoTotal>("/caja/acumulado"),
   listarProveedores: () => apiFetch<Proveedor[]>("/caja/proveedores"),
   crearProveedor: (nombre: string, contacto?: string, telefono?: string, email?: string) =>
     apiFetch<Proveedor>("/caja/proveedores", {

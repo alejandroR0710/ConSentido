@@ -610,7 +610,13 @@ export function CajaHistorialPage() {
                       Detalle de movimientos
                     </span>
                     <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
-                      {movimientosDelDia.map((m) => {
+                      {(() => {
+                        // Una cuenta dividida/mixta genera UN movimiento por cada línea
+                        // de pago (misma venta_id repetida varias veces) — el botón de
+                        // factura solo se muestra en la primera, si no se ve repetido
+                        // una vez por línea de pago de la misma cuenta.
+                        const facturaYaMostradaDeVenta = new Set<string>();
+                        return movimientosDelDia.map((m) => {
                         const puedeEditar = m.tipo === "egreso" || !m.referencia_entidad;
                         const puedeAnular =
                           m.tipo === "ingreso" &&
@@ -621,7 +627,9 @@ export function CajaHistorialPage() {
                           m.tipo === "ingreso" &&
                           m.referencia_entidad === "ventas" &&
                           m.modulo_origen_slug === "migao" &&
-                          !!m.referencia_id;
+                          !!m.referencia_id &&
+                          !facturaYaMostradaDeVenta.has(m.referencia_id);
+                        if (puedeVerFactura) facturaYaMostradaDeVenta.add(m.referencia_id!);
                         return (
                           <div
                             key={m.id}
@@ -682,7 +690,8 @@ export function CajaHistorialPage() {
                             </div>
                           </div>
                         );
-                      })}
+                      });
+                      })()}
                     </div>
                   </div>
                 </>

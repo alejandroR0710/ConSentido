@@ -77,7 +77,12 @@ export function ReciboImprimible({
           <img
             src="/logo-recibo.png"
             alt={NOMBRE_NEGOCIO}
-            className="h-16 w-16 object-contain"
+            // La impresora térmica es monocromática: un logo a color con
+            // sombras/degradados se "puntea" (dithering) y sale pixelado. Se
+            // muestra ya en blanco y negro con más contraste (lo más parecido
+            // a lo que realmente va a salir impreso) y más grande (más puntos
+            // físicos para dibujar el trazo = menos bloques visibles).
+            className="h-24 w-24 object-contain grayscale contrast-125"
             onError={() => setLogoError(true)}
           />
         ) : (

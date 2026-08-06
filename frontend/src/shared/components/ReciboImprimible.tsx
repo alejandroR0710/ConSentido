@@ -101,20 +101,20 @@ export function ReciboImprimible({
             onError={() => setLogoError(true)}
           />
         ) : (
-          <div className="text-base font-bold">Con Sentido</div>
+          <div className="text-lg font-bold">Con Sentido</div>
         )}
-        <div className="text-[14px] leading-tight">{NOMBRE_NEGOCIO}</div>
+        <div className="text-[16px] leading-tight">{NOMBRE_NEGOCIO}</div>
       </div>
 
       <div
-        className={`my-2 rounded border-2 py-1 text-center text-[14px] font-bold ${
+        className={`my-2 rounded border-2 py-1 text-center text-[16px] font-bold ${
           esCotizacion ? "border-amber-600 text-amber-700" : "border-black text-black"
         }`}
       >
         {esCotizacion ? "COTIZACIÓN — NO es una factura de venta" : "FACTURA DE VENTA"}
       </div>
 
-      <div className="mb-2 text-[14px]">
+      <div className="mb-2 text-[16px]">
         <div>
           {esCotizacion ? "Cotización" : "Factura"} Nº {folio}
         </div>
@@ -128,7 +128,7 @@ export function ReciboImprimible({
 
       <div className="border-t border-dashed border-black" />
 
-      <table className="w-full text-[14px]">
+      <table className="w-full text-[16px]">
         <thead>
           <tr className="border-b border-dashed border-black">
             <th className="py-1 text-left font-semibold">Producto</th>
@@ -151,7 +151,7 @@ export function ReciboImprimible({
 
       <div className="border-t border-dashed border-black" />
 
-      <div className="mt-1 flex flex-col gap-0.5 text-[14px]">
+      <div className="mt-1 flex flex-col gap-0.5 text-[16px]">
         <div className="flex justify-between">
           <span>Subtotal</span>
           <span>{formatMoney(subtotal)}</span>
@@ -168,14 +168,14 @@ export function ReciboImprimible({
             <span>{formatMoney(propina.monto)}</span>
           </div>
         )}
-        <div className="flex justify-between text-base font-bold">
+        <div className="flex justify-between text-lg font-bold">
           <span>TOTAL</span>
           <span>{formatMoney(total)}</span>
         </div>
       </div>
 
       {pagos && pagos.length > 0 && (
-        <div className="mt-2 border-t border-dashed border-black pt-1 text-[14px]">
+        <div className="mt-2 border-t border-dashed border-black pt-1 text-[16px]">
           <div className="font-semibold">Pago{pagos.length > 1 ? "s" : ""}:</div>
           {pagos.map((p, idx) => (
             <div key={idx} className="flex justify-between capitalize">
@@ -189,9 +189,9 @@ export function ReciboImprimible({
         </div>
       )}
 
-      {nota && <div className="mt-2 text-[14px] italic">Nota: {nota}</div>}
+      {nota && <div className="mt-2 text-[16px] italic">Nota: {nota}</div>}
 
-      <div className="mt-3 text-center text-[13px]">
+      <div className="mt-3 text-center text-[15px]">
         {esCotizacion ? "Precios sujetos a cambio. Válida por 15 días." : "¡Gracias por tu compra!"}
       </div>
     </div>

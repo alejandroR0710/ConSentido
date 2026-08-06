@@ -95,7 +95,9 @@ export function ReciboImprimible({
             // filtros de grayscale/contraste como el logo a color.
             src="/con_sentido_vectorizados.svg"
             alt={NOMBRE_NEGOCIO}
-            className="h-24 w-24 object-contain"
+            // Es vector (SVG): agrandarlo no pierde nitidez — se sube bastante
+            // para que ocupe el espacio en blanco que quedaba arriba del recibo.
+            className="h-44 w-44 object-contain"
             onError={() => setLogoError(true)}
           />
         ) : (

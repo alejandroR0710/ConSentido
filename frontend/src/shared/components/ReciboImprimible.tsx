@@ -75,7 +75,17 @@ export function ReciboImprimible({
     <div
       id={id}
       className={`mx-auto bg-white p-3 text-black ${anchoMm === 58 ? "w-[58mm]" : "w-[80mm]"}`}
-      style={{ fontFamily: '"Courier New", monospace' }}
+      // La impresora térmica no tiene escala de grises: cualquier trazo fino
+      // (peso "regular" de una fuente, letras chicas) se convierte en un
+      // patrón de puntos (dithering) para simularlo, y eso es lo que se ve
+      // "borroso". Semibold + una fuente sin serifas de trazo parejo aguanta
+      // mucho mejor ese proceso — se imprime sólido en vez de punteado.
+      style={{
+        fontFamily: '"Consolas", "Courier New", monospace',
+        fontWeight: 600,
+        WebkitFontSmoothing: "none",
+        textRendering: "optimizeLegibility",
+      }}
     >
       <div className="flex flex-col items-center gap-1 text-center">
         {!logoError ? (
@@ -93,18 +103,18 @@ export function ReciboImprimible({
         ) : (
           <div className="text-sm font-bold">Con Sentido</div>
         )}
-        <div className="text-[11px] leading-tight">{NOMBRE_NEGOCIO}</div>
+        <div className="text-[12px] leading-tight">{NOMBRE_NEGOCIO}</div>
       </div>
 
       <div
-        className={`my-2 rounded border-2 py-1 text-center text-[11px] font-bold ${
+        className={`my-2 rounded border-2 py-1 text-center text-[12px] font-bold ${
           esCotizacion ? "border-amber-600 text-amber-700" : "border-black text-black"
         }`}
       >
         {esCotizacion ? "COTIZACIÓN — NO es una factura de venta" : "FACTURA DE VENTA"}
       </div>
 
-      <div className="mb-2 text-[11px]">
+      <div className="mb-2 text-[12px]">
         <div>
           {esCotizacion ? "Cotización" : "Factura"} Nº {folio}
         </div>
@@ -118,7 +128,7 @@ export function ReciboImprimible({
 
       <div className="border-t border-dashed border-black" />
 
-      <table className="w-full text-[11px]">
+      <table className="w-full text-[12px]">
         <thead>
           <tr className="border-b border-dashed border-black">
             <th className="py-1 text-left font-semibold">Producto</th>
@@ -141,7 +151,7 @@ export function ReciboImprimible({
 
       <div className="border-t border-dashed border-black" />
 
-      <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+      <div className="mt-1 flex flex-col gap-0.5 text-[12px]">
         <div className="flex justify-between">
           <span>Subtotal</span>
           <span>{formatMoney(subtotal)}</span>
@@ -165,7 +175,7 @@ export function ReciboImprimible({
       </div>
 
       {pagos && pagos.length > 0 && (
-        <div className="mt-2 border-t border-dashed border-black pt-1 text-[11px]">
+        <div className="mt-2 border-t border-dashed border-black pt-1 text-[12px]">
           <div className="font-semibold">Pago{pagos.length > 1 ? "s" : ""}:</div>
           {pagos.map((p, idx) => (
             <div key={idx} className="flex justify-between capitalize">
@@ -179,9 +189,9 @@ export function ReciboImprimible({
         </div>
       )}
 
-      {nota && <div className="mt-2 text-[11px] italic">Nota: {nota}</div>}
+      {nota && <div className="mt-2 text-[12px] italic">Nota: {nota}</div>}
 
-      <div className="mt-3 text-center text-[10px]">
+      <div className="mt-3 text-center text-[11px]">
         {esCotizacion ? "Precios sujetos a cambio. Válida por 15 días." : "¡Gracias por tu compra!"}
       </div>
     </div>

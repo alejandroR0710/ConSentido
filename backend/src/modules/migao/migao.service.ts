@@ -21,6 +21,24 @@ import {
   RepartirPropinasInput,
 } from "./migao.schema";
 
+// Quiénes deben enterarse de un aviso de stock (bajo o agotado) sin importar
+// quién haya sido el mesero/cocina que disparó el consumo — Root/Super Root
+// porque administran el negocio, Cocina porque administra el inventario
+// (ver migao.inventario.administrar).
+const ROLES_ALERTA_INVENTARIO = ["Root", "Super Root", "Cocina"];
+
+/** Avisa por push a los roles de arriba cuando un consumo de inventario deja
+ *  algo en negativo — nunca lanza, nunca bloquea el flujo de la orden. */
+function notificarAlertasInventario(alertas: string[]) {
+  if (alertas.length === 0) return;
+  const cuerpo = alertas.join(" ");
+  for (const rol of ROLES_ALERTA_INVENTARIO) {
+    notificacionesService
+      .enviarATodosDeRol(rol, { titulo: "⚠ Stock de inventario", cuerpo, url: "/migao/inventario" })
+      .catch(() => {});
+  }
+}
+
 export async function listarCategorias() {
   return repo.listCategoriasProducto();
 }
@@ -290,6 +308,7 @@ export async function agregarItem(
       .enviarATodosDeRol("Cocina", { titulo: "Pedido nuevo", cuerpo: "Se agregó un producto a una orden", url: "/cocina" })
       .catch(() => {});
   }
+  notificarAlertasInventario(alertasInventario);
   return { ...item, alertasInventario };
 }
 
@@ -420,6 +439,7 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
     client.release();
   }
 
+  notificarAlertasInventario(alertasInventario);
   return { ...actualizado, alertasInventario };
 }
 
@@ -579,6 +599,7 @@ export async function marcarOrdenLista(ordenId: string, usuarioId: string) {
         .enviarAUsuario(orden.mesero_id, { titulo: "Orden lista", cuerpo: "Una orden tuya ya está lista", url: "/mesero" })
         .catch(() => {});
     }
+    notificarAlertasInventario(alertasInventario);
     return { items: actualizados, alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");

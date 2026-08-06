@@ -99,6 +99,17 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                         <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">{p.nombre}</span>
                         <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">{formatMoney(p.precio)}</span>
                       </div>
+                      {(p.sin_stock || p.bajo_stock) && (
+                        <span
+                          className={`self-start rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            p.sin_stock
+                              ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                          }`}
+                        >
+                          {p.sin_stock ? "⚠ Sin stock del insumo" : "⚠ Stock bajo del insumo"}
+                        </span>
+                      )}
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -159,7 +170,23 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                           : "hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30"
                       }`}
                     >
-                      <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">{p.nombre}</span>
+                      <span className="flex items-center gap-2 text-base font-medium text-brand-ink dark:text-brand-vanilla">
+                        {p.nombre}
+                        {p.sin_stock && (
+                          <span
+                            title="Sin stock del insumo"
+                            aria-label="Sin stock del insumo"
+                            className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                          />
+                        )}
+                        {!p.sin_stock && p.bajo_stock && (
+                          <span
+                            title="Stock bajo del insumo"
+                            aria-label="Stock bajo del insumo"
+                            className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                          />
+                        )}
+                      </span>
                       <span
                         className={`text-sm ${
                           recienAgregado

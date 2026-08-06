@@ -171,6 +171,11 @@ export interface Producto {
   categoria_nombre: string | null;
   descripcion: string | null;
   es_para_llevar: boolean;
+  // Calculados en vivo contra la receta de inventario del producto (ver
+  // migao.repository.ts::listProductosMigao) — un producto sin receta nunca
+  // sale marcado, no depende de inventario.
+  sin_stock: boolean;
+  bajo_stock: boolean;
 }
 
 export interface ProductoAdmin extends Producto {

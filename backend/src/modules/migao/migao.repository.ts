@@ -245,9 +245,27 @@ export async function crearOrden(
   return result.rows[0];
 }
 
+/** `sin_stock`/`bajo_stock` se calculan en vivo contra la receta de cada
+ *  producto (migao_producto_ingredientes) — nunca se guardan aparte, así
+ *  nunca se pueden desincronizar del stock real. `sin_stock` = ya no
+ *  alcanza para preparar ni 1 unidad más de algún ingrediente; `bajo_stock`
+ *  = algún ingrediente ya cruzó su stock mínimo (mismo criterio que la
+ *  página de Inventario), pero todavía alcanza para al menos 1 más. Un
+ *  producto sin receta nunca sale marcado (no depende de inventario). */
 export async function listProductosMigao() {
   const result = await pool.query(
-    `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, p.es_para_llevar, cp.nombre AS categoria_nombre
+    `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, p.es_para_llevar, cp.nombre AS categoria_nombre,
+            EXISTS (
+              SELECT 1 FROM migao_producto_ingredientes pi
+                JOIN migao_inventario_productos ip ON ip.id = pi.inventario_producto_id
+               WHERE pi.producto_id = p.id AND ip.stock_unidades < pi.cantidad_por_unidad
+            ) AS sin_stock,
+            EXISTS (
+              SELECT 1 FROM migao_producto_ingredientes pi
+                JOIN migao_inventario_productos ip ON ip.id = pi.inventario_producto_id
+               WHERE pi.producto_id = p.id AND ip.stock_minimo_unidades IS NOT NULL
+                 AND ip.stock_unidades <= ip.stock_minimo_unidades
+            ) AS bajo_stock
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id

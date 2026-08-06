@@ -214,6 +214,27 @@ export function MigaoPage() {
   const propinaMonto =
     propinaPorcentaje === 0 ? 0 : propinaPorcentaje === null ? propinaMontoCustom : totalConDescuento * (propinaPorcentaje / 100);
 
+  // La propina se cobra en el mismo método que la cuenta: si se pagó en
+  // efectivo, la propina es efectivo; si se pagó en banco, es banco. Solo
+  // queda ambiguo (y ahí sí se le pregunta al cajero) cuando el pago es
+  // "mixto", cuando es administrativo (no es un pago real), o cuando la
+  // cuenta se dividió entre partes que no coinciden todas en el mismo método.
+  function metodoUnico(p: MetodoPagoValor): "efectivo" | "banco" | null {
+    return p.metodoPago === "mixto" ? null : p.metodoPago;
+  }
+  const metodoPropinaAutomatico = dividirCuenta
+    ? (() => {
+        const metodos = new Set(pagosPartes.slice(0, numPartes).map(metodoUnico));
+        return metodos.size === 1 ? [...metodos][0] : null;
+      })()
+    : esAdministrativo
+      ? null
+      : metodoUnico(pago);
+
+  useEffect(() => {
+    if (metodoPropinaAutomatico) setPropinaMetodoPago(metodoPropinaAutomatico);
+  }, [metodoPropinaAutomatico]);
+
   const pagoMixtoInvalido =
     !esAdministrativo &&
     pago.metodoPago === "mixto" &&
@@ -664,25 +685,37 @@ export function MigaoPage() {
                     ≈ {formatMoney(propinaMonto / numPartes)} de propina por persona
                   </p>
                 )}
-                {propinaMonto > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Propina pagada en:</span>
-                    {(["efectivo", "banco"] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setPropinaMetodoPago(m)}
-                        className={`rounded-md border-2 px-2 py-1 text-xs font-medium capitalize ${
-                          propinaMetodoPago === m
-                            ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                            : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {propinaMonto > 0 &&
+                  (metodoPropinaAutomatico ? (
+                    // Se cobra en el mismo método que la cuenta — no hay nada que elegir.
+                    <p className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                      Propina se carga en:{" "}
+                      <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
+                        {metodoPropinaAutomatico}
+                      </span>{" "}
+                      (mismo método de la cuenta)
+                    </p>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                        Método mixto/varias partes — ¿en qué se cobra la propina?
+                      </span>
+                      {(["efectivo", "banco"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setPropinaMetodoPago(m)}
+                          className={`rounded-md border-2 px-2 py-1 text-xs font-medium capitalize ${
+                            propinaMetodoPago === m
+                              ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                              : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
               </div>
 
               <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">

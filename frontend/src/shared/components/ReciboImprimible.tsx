@@ -14,6 +14,10 @@ export interface ReciboPago {
 }
 
 export interface ReciboImprimibleProps {
+  // Solo la copia que de verdad se imprime lleva "recibo-imprimible" (ver
+  // ModalImprimir.tsx) — la vista previa dentro del modal no lo lleva, para
+  // no tener dos elementos con el mismo id en el DOM al mismo tiempo.
+  id?: string;
   tipo: "factura" | "cotizacion";
   folio: string;
   fecha: string;
@@ -49,6 +53,7 @@ function formatearFecha(fechaIso: string) {
  * imprimir SOLO esto, ignorando el resto de la pantalla.
  */
 export function ReciboImprimible({
+  id,
   tipo,
   folio,
   fecha,
@@ -68,7 +73,7 @@ export function ReciboImprimible({
 
   return (
     <div
-      id="recibo-imprimible"
+      id={id}
       className={`mx-auto bg-white p-3 text-black ${anchoMm === 58 ? "w-[58mm]" : "w-[80mm]"}`}
       style={{ fontFamily: '"Courier New", monospace' }}
     >

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { ReciboImprimible, type ReciboImprimibleProps } from "./ReciboImprimible";
 
@@ -46,6 +47,7 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
       </div>
 
       <div className="max-h-[55vh] overflow-y-auto rounded-md border border-brand-vanilla-dark dark:border-brand-green-700">
+        {/* Vista previa: sin id, para no duplicar "recibo-imprimible" en el DOM. */}
         <ReciboImprimible {...recibo} anchoMm={anchoMm} />
       </div>
 
@@ -55,6 +57,21 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
       >
         🖨️ Imprimir
       </button>
+
+      {/*
+       * Copia real que se imprime, aparte de la vista previa de arriba: se
+       * "teleporta" (portal) directo a <body>, fuera del contenedor del modal
+       * (que es `position: fixed`). Chrome repite en CADA página impresa
+       * cualquier elemento que cuelgue de un ancestro `position: fixed` — por
+       * eso antes salían 4 copias seguidas del mismo recibo en una sola tira.
+       * Oculta en pantalla (`hidden`), visible solo al imprimir (`print:block`).
+       */}
+      {createPortal(
+        <div className="hidden print:block">
+          <ReciboImprimible {...recibo} anchoMm={anchoMm} id="recibo-imprimible" />
+        </div>,
+        document.body,
+      )}
     </Modal>
   );
 }

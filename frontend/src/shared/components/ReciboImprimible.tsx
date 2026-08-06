@@ -45,6 +45,10 @@ export interface ReciboImprimibleProps {
   resumenIngresos?: ReciboEtiquetaMonto[];
   resumenEgresos?: ReciboEtiquetaMonto[];
   anchoMm: 58 | 80;
+  // Avisa cuando el logo terminó de cargar (o falló) — ModalImprimir espera
+  // esto antes de mandar a imprimir, para que no salga sin logo por haber
+  // impreso antes de que la imagen llegara a pintarse.
+  onLogoSettled?: () => void;
 }
 
 const NOMBRE_NEGOCIO = "Con Sentido — El Rinconcito del Migao";
@@ -85,6 +89,7 @@ export function ReciboImprimible({
   resumenIngresos,
   resumenEgresos,
   anchoMm,
+  onLogoSettled,
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
 
@@ -140,7 +145,11 @@ export function ReciboImprimible({
             // Es vector (SVG): agrandarlo no pierde nitidez — se sube bastante
             // para que ocupe el espacio en blanco que quedaba arriba del recibo.
             className="h-44 w-44 object-contain"
-            onError={() => setLogoError(true)}
+            onLoad={() => onLogoSettled?.()}
+            onError={() => {
+              setLogoError(true);
+              onLogoSettled?.();
+            }}
           />
         ) : (
           <div className="text-lg font-bold">Con Sentido</div>

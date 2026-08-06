@@ -27,6 +27,12 @@ type ModalImprimirProps = Omit<ReciboImprimibleProps, "anchoMm"> & { onCerrar: (
  */
 export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
   const [anchoMm, setAnchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
+  // El logo (SVG) tarda un poquito en llegar la primera vez de la sesión —
+  // si se imprimía apenas se abría el modal (como antes), a veces la
+  // impresión salía disparada ANTES de que la imagen terminara de pintarse
+  // y quedaba sin logo. Se espera a que la copia que de verdad se imprime
+  // avise que ya cargó (o falló) antes de mandar a imprimir.
+  const [logoListo, setLogoListo] = useState(false);
 
   // Salta directo al diálogo de impresión del navegador al abrir — sin este
   // paso, había que ver nuestra vista previa Y LUEGO la del navegador, dos
@@ -35,8 +41,16 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
   // seguridad), así que este modal queda de respaldo debajo por si hay que
   // reimprimir o cambiar el ancho de papel.
   useEffect(() => {
+    if (!logoListo) return;
     window.print();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoListo]);
+
+  // Red de seguridad: si por lo que sea el logo nunca dispara onLoad/onError
+  // (ej. algún caso raro de caché), no dejar al cajero esperando para siempre.
+  useEffect(() => {
+    const timeout = setTimeout(() => setLogoListo(true), 1500);
+    return () => clearTimeout(timeout);
   }, []);
 
   function cambiarAncho(valor: 58 | 80) {
@@ -86,7 +100,12 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
        */}
       {createPortal(
         <div className="hidden print:block">
-          <ReciboImprimible {...recibo} anchoMm={anchoMm} id="recibo-imprimible" />
+          <ReciboImprimible
+            {...recibo}
+            anchoMm={anchoMm}
+            id="recibo-imprimible"
+            onLogoSettled={() => setLogoListo(true)}
+          />
         </div>,
         document.body,
       )}

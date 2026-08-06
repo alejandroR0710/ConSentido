@@ -6,6 +6,7 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { Modal } from "../../../shared/components/Modal";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
   cajaApi,
@@ -22,9 +23,11 @@ import { AgregarMovimientoHistoricoModal } from "../components/AgregarMovimiento
 import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
 import { BorrarTurnoModal } from "../components/BorrarTurnoModal";
+import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoAcumuladoModal } from "../components/EgresoAcumuladoModal";
-import { LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
+import { resumenAReciboProps } from "../factura";
+import { agruparPorEtiqueta, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
   "Enero",
@@ -66,21 +69,6 @@ function formatearHora(fechaIso: string) {
   return new Date(fechaIso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
 }
 
-/** Agrupa movimientos de un mismo tipo (ingreso/egreso) por su etiqueta de
- *  origen (área o categoría de gasto), para mostrar de qué se compone el
- *  total — no solo la suma. */
-function agruparPorEtiqueta(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
-  const porEtiqueta = new Map<string, number>();
-  for (const m of movimientos) {
-    if (m.tipo !== tipo) continue;
-    const etiqueta =
-      tipo === "ingreso"
-        ? (m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Otro")
-        : (m.categoria_gasto_nombre ?? "Otro");
-    porEtiqueta.set(etiqueta, (porEtiqueta.get(etiqueta) ?? 0) + Number(m.monto));
-  }
-  return Array.from(porEtiqueta.entries()).sort((a, b) => b[1] - a[1]);
-}
 
 function sumar(dias: DiaHistorialCaja[]): Totales {
   return dias.reduce(
@@ -192,6 +180,7 @@ export function CajaHistorialPage() {
   const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
   const [edicionesDelDia, setEdicionesDelDia] = useState<EdicionHistorialCaja[]>([]);
   const [agregarAbierto, setAgregarAbierto] = useState(false);
+  const [imprimirResumenDia, setImprimirResumenDia] = useState(false);
   const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoCaja | null>(null);
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
 
@@ -547,7 +536,14 @@ export function CajaHistorialPage() {
       )}
 
       {diaSeleccionado && (
-        <Modal titulo={diaSeleccionado.fecha} onCerrar={() => setDiaSeleccionado(null)} maxWidth="sm:max-w-lg">
+        <Modal
+          titulo={diaSeleccionado.fecha}
+          onCerrar={() => {
+            setDiaSeleccionado(null);
+            setImprimirResumenDia(false);
+          }}
+          maxWidth="sm:max-w-lg"
+        >
           <div className="flex flex-col gap-2 text-sm">
             <div className="flex justify-between">
               <span className="text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</span>
@@ -563,8 +559,18 @@ export function CajaHistorialPage() {
               <span className="font-medium">Neto</span>
               <span className="font-bold">{formatMoney(diaSeleccionado.neto)}</span>
             </div>
-            <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-              {diaSeleccionado.movimientos} movimiento{diaSeleccionado.movimientos === 1 ? "" : "s"} ese día.
+            <div className="mt-1 flex items-center justify-between text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              <span>
+                {diaSeleccionado.movimientos} movimiento{diaSeleccionado.movimientos === 1 ? "" : "s"} ese día.
+              </span>
+              {movimientosDelDia.length > 0 && (
+                <button
+                  onClick={() => setImprimirResumenDia(true)}
+                  className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                >
+                  🖨️ Imprimir resumen del día
+                </button>
+              )}
             </div>
 
             {cargandoMovimientos ? (
@@ -666,13 +672,18 @@ export function CajaHistorialPage() {
                                 {m.tipo === "egreso" ? "-" : "+"}
                                 {formatMoney(m.monto)}
                               </span>
-                              {puedeVerFactura && (
+                              {puedeVerFactura ? (
                                 <BotonFactura
                                   origen={
                                     m.modulo_origen_slug === "con_sentido"
                                       ? { tipo: "venta_con_sentido", id: m.referencia_id! }
                                       : { tipo: "venta", id: m.referencia_id! }
                                   }
+                                  className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                />
+                              ) : (
+                                <BotonImprimirMovimiento
+                                  movimiento={m}
                                   className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                 />
                               )}
@@ -800,6 +811,24 @@ export function CajaHistorialPage() {
           categorias={categorias}
           onCerrar={() => setAgregarAbierto(false)}
           onAgregado={refrescarTrasAjuste}
+        />
+      )}
+
+      {imprimirResumenDia && diaSeleccionado && (
+        <ModalImprimir
+          {...resumenAReciboProps({
+            fecha: new Date().toISOString(),
+            camposEncabezado: [{ etiqueta: "Día", valor: diaSeleccionado.fecha }],
+            ingresos: agruparPorEtiqueta(movimientosDelDia, "ingreso").map(([etiqueta, monto]) => ({
+              etiqueta,
+              monto,
+            })),
+            egresos: agruparPorEtiqueta(movimientosDelDia, "egreso").map(([etiqueta, monto]) => ({
+              etiqueta,
+              monto,
+            })),
+          })}
+          onCerrar={() => setImprimirResumenDia(false)}
         />
       )}
 

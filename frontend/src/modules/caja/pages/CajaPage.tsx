@@ -4,15 +4,19 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type MovimientoCaja, type ResumenTurno } from "../api";
 import { BotonFactura } from "../../migao/components/BotonFactura";
 import { AdministracionModal } from "../components/AdministracionModal";
+import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
+import { resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
+import { agruparPorEtiqueta } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
 
 const POLL_MS = 10000;
@@ -46,6 +50,7 @@ export function CajaPage() {
 
   const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | "administracion" | null>(null);
   const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
+  const [imprimirResumenTurno, setImprimirResumenTurno] = useState(false);
 
   const turnoIdRef = useRef<string | null>(null);
   turnoIdRef.current = resumen?.turno.id ?? null;
@@ -215,7 +220,17 @@ export function CajaPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
+              {resumen.movimientos.length > 0 && (
+                <button
+                  onClick={() => setImprimirResumenTurno(true)}
+                  className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                >
+                  🖨️ Imprimir resumen del turno
+                </button>
+              )}
+            </div>
             {resumen.movimientos.length === 0 ? (
               <p className="text-sm text-brand-ink/60">Sin movimientos todavía.</p>
             ) : (
@@ -316,13 +331,18 @@ export function CajaPage() {
                                     {m.tipo === "egreso" ? "-" : "+"}
                                     {formatearMoneda(Number(m.monto))}
                                   </div>
-                                  {puedeVerFactura && (
+                                  {puedeVerFactura ? (
                                     <BotonFactura
                                       origen={
                                         m.modulo_origen_slug === "con_sentido"
                                           ? { tipo: "venta_con_sentido", id: m.referencia_id! }
                                           : { tipo: "venta", id: m.referencia_id! }
                                       }
+                                      className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                    />
+                                  ) : (
+                                    <BotonImprimirMovimiento
+                                      movimiento={m}
                                       className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                     />
                                   )}
@@ -424,6 +444,26 @@ export function CajaPage() {
           moduloOrigenActual={movimientoEditando.modulo_origen_slug as ModuloOrigenSlug | null}
           onCerrar={() => setMovimientoEditando(null)}
           onGuardado={cargarResumenDeTurnoActual}
+        />
+      )}
+
+      {imprimirResumenTurno && resumen && (
+        <ModalImprimir
+          {...resumenAReciboProps({
+            fecha: new Date().toISOString(),
+            camposEncabezado: [
+              { etiqueta: "Turno abierto", valor: formatearHora(resumen.turno.abiertoEn) },
+            ],
+            ingresos: agruparPorEtiqueta(resumen.movimientos, "ingreso").map(([etiqueta, monto]) => ({
+              etiqueta,
+              monto,
+            })),
+            egresos: agruparPorEtiqueta(resumen.movimientos, "egreso").map(([etiqueta, monto]) => ({
+              etiqueta,
+              monto,
+            })),
+          })}
+          onCerrar={() => setImprimirResumenTurno(false)}
         />
       )}
     </div>

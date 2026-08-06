@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { ReciboImprimible, type ReciboImprimibleProps } from "./ReciboImprimible";
 
 const CLAVE_ANCHO = "recibo-ancho-mm";
+
+const TITULO_POR_TIPO: Record<ReciboImprimibleProps["tipo"], string> = {
+  factura: "Factura",
+  cotizacion: "Cotización",
+  movimiento: "Comprobante",
+  resumen: "Resumen de caja",
+};
 
 function obtenerAnchoGuardado(): 58 | 80 {
   return window.localStorage.getItem(CLAVE_ANCHO) === "58" ? 58 : 80;
@@ -21,13 +28,24 @@ type ModalImprimirProps = Omit<ReciboImprimibleProps, "anchoMm"> & { onCerrar: (
 export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
   const [anchoMm, setAnchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
 
+  // Salta directo al diálogo de impresión del navegador al abrir — sin este
+  // paso, había que ver nuestra vista previa Y LUEGO la del navegador, dos
+  // pantallas para lo mismo. El navegador siempre va a pedir su propia
+  // confirmación antes de imprimir (ninguna web puede saltársela por
+  // seguridad), así que este modal queda de respaldo debajo por si hay que
+  // reimprimir o cambiar el ancho de papel.
+  useEffect(() => {
+    window.print();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function cambiarAncho(valor: 58 | 80) {
     setAnchoMm(valor);
     window.localStorage.setItem(CLAVE_ANCHO, String(valor));
   }
 
   return (
-    <Modal titulo={recibo.tipo === "cotizacion" ? "Cotización" : "Factura"} onCerrar={onCerrar} maxWidth="sm:max-w-sm">
+    <Modal titulo={TITULO_POR_TIPO[recibo.tipo]} onCerrar={onCerrar} maxWidth="sm:max-w-sm">
       <div className="mb-3 flex items-center justify-center gap-2">
         <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Ancho de papel:</span>
         {([58, 80] as const).map((valor) => (

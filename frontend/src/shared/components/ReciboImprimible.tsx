@@ -13,23 +13,37 @@ export interface ReciboPago {
   monto: number;
 }
 
+export interface ReciboEtiquetaMonto {
+  etiqueta: string;
+  monto: number;
+}
+
 export interface ReciboImprimibleProps {
   // Solo la copia que de verdad se imprime lleva "recibo-imprimible" (ver
   // ModalImprimir.tsx) — la vista previa dentro del modal no lo lleva, para
   // no tener dos elementos con el mismo id en el DOM al mismo tiempo.
   id?: string;
-  tipo: "factura" | "cotizacion";
-  folio: string;
+  // "movimiento": comprobante simple de un ingreso/egreso suelto de Caja
+  // General (sin ítems, ej. un ingreso manual o un egreso) — ver `variante`.
+  // "resumen": totalizado de un día o un turno (ver resumenIngresos/Egresos).
+  tipo: "factura" | "cotizacion" | "movimiento" | "resumen";
+  // Solo aplica a tipo "movimiento": qué franja/color mostrar.
+  variante?: "ingreso" | "egreso";
+  folio?: string;
   fecha: string;
   camposEncabezado?: { etiqueta: string; valor: string }[];
-  items: ReciboLinea[];
-  subtotal: number;
+  // factura / cotización / movimiento (movimiento usa una sola línea)
+  items?: ReciboLinea[];
+  subtotal?: number;
   descuentoPorcentaje?: number;
   descuentoMonto?: number;
   propina?: { monto: number; metodoPago: string } | null;
   pagos?: ReciboPago[];
-  total: number;
+  total?: number;
   nota?: string | null;
+  // resumen de día/turno: desglose por área/categoría + balance
+  resumenIngresos?: ReciboEtiquetaMonto[];
+  resumenEgresos?: ReciboEtiquetaMonto[];
   anchoMm: 58 | 80;
 }
 
@@ -46,15 +60,17 @@ function formatearFecha(fechaIso: string) {
 }
 
 /**
- * Layout del recibo imprimible (factura o cotización), compartido por ambos
- * flujos: mismo diseño, solo cambia la franja de estado y qué secciones
- * opcionales trae cada uno (pagos solo en factura, nota más común en
- * cotización). `id="recibo-imprimible"` es el gancho que usa print.css para
- * imprimir SOLO esto, ignorando el resto de la pantalla.
+ * Layout del recibo imprimible, compartido por los 4 documentos que puede
+ * imprimir la app: factura, cotización, comprobante suelto de un movimiento
+ * de Caja (ingreso/egreso sin ítems) y resumen totalizado de un día/turno.
+ * Mismo encabezado (logo + franja de estado) y pie para los 4 — solo cambia
+ * el cuerpo según `tipo`. `id="recibo-imprimible"` es el gancho que usa
+ * print.css para imprimir SOLO esto, ignorando el resto de la pantalla.
  */
 export function ReciboImprimible({
   id,
   tipo,
+  variante,
   folio,
   fecha,
   camposEncabezado = [],
@@ -66,10 +82,36 @@ export function ReciboImprimible({
   pagos,
   total,
   nota,
+  resumenIngresos,
+  resumenEgresos,
   anchoMm,
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
+
   const esCotizacion = tipo === "cotizacion";
+  const esMovimiento = tipo === "movimiento";
+  const esResumen = tipo === "resumen";
+  const esEgreso = esMovimiento && variante === "egreso";
+
+  const franjaTexto = esCotizacion
+    ? "COTIZACIÓN — NO es una factura de venta"
+    : esResumen
+      ? "RESUMEN DE CAJA"
+      : esMovimiento
+        ? esEgreso
+          ? "COMPROBANTE DE EGRESO"
+          : "COMPROBANTE DE INGRESO"
+        : "FACTURA DE VENTA";
+  const franjaClase = esCotizacion
+    ? "border-amber-600 text-amber-700"
+    : esEgreso
+      ? "border-red-600 text-red-700"
+      : "border-black text-black";
+
+  const tituloDocumento = esCotizacion ? "Cotización" : esMovimiento ? "Comprobante" : esResumen ? null : "Factura";
+
+  const totalIngresos = (resumenIngresos ?? []).reduce((acc, r) => acc + r.monto, 0);
+  const totalEgresos = (resumenEgresos ?? []).reduce((acc, r) => acc + r.monto, 0);
 
   return (
     <div
@@ -106,18 +148,17 @@ export function ReciboImprimible({
         <div className="text-[16px] leading-tight">{NOMBRE_NEGOCIO}</div>
       </div>
 
-      <div
-        className={`my-2 rounded border-2 py-1 text-center text-[16px] font-bold ${
-          esCotizacion ? "border-amber-600 text-amber-700" : "border-black text-black"
-        }`}
-      >
-        {esCotizacion ? "COTIZACIÓN — NO es una factura de venta" : "FACTURA DE VENTA"}
+      <div className={`my-2 rounded border-2 py-1 text-center text-[16px] font-bold ${franjaClase}`}>
+        {franjaTexto}
       </div>
 
       <div className="mb-2 text-[16px]">
-        <div>
-          {esCotizacion ? "Cotización" : "Factura"} Nº {folio}
-        </div>
+        {tituloDocumento && (
+          <div>
+            {tituloDocumento}
+            {folio ? ` Nº ${folio}` : ""}
+          </div>
+        )}
         <div>Fecha: {formatearFecha(fecha)}</div>
         {camposEncabezado.map((c) => (
           <div key={c.etiqueta}>
@@ -128,50 +169,109 @@ export function ReciboImprimible({
 
       <div className="border-t border-dashed border-black" />
 
-      <table className="w-full text-[16px]">
-        <thead>
-          <tr className="border-b border-dashed border-black">
-            <th className="py-1 text-left font-semibold">Producto</th>
-            <th className="py-1 text-right font-semibold">Cant.</th>
-            <th className="py-1 text-right font-semibold">Precio</th>
-            <th className="py-1 text-right font-semibold">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx}>
-              <td className="py-0.5 pr-1 align-top">{item.nombre}</td>
-              <td className="py-0.5 text-right align-top">{item.cantidad}</td>
-              <td className="py-0.5 text-right align-top">{formatMoney(item.precioUnitario)}</td>
-              <td className="py-0.5 text-right align-top">{formatMoney(item.subtotal)}</td>
+      {esResumen ? (
+        <div className="my-2 flex flex-col gap-3 text-[16px]">
+          <div>
+            <div className="mb-1 font-bold">Ingresos</div>
+            {(resumenIngresos ?? []).length === 0 ? (
+              <div className="text-[15px]">Sin ingresos.</div>
+            ) : (
+              (resumenIngresos ?? []).map((r) => (
+                <div key={r.etiqueta} className="flex justify-between">
+                  <span>{r.etiqueta}</span>
+                  <span>{formatMoney(r.monto)}</span>
+                </div>
+              ))
+            )}
+            <div className="flex justify-between border-t border-dashed border-black font-semibold">
+              <span>Total ingresos</span>
+              <span>{formatMoney(totalIngresos)}</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 font-bold">Egresos</div>
+            {(resumenEgresos ?? []).length === 0 ? (
+              <div className="text-[15px]">Sin egresos.</div>
+            ) : (
+              (resumenEgresos ?? []).map((r) => (
+                <div key={r.etiqueta} className="flex justify-between">
+                  <span>{r.etiqueta}</span>
+                  <span>-{formatMoney(r.monto)}</span>
+                </div>
+              ))
+            )}
+            <div className="flex justify-between border-t border-dashed border-black font-semibold">
+              <span>Total egresos</span>
+              <span>-{formatMoney(totalEgresos)}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <table className="w-full text-[16px]">
+          <thead>
+            <tr className="border-b border-dashed border-black">
+              <th className="py-1 text-left font-semibold">{esMovimiento ? "Concepto" : "Producto"}</th>
+              {!esMovimiento && (
+                <>
+                  <th className="py-1 text-right font-semibold">Cant.</th>
+                  <th className="py-1 text-right font-semibold">Precio</th>
+                </>
+              )}
+              <th className="py-1 text-right font-semibold">{esMovimiento ? "Monto" : "Total"}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {(items ?? []).map((item, idx) => (
+              <tr key={idx}>
+                <td className="py-0.5 pr-1 align-top">{item.nombre}</td>
+                {!esMovimiento && (
+                  <>
+                    <td className="py-0.5 text-right align-top">{item.cantidad}</td>
+                    <td className="py-0.5 text-right align-top">{formatMoney(item.precioUnitario)}</td>
+                  </>
+                )}
+                <td className="py-0.5 text-right align-top">{formatMoney(item.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <div className="border-t border-dashed border-black" />
 
       <div className="mt-1 flex flex-col gap-0.5 text-[16px]">
-        <div className="flex justify-between">
-          <span>Subtotal</span>
-          <span>{formatMoney(subtotal)}</span>
-        </div>
-        {!!descuentoPorcentaje && descuentoPorcentaje > 0 && (
-          <div className="flex justify-between">
-            <span>Descuento ({descuentoPorcentaje}%)</span>
-            <span>-{formatMoney(descuentoMonto ?? 0)}</span>
+        {esResumen ? (
+          <div className="flex justify-between text-lg font-bold">
+            <span>BALANCE</span>
+            <span>{formatMoney(totalIngresos - totalEgresos)}</span>
           </div>
+        ) : (
+          <>
+            {!esMovimiento && (
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>{formatMoney(subtotal ?? 0)}</span>
+              </div>
+            )}
+            {!!descuentoPorcentaje && descuentoPorcentaje > 0 && (
+              <div className="flex justify-between">
+                <span>Descuento ({descuentoPorcentaje}%)</span>
+                <span>-{formatMoney(descuentoMonto ?? 0)}</span>
+              </div>
+            )}
+            {propina && propina.monto > 0 && (
+              <div className="flex justify-between">
+                <span>Propina ({propina.metodoPago})</span>
+                <span>{formatMoney(propina.monto)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-lg font-bold">
+              <span>TOTAL</span>
+              <span>{formatMoney(total ?? 0)}</span>
+            </div>
+          </>
         )}
-        {propina && propina.monto > 0 && (
-          <div className="flex justify-between">
-            <span>Propina ({propina.metodoPago})</span>
-            <span>{formatMoney(propina.monto)}</span>
-          </div>
-        )}
-        <div className="flex justify-between text-lg font-bold">
-          <span>TOTAL</span>
-          <span>{formatMoney(total)}</span>
-        </div>
       </div>
 
       {pagos && pagos.length > 0 && (
@@ -192,7 +292,11 @@ export function ReciboImprimible({
       {nota && <div className="mt-2 text-[16px] italic">Nota: {nota}</div>}
 
       <div className="mt-3 text-center text-[15px]">
-        {esCotizacion ? "Precios sujetos a cambio. Válida por 15 días." : "¡Gracias por tu compra!"}
+        {esCotizacion
+          ? "Precios sujetos a cambio. Válida por 15 días."
+          : esMovimiento || esResumen
+            ? "Documento interno — no es una factura de venta."
+            : "¡Gracias por tu compra!"}
       </div>
     </div>
   );

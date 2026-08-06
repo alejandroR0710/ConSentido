@@ -8,6 +8,7 @@ import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type HistorialAdministrativoEntrada } from "../api";
 import { labelArea } from "../areas";
+import { BotonFactura } from "../components/BotonFactura";
 
 const POLL_MS = 15000;
 
@@ -138,18 +139,19 @@ export function HistorialAdministrativoPage() {
               <th className="px-3 py-2">Motivo</th>
               <th className="px-3 py-2">Fecha y hora</th>
               <th className="px-3 py-2">Total</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                   Cargando...
                 </td>
               </tr>
             ) : historial.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                   Todavía no hay cuentas con pago administrativo.
                 </td>
               </tr>
@@ -161,7 +163,7 @@ export function HistorialAdministrativoPage() {
                     key={`dia-${grupo.fecha}`}
                     className="border-t-2 border-amber-500 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20"
                   >
-                    <td colSpan={5} className="px-3 py-2">
+                    <td colSpan={6} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <span className="font-semibold capitalize text-amber-700 dark:text-amber-400">
                           {formatearFechaLarga(grupo.fecha)}
@@ -201,6 +203,9 @@ export function HistorialAdministrativoPage() {
                       ) : (
                         formatMoney(h.total_cobrado)
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <BotonFactura ordenId={h.id} />
                     </td>
                   </tr>
                 ));

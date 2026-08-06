@@ -278,6 +278,60 @@ WHERE r.nombre IN ('Super Root', 'Root')
 
 
 -- ========================================================================
+-- SECCIÓN 7: FACTURA IMPRIMIBLE (Migao) + MÓDULO DE COTIZACIONES
+-- ========================================================================
+-- ⚠️ NO ejecutar contra Supabase todavía — se está probando en local.
+-- La tabla `facturas` ya existe desde el schema original (nunca se había
+-- usado); solo falta la secuencia de numeración. `migao_cotizaciones` vive
+-- completamente aparte (no toca ordenes/ventas/inventario/caja) porque una
+-- cotización es un presupuesto ANTES de que exista una venta real.
+CREATE SEQUENCE IF NOT EXISTS facturas_numero_seq;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_venta_unica ON facturas(venta_id) WHERE venta_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS migao_cotizaciones (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero           BIGINT GENERATED ALWAYS AS IDENTITY,
+  cliente_nombre   VARCHAR(150),
+  cliente_telefono VARCHAR(30),
+  nota             VARCHAR(300),
+  subtotal         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  usuario_id       UUID REFERENCES usuarios(id),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS migao_cotizacion_items (
+  id              BIGSERIAL PRIMARY KEY,
+  cotizacion_id   UUID NOT NULL REFERENCES migao_cotizaciones(id) ON DELETE CASCADE,
+  nombre          VARCHAR(150) NOT NULL,
+  cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_unitario NUMERIC(12,2) NOT NULL,
+  subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED
+);
+CREATE INDEX IF NOT EXISTS idx_migao_cotizacion_items_cotizacion ON migao_cotizacion_items(cotizacion_id);
+
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_cotizaciones',    'migao.cotizaciones.ver'),
+  ('crear_cotizacion',    'migao.cotizaciones.crear'),
+  ('eliminar_cotizacion', 'migao.cotizaciones.eliminar')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+-- Cajero también las tiene (atiende clientes/cobra); Root/Super Root las
+-- necesitan explícitas acá porque la regla de "todos los permisos" de
+-- seed.sql solo corre en una base nueva, no en Supabase (ya seedeada).
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Cajero', 'Super Root', 'Root')
+  AND p.codigo IN ('migao.cotizaciones.ver', 'migao.cotizaciones.crear', 'migao.cotizaciones.eliminar')
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

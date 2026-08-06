@@ -245,3 +245,24 @@ export const editarItemSchema = z
     message: "Debes indicar una nueva cantidad, una observación, o cancelar el ítem",
   });
 export type EditarItemInput = z.infer<typeof editarItemSchema>;
+
+// Cotización: presupuesto para un cliente ANTES de que exista una orden real.
+// Los ítems son texto libre (sin FK a productos) para poder cotizar cosas que
+// no están en el menú — el frontend puede autocompletar desde el catálogo de
+// Migao como atajo, pero lo que se guarda siempre es una copia (nombre/precio
+// congelados al momento de cotizar, no una referencia viva al producto).
+export const crearCotizacionSchema = z.object({
+  clienteNombre: z.string().trim().max(150).optional(),
+  clienteTelefono: z.string().trim().max(30).optional(),
+  nota: z.string().trim().max(300).optional(),
+  items: z
+    .array(
+      z.object({
+        nombre: z.string().trim().min(1).max(150),
+        cantidad: z.number().positive(),
+        precioUnitario: z.number().nonnegative(),
+      }),
+    )
+    .min(1, "Agrega al menos un producto o servicio a la cotización"),
+});
+export type CrearCotizacionInput = z.infer<typeof crearCotizacionSchema>;

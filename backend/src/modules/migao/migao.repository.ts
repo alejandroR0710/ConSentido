@@ -891,3 +891,161 @@ export async function reiniciarTodoCompleto() {
     client.release();
   }
 }
+
+// ============================================================================
+// Factura imprimible: reconstruye lo cobrado de una orden ya cerrada a partir
+// de ventas/venta_items/pagos/migao_propinas — nunca toca la transacción de
+// cerrarOrden, solo lee lo que ya quedó guardado ahí.
+// ============================================================================
+
+export async function getVentaPorOrdenId(ordenId: string) {
+  const result = await pool.query(`SELECT * FROM ventas WHERE orden_id = $1`, [ordenId]);
+  return result.rowCount ? result.rows[0] : null;
+}
+
+export async function getOrdenParaFactura(ordenId: string) {
+  const result = await pool.query(
+    `SELECT o.id, o.comensal_numero, o.numero_personas, o.created_at, o.closed_at,
+            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre
+       FROM ordenes o
+       LEFT JOIN mesas m ON m.id = o.mesa_id
+       LEFT JOIN usuarios u ON u.id = o.mesero_id
+      WHERE o.id = $1`,
+    [ordenId],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+export async function getVentaItems(ventaId: string) {
+  const result = await pool.query(
+    `SELECT vi.id, vi.producto_id, p.nombre AS producto_nombre, vi.cantidad, vi.precio_unitario, vi.subtotal
+       FROM venta_items vi
+       JOIN productos p ON p.id = vi.producto_id
+      WHERE vi.venta_id = $1
+      ORDER BY vi.id ASC`,
+    [ventaId],
+  );
+  return result.rows;
+}
+
+export async function getPagosPorVenta(ventaId: string) {
+  const result = await pool.query(
+    `SELECT id, metodo_pago, monto, referencia, created_at
+       FROM pagos
+      WHERE venta_id = $1
+      ORDER BY created_at ASC`,
+    [ventaId],
+  );
+  return result.rows;
+}
+
+export async function getPropinaPorVenta(ventaId: string) {
+  const result = await pool.query(
+    `SELECT monto, porcentaje, metodo_pago FROM migao_propinas WHERE venta_id = $1`,
+    [ventaId],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+/** Get-or-create idempotente: la primera vez que se pide la factura de una
+ *  venta se le asigna el siguiente número de `facturas_numero_seq` (nunca se
+ *  reutiliza); reimprimir después siempre devuelve la misma fila. El índice
+ *  único en `venta_id` blinda contra doble clic/pedidos simultáneos. */
+export async function getOrCrearFactura(params: {
+  ventaId: string;
+  ordenId: string;
+  subtotal: number;
+  total: number;
+}) {
+  const insert = await pool.query(
+    `INSERT INTO facturas (venta_id, orden_id, numero, tipo, subtotal, total)
+     VALUES ($1, $2, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $3, $4)
+     ON CONFLICT (venta_id) WHERE venta_id IS NOT NULL DO NOTHING
+     RETURNING *`,
+    [params.ventaId, params.ordenId, params.subtotal, params.total],
+  );
+  if (insert.rowCount) return insert.rows[0];
+
+  const existente = await pool.query(`SELECT * FROM facturas WHERE venta_id = $1`, [params.ventaId]);
+  return existente.rows[0];
+}
+
+// ============================================================================
+// Cotizaciones: presupuesto para un cliente ANTES de una orden/venta real —
+// vive completamente aparte, nunca toca ordenes/ventas/inventario/caja.
+// ============================================================================
+
+export async function crearCotizacion(params: {
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  nota?: string;
+  subtotal: number;
+  total: number;
+  usuarioId: string;
+}) {
+  const result = await pool.query(
+    `INSERT INTO migao_cotizaciones (cliente_nombre, cliente_telefono, nota, subtotal, total, usuario_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      params.clienteNombre ?? null,
+      params.clienteTelefono ?? null,
+      params.nota ?? null,
+      params.subtotal,
+      params.total,
+      params.usuarioId,
+    ],
+  );
+  return result.rows[0];
+}
+
+export async function crearCotizacionItems(
+  cotizacionId: string,
+  items: { nombre: string; cantidad: number; precioUnitario: number }[],
+) {
+  for (const item of items) {
+    await pool.query(
+      `INSERT INTO migao_cotizacion_items (cotizacion_id, nombre, cantidad, precio_unitario)
+       VALUES ($1, $2, $3, $4)`,
+      [cotizacionId, item.nombre, item.cantidad, item.precioUnitario],
+    );
+  }
+}
+
+export async function listCotizaciones() {
+  const result = await pool.query(
+    `SELECT c.id, c.numero, c.cliente_nombre, c.cliente_telefono, c.nota, c.subtotal, c.total, c.created_at,
+            u.nombre AS usuario_nombre
+       FROM migao_cotizaciones c
+       LEFT JOIN usuarios u ON u.id = c.usuario_id
+      ORDER BY c.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
+}
+
+export async function getCotizacionPorId(id: string) {
+  const cotizacion = await pool.query(
+    `SELECT c.id, c.numero, c.cliente_nombre, c.cliente_telefono, c.nota, c.subtotal, c.total, c.created_at,
+            u.nombre AS usuario_nombre
+       FROM migao_cotizaciones c
+       LEFT JOIN usuarios u ON u.id = c.usuario_id
+      WHERE c.id = $1`,
+    [id],
+  );
+  if (!cotizacion.rowCount) return null;
+
+  const items = await pool.query(
+    `SELECT id, nombre, cantidad, precio_unitario, subtotal
+       FROM migao_cotizacion_items
+      WHERE cotizacion_id = $1
+      ORDER BY id ASC`,
+    [id],
+  );
+  return { ...cotizacion.rows[0], items: items.rows };
+}
+
+export async function eliminarCotizacion(id: string) {
+  const result = await pool.query(`DELETE FROM migao_cotizaciones WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}

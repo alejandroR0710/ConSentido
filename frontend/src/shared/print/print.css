@@ -1,0 +1,23 @@
+/* Impresión de recibos (factura/cotización) contra la impresora térmica
+ * instalada como impresora del sistema — ver ReciboImprimible.tsx/ModalImprimir.tsx.
+ * Truco clásico: se oculta TODO menos #recibo-imprimible, que se saca del
+ * flujo del modal y se posiciona en la esquina de la página impresa (cuyo
+ * tamaño físico ya lo define el driver de la impresora térmica: 58mm/80mm). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #recibo-imprimible,
+  #recibo-imprimible * {
+    visibility: visible;
+  }
+  #recibo-imprimible {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  @page {
+    margin: 0;
+  }
+}

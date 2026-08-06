@@ -263,6 +263,60 @@ export interface LiquidacionPropinas {
   created_at: string;
 }
 
+/** Factura imprimible de una orden ya cobrada — reconstruida en vivo desde
+ *  ventas/venta_items/pagos/migao_propinas (ver migao.service.ts::obtenerFacturaOrden).
+ *  `pagos` trae UNA línea por método (una cuenta dividida en 3 trae 3 líneas). */
+export interface FacturaItem {
+  productoNombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+export interface FacturaPago {
+  metodoPago: string;
+  monto: number;
+  referencia: string | null;
+}
+export interface FacturaOrden {
+  numeroFactura: string;
+  fecha: string;
+  mesaNumero: string | null;
+  mesaPiso: number | null;
+  meseroNombre: string | null;
+  comensalNumero: number;
+  items: FacturaItem[];
+  subtotal: number;
+  descuentoPorcentaje: number;
+  descuentoMonto: number;
+  total: number;
+  pagos: FacturaPago[];
+  propina: { monto: number; porcentaje: number | null; metodoPago: "efectivo" | "banco" } | null;
+}
+
+/** Cotización: presupuesto para un cliente ANTES de una orden/venta real —
+ *  no toca inventario/caja/ordenes (ver migao_cotizaciones en schema.sql). */
+export interface CotizacionItem {
+  id: number;
+  nombre: string;
+  cantidad: string;
+  precio_unitario: string;
+  subtotal: string;
+}
+export interface CotizacionResumen {
+  id: string;
+  numero: string;
+  cliente_nombre: string | null;
+  cliente_telefono: string | null;
+  nota: string | null;
+  subtotal: string;
+  total: string;
+  created_at: string;
+  usuario_nombre: string | null;
+}
+export interface CotizacionDetalle extends CotizacionResumen {
+  items: CotizacionItem[];
+}
+
 export const migaoApi = {
   listarOrdenesAbiertas: () => apiFetch<OrdenResumen[]>("/migao/ordenes"),
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
@@ -477,4 +531,20 @@ export const migaoApi = {
   editarMesa: (id: number, input: { numero?: string; piso?: number; capacidad?: number; activo?: boolean }) =>
     apiFetch<Mesa>(`/migao/mesas/${id}`, { method: "PATCH", body: input }),
   eliminarMesa: (id: number) => apiFetch<{ eliminada: boolean }>(`/migao/mesas/${id}`, { method: "DELETE" }),
+
+  // Factura imprimible de una orden ya cobrada — la primera vez que se pide
+  // se le asigna número (get-or-create), reimprimir después trae el mismo.
+  obtenerFactura: (ordenId: string) => apiFetch<FacturaOrden>(`/migao/ordenes/${ordenId}/factura`),
+
+  // Cotizaciones: presupuesto para un cliente, no toca inventario/caja/ordenes.
+  listarCotizaciones: () => apiFetch<CotizacionResumen[]>("/migao/cotizaciones"),
+  obtenerCotizacion: (id: string) => apiFetch<CotizacionDetalle>(`/migao/cotizaciones/${id}`),
+  crearCotizacion: (input: {
+    clienteNombre?: string;
+    clienteTelefono?: string;
+    nota?: string;
+    items: { nombre: string; cantidad: number; precioUnitario: number }[];
+  }) => apiFetch<CotizacionDetalle>("/migao/cotizaciones", { method: "POST", body: input }),
+  eliminarCotizacion: (id: string) =>
+    apiFetch<{ eliminada: boolean }>(`/migao/cotizaciones/${id}`, { method: "DELETE" }),
 };

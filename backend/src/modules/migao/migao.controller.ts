@@ -8,6 +8,7 @@ import {
   cerrarOrdenSchema,
   checkItemSchema,
   crearCategoriaProductoSchema,
+  crearCotizacionSchema,
   crearMesaSchema,
   crearOrdenSchema,
   crearProductoSchema,
@@ -230,4 +231,30 @@ export async function listarItemsActivosController(_req: Request, res: Response)
 export async function entregarItemController(req: Request, res: Response) {
   const item = await service.entregarItem(req.params.id, req.auth!.usuarioId);
   return ok(res, item);
+}
+
+export async function obtenerFacturaOrdenController(req: Request, res: Response) {
+  const factura = await service.obtenerFacturaOrden(req.params.id);
+  return ok(res, factura);
+}
+
+export async function crearCotizacionController(req: Request, res: Response) {
+  const data = crearCotizacionSchema.parse(req.body);
+  const cotizacion = await service.crearCotizacion(req.auth!.usuarioId, data);
+  return created(res, cotizacion);
+}
+
+export async function listarCotizacionesController(_req: Request, res: Response) {
+  const cotizaciones = await service.listarCotizaciones();
+  return ok(res, cotizaciones);
+}
+
+export async function obtenerCotizacionController(req: Request, res: Response) {
+  const cotizacion = await service.obtenerCotizacion(req.params.id);
+  return ok(res, cotizacion);
+}
+
+export async function eliminarCotizacionController(req: Request, res: Response) {
+  const resultado = await service.eliminarCotizacion(req.params.id);
+  return ok(res, resultado);
 }

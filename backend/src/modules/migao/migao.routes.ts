@@ -20,17 +20,20 @@ import {
   cancelarOrdenController,
   cerrarOrdenController,
   crearCategoriaController,
+  crearCotizacionController,
   crearMesaController,
   crearOrdenController,
   crearProductoController,
   editarItemController,
   editarMesaController,
   editarProductoController,
+  eliminarCotizacionController,
   eliminarMesaController,
   empezarPrepararController,
   entregarItemController,
   listarCategoriasController,
   listarColaDeCocinaController,
+  listarCotizacionesController,
   listarHistorialAdministrativoController,
   listarHistorialDespachadosController,
   listarHistorialOrdenesController,
@@ -45,7 +48,9 @@ import {
   marcarCheckItemController,
   marcarOrdenListaController,
   moverMesaController,
+  obtenerCotizacionController,
   obtenerDetalleOrdenController,
+  obtenerFacturaOrdenController,
   obtenerResumenDiarioIngresosController,
   reiniciarTodoController,
   repartirPropinasController,
@@ -157,6 +162,13 @@ migaoRouter.get(
   asyncHandler(obtenerResumenDiarioIngresosController),
 );
 migaoRouter.get("/ordenes/:id", requirePermission("migao.ordenes.ver"), asyncHandler(obtenerDetalleOrdenController));
+// Factura imprimible de una orden ya cobrada — mismo permiso que ver el
+// detalle/historial (cualquiera que ve la orden puede reimprimir su factura).
+migaoRouter.get(
+  "/ordenes/:id/factura",
+  requirePermission("migao.ordenes.ver"),
+  asyncHandler(obtenerFacturaOrdenController),
+);
 // El mesero cambia la mesa de una orden abierta (ej. los comensales se
 // cambiaron de mesa a mitad del pedido).
 migaoRouter.patch(
@@ -219,6 +231,29 @@ migaoRouter.post(
   "/reiniciar-todo",
   requirePermission("general.sistema.reiniciar_todo"),
   asyncHandler(reiniciarTodoController),
+);
+
+// Cotizaciones: presupuesto para un cliente ANTES de una orden real — vive
+// aparte de ordenes/ventas, propios permisos (también los tiene Cajero).
+migaoRouter.get(
+  "/cotizaciones",
+  requirePermission("migao.cotizaciones.ver"),
+  asyncHandler(listarCotizacionesController),
+);
+migaoRouter.post(
+  "/cotizaciones",
+  requirePermission("migao.cotizaciones.crear"),
+  asyncHandler(crearCotizacionController),
+);
+migaoRouter.get(
+  "/cotizaciones/:id",
+  requirePermission("migao.cotizaciones.ver"),
+  asyncHandler(obtenerCotizacionController),
+);
+migaoRouter.delete(
+  "/cotizaciones/:id",
+  requirePermission("migao.cotizaciones.eliminar"),
+  asyncHandler(eliminarCotizacionController),
 );
 
 // Cocina: solo ve la cola de ítems pendientes/en preparación de todas las órdenes.

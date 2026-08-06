@@ -690,6 +690,37 @@ CREATE INDEX idx_migao_propinas_mesero ON migao_propinas(mesero_id);
 CREATE INDEX idx_migao_propinas_fecha ON migao_propinas(created_at DESC);
 CREATE INDEX idx_migao_propinas_liquidacion ON migao_propinas(liquidacion_id);
 
+-- Cotización: presupuesto para un cliente ANTES de que exista una orden/venta
+-- real — vive completamente aparte (nunca toca ordenes/ventas/inventario/caja).
+-- Los ítems son texto libre (sin FK a productos) para poder cotizar cosas que
+-- no están en el menú/catálogo; el frontend puede autocompletar desde el
+-- catálogo de Migao como atajo, pero el valor guardado siempre es una copia.
+CREATE TABLE migao_cotizaciones (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero           BIGINT GENERATED ALWAYS AS IDENTITY,
+  cliente_nombre   VARCHAR(150),
+  cliente_telefono VARCHAR(30),
+  nota             VARCHAR(300),
+  subtotal         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  usuario_id       UUID REFERENCES usuarios(id),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE migao_cotizacion_items (
+  id              BIGSERIAL PRIMARY KEY,
+  cotizacion_id   UUID NOT NULL REFERENCES migao_cotizaciones(id) ON DELETE CASCADE,
+  nombre          VARCHAR(150) NOT NULL,
+  cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_unitario NUMERIC(12,2) NOT NULL,
+  subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED
+);
+CREATE INDEX idx_migao_cotizacion_items_cotizacion ON migao_cotizacion_items(cotizacion_id);
+
+-- Numeración legible ("F-000123") para facturas/tickets impresos — nunca se
+-- reinicia ni se recalcula, cada factura toma el siguiente valor una sola vez.
+CREATE SEQUENCE facturas_numero_seq;
+
 CREATE TABLE facturas (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   venta_id   UUID REFERENCES ventas(id),
@@ -703,6 +734,8 @@ CREATE TABLE facturas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (venta_id IS NOT NULL OR orden_id IS NOT NULL OR pedido_id IS NOT NULL)
 );
+-- Una sola factura por venta (get-or-create idempotente al reimprimir).
+CREATE UNIQUE INDEX idx_facturas_venta_unica ON facturas(venta_id) WHERE venta_id IS NOT NULL;
 
 -- ============================================================================
 -- 7. PEDIDOS / ENCARGOS

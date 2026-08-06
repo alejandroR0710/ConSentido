@@ -46,6 +46,14 @@ export const MODULES_META: ModuloMeta[] = [
   // Historial aparte de propinas (dinero del mesero, no cuenta en Caja
   // General) — exclusivo de Root/Super Root.
   { slug: "migao", label: "Historial de Propinas", path: "/migao/propinas", icon: "💵", roles: ["Super Root", "Root"] },
+  // Presupuesto para un cliente, sin generar venta — lo usa quien atiende/cobra.
+  {
+    slug: "migao",
+    label: "Cotizaciones",
+    path: "/migao/cotizaciones",
+    icon: "📄",
+    roles: ["Super Root", "Root", "Cajero"],
+  },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
   // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
   // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
@@ -107,6 +115,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
       "/migao/editor-mesas",
       "/migao/historial-administrativo",
       "/migao/propinas",
+      "/migao/cotizaciones",
     ],
   },
   {

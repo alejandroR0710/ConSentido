@@ -11,6 +11,7 @@ import {
   CambiarMesaInput,
   CerrarOrdenInput,
   CheckItemInput,
+  CrearCotizacionInput,
   CrearMesaInput,
   CrearOrdenInput,
   CrearProductoInput,
@@ -886,4 +887,96 @@ export async function resetearOrdenes() {
  *  catálogo (productos, categorías), usuarios y roles/permisos. */
 export async function reiniciarTodo() {
   return repo.reiniciarTodoCompleto();
+}
+
+/**
+ * Reconstruye la factura imprimible de una orden ya cobrada a partir de lo
+ * que quedó guardado al cerrarla (ventas/venta_items/pagos/migao_propinas) —
+ * nunca recalcula ni vuelve a tocar esa transacción, solo la lee. La primera
+ * vez que se pide se le asigna un número de factura (get-or-create, ver
+ * migao.repository.ts::getOrCrearFactura); reimprimir después trae el mismo número.
+ */
+export async function obtenerFacturaOrden(ordenId: string) {
+  const [orden, venta] = await Promise.all([repo.getOrdenParaFactura(ordenId), repo.getVentaPorOrdenId(ordenId)]);
+  if (!orden) throw Errors.notFound("Orden no encontrada");
+  if (!venta) throw Errors.notFound("Esta orden todavía no tiene una venta cobrada que facturar");
+
+  const [items, pagos, propina, factura] = await Promise.all([
+    repo.getVentaItems(venta.id),
+    repo.getPagosPorVenta(venta.id),
+    repo.getPropinaPorVenta(venta.id),
+    repo.getOrCrearFactura({
+      ventaId: venta.id,
+      ordenId,
+      subtotal: Number(venta.subtotal),
+      total: Number(venta.total),
+    }),
+  ]);
+
+  return {
+    numeroFactura: factura.numero as string,
+    fecha: orden.closed_at ?? venta.created_at,
+    mesaNumero: orden.mesa_numero as string | null,
+    mesaPiso: orden.mesa_piso as number | null,
+    meseroNombre: orden.mesero_nombre as string | null,
+    comensalNumero: orden.comensal_numero as number,
+    items: items.map((i) => ({
+      productoNombre: i.producto_nombre as string,
+      cantidad: Number(i.cantidad),
+      precioUnitario: Number(i.precio_unitario),
+      subtotal: Number(i.subtotal),
+    })),
+    subtotal: Number(venta.subtotal),
+    descuentoPorcentaje: Number(venta.descuento_porcentaje),
+    descuentoMonto: Number(venta.descuento),
+    total: Number(venta.total),
+    pagos: pagos.map((p) => ({
+      metodoPago: p.metodo_pago as string,
+      monto: Number(p.monto),
+      referencia: p.referencia as string | null,
+    })),
+    propina: propina
+      ? {
+          monto: Number(propina.monto),
+          porcentaje: propina.porcentaje !== null ? Number(propina.porcentaje) : null,
+          metodoPago: propina.metodo_pago as "efectivo" | "banco",
+        }
+      : null,
+  };
+}
+
+/**
+ * Cotización: presupuesto para un cliente ANTES de que exista una orden/venta
+ * real — vive completamente aparte, nunca toca ordenes/ventas/inventario/caja.
+ * El total se calcula acá a partir de los ítems, nunca se confía en un total
+ * mandado por el cliente.
+ */
+export async function crearCotizacion(usuarioId: string, input: CrearCotizacionInput) {
+  const subtotal = input.items.reduce((acc, i) => acc + i.cantidad * i.precioUnitario, 0);
+  const cotizacion = await repo.crearCotizacion({
+    clienteNombre: input.clienteNombre,
+    clienteTelefono: input.clienteTelefono,
+    nota: input.nota,
+    subtotal,
+    total: subtotal,
+    usuarioId,
+  });
+  await repo.crearCotizacionItems(cotizacion.id, input.items);
+  return repo.getCotizacionPorId(cotizacion.id);
+}
+
+export async function listarCotizaciones() {
+  return repo.listCotizaciones();
+}
+
+export async function obtenerCotizacion(id: string) {
+  const cotizacion = await repo.getCotizacionPorId(id);
+  if (!cotizacion) throw Errors.notFound("Cotización no encontrada");
+  return cotizacion;
+}
+
+export async function eliminarCotizacion(id: string) {
+  const eliminada = await repo.eliminarCotizacion(id);
+  if (!eliminada) throw Errors.notFound("Cotización no encontrada");
+  return { eliminada: true };
 }

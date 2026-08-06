@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -14,6 +15,7 @@ import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
+import { facturaAReciboProps } from "../factura";
 import { formatCantidad } from "../format";
 import { combinarMesasConOrdenes } from "../ocupacionMesas";
 
@@ -74,6 +76,11 @@ export function MigaoPage() {
   const [montosRecibidosPartes, setMontosRecibidosPartes] = useState<number[]>([0, 0]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  // Al cobrar, se ofrece imprimir la factura recién generada de una vez (el
+  // punto real de uso: la orden todavía "caliente" en el mostrador) — no
+  // bloquea el cobro si falla, solo se le avisa al Cajero.
+  const [reciboFactura, setReciboFactura] = useState<ReturnType<typeof facturaAReciboProps> | null>(null);
+  const [errorFactura, setErrorFactura] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
@@ -210,6 +217,18 @@ export function MigaoPage() {
     detalle !== null &&
     Math.abs(pago.montoEfectivo + pago.montoBanco - totalConDescuento) > 0.01;
 
+  /** Trae la factura recién generada y la ofrece para imprimir de una vez —
+   *  si falla, solo se avisa aparte, nunca deshace el cobro (ya se cerró). */
+  async function abrirFacturaTrasCobro(ordenId: string) {
+    try {
+      const factura = await migaoApi.obtenerFactura(ordenId);
+      setReciboFactura(facturaAReciboProps(factura));
+      setErrorFactura(null);
+    } catch (err) {
+      setErrorFactura(err instanceof ApiError ? err.message : "No se pudo generar la factura para imprimir");
+    }
+  }
+
   async function cerrarYCobrar() {
     if (!ordenSeleccionadaId || pagoMixtoInvalido) return;
     setCobrando(true);
@@ -223,6 +242,7 @@ export function MigaoPage() {
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
       setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}`);
+      await abrirFacturaTrasCobro(ordenSeleccionadaId);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
       await cargarOrdenes();
@@ -346,6 +366,7 @@ export function MigaoPage() {
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
       setMensaje(`Orden cobrada y cerrada (cuenta dividida en ${numPartes}). Total: ${formatMoney(resultado.total)}`);
+      await abrirFacturaTrasCobro(ordenSeleccionadaId);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
       reiniciarDivision();
@@ -389,6 +410,7 @@ export function MigaoPage() {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
+      {errorFactura && <p className="text-sm text-amber-700 dark:text-amber-400">⚠ {errorFactura}</p>}
 
       {!mostrarCobro ? (
         <div className="flex flex-col gap-3">
@@ -876,6 +898,8 @@ export function MigaoPage() {
           onAgregado={refrescarDetalle}
         />
       )}
+
+      {reciboFactura && <ModalImprimir {...reciboFactura} onCerrar={() => setReciboFactura(null)} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   type ResumenDiarioIngreso,
 } from "../api";
 import { labelArea } from "../areas";
+import { BotonFactura } from "../components/BotonFactura";
 import { DetalleCuentaMigao } from "../components/DetalleCuentaMigao";
 import { ResetearOrdenesModal } from "../components/ResetearOrdenesModal";
 
@@ -310,27 +311,32 @@ export function MigaoHistorialPage() {
                     </td>
                     {puedeEditarPagos && (
                       <td className="px-3 py-2">
-                        {h.estado === "cerrada" && h.movimiento_id != null && (
-                          <button
-                            onClick={() =>
-                              setMovimientoEditando({
-                                tipo: "orden",
-                                movimientoId: h.movimiento_id!,
-                                metodoPagoActual: h.metodo_pago!,
-                                monto: Number(h.total_cobrado),
-                                etiqueta: `Mesa ${h.mesa_numero ?? "—"}`,
-                                ordenId: h.id,
-                                mesaNumero: h.mesa_numero,
-                                mesaPiso: h.mesa_piso,
-                                meseroNombre: h.mesero_nombre,
-                                numeroPersonas: h.numero_personas,
-                                fecha: h.closed_at,
-                              })
-                            }
-                            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                          >
-                            Editar
-                          </button>
+                        {h.estado === "cerrada" && (
+                          <div className="flex flex-wrap gap-1">
+                            <BotonFactura ordenId={h.id} />
+                            {h.movimiento_id != null && (
+                              <button
+                                onClick={() =>
+                                  setMovimientoEditando({
+                                    tipo: "orden",
+                                    movimientoId: h.movimiento_id!,
+                                    metodoPagoActual: h.metodo_pago!,
+                                    monto: Number(h.total_cobrado),
+                                    etiqueta: `Mesa ${h.mesa_numero ?? "—"}`,
+                                    ordenId: h.id,
+                                    mesaNumero: h.mesa_numero,
+                                    mesaPiso: h.mesa_piso,
+                                    meseroNombre: h.mesero_nombre,
+                                    numeroPersonas: h.numero_personas,
+                                    fecha: h.closed_at,
+                                  })
+                                }
+                                className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                              >
+                                Editar
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     )}

@@ -144,3 +144,47 @@ export async function obtenerVenta(id: string) {
   if (!venta) throw Errors.notFound("Venta no encontrada");
   return venta;
 }
+
+/**
+ * Factura imprimible de una venta de Con Sentido — mismo formato normalizado
+ * que migao.service.ts::obtenerFacturaOrden (mesa/mesero/comensal quedan null,
+ * acá no aplican) para poder reusar el mismo componente de impresión del
+ * frontend. No hay concepto de descuento en este flujo, así que subtotal y
+ * total son iguales.
+ */
+export async function obtenerFacturaVenta(ventaId: string) {
+  const venta = await repo.getVentaById(ventaId);
+  if (!venta) throw Errors.notFound("Venta no encontrada");
+
+  const monto = Number(venta.monto);
+  const factura = await repo.getOrCrearFactura({ ventaId, subtotal: monto, total: monto });
+
+  const pagos =
+    venta.metodo_pago === "mixto"
+      ? [
+          { metodoPago: "efectivo", monto: Number(venta.monto_efectivo), referencia: null },
+          { metodoPago: "banco", monto: Number(venta.monto_banco), referencia: null },
+        ]
+      : [{ metodoPago: venta.metodo_pago as string, monto, referencia: null }];
+
+  return {
+    numeroFactura: factura.numero as string,
+    fecha: venta.created_at as string,
+    mesaNumero: null,
+    mesaPiso: null,
+    meseroNombre: null,
+    comensalNumero: null,
+    items: (venta.items as Array<Record<string, unknown>>).map((item) => ({
+      productoNombre: item.producto as string,
+      cantidad: Number(item.cantidad),
+      precioUnitario: Number(item.precio_unitario),
+      subtotal: Number(item.subtotal),
+    })),
+    subtotal: monto,
+    descuentoPorcentaje: 0,
+    descuentoMonto: 0,
+    total: monto,
+    pagos,
+    propina: null,
+  };
+}

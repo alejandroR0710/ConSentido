@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
+import { conSentidoApi } from "../../con_sentido/api";
 import { migaoApi } from "../api";
 import { facturaAReciboProps } from "../factura";
 
-type OrigenFactura = { tipo: "orden"; id: string } | { tipo: "venta"; id: string };
+// "orden"/"venta" son de Migao (una orden cerrada genera una venta); "venta_con_sentido"
+// es el flujo de venta directa de Con Sentido — cada uno pega contra su propio
+// endpoint de factura, pero ambos devuelven el mismo formato normalizado.
+type OrigenFactura =
+  | { tipo: "orden"; id: string }
+  | { tipo: "venta"; id: string }
+  | { tipo: "venta_con_sentido"; id: string };
 
 interface BotonFacturaProps {
   origen: OrigenFactura;
@@ -12,11 +19,11 @@ interface BotonFacturaProps {
   etiqueta?: string;
 }
 
-/** Botón reutilizable: trae la factura de una orden ya cobrada (se crea la
- *  primera vez que se pide, ver migao.service.ts::obtenerFacturaOrden) y abre
- *  el modal de impresión — usado en cualquier historial que liste órdenes/ventas
- *  cerradas. Acepta el origen como orden (historiales de Migao) o como venta
- *  (Caja General, donde los movimientos guardan venta_id, no orden_id). */
+/** Botón reutilizable: trae la factura de una venta ya cobrada (se crea la
+ *  primera vez que se pide, ver migao.service.ts::obtenerFacturaOrden /
+ *  con_sentido.service.ts::obtenerFacturaVenta) y abre el modal de impresión
+ *  — usado en cualquier historial que liste órdenes/ventas cerradas, sin
+ *  importar de qué módulo del negocio vengan. */
 export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonFacturaProps) {
   const [cargando, setCargando] = useState(false);
   const [recibo, setRecibo] = useState<ReturnType<typeof facturaAReciboProps> | null>(null);
@@ -29,7 +36,9 @@ export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonF
       const factura =
         origen.tipo === "orden"
           ? await migaoApi.obtenerFactura(origen.id)
-          : await migaoApi.obtenerFacturaPorVenta(origen.id);
+          : origen.tipo === "venta"
+            ? await migaoApi.obtenerFacturaPorVenta(origen.id)
+            : await conSentidoApi.obtenerFactura(origen.id);
       setRecibo(facturaAReciboProps(factura));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar la factura");

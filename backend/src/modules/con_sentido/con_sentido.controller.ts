@@ -52,3 +52,8 @@ export async function obtenerVentaController(req: Request, res: Response) {
   const venta = await service.obtenerVenta(req.params.id);
   return ok(res, venta);
 }
+
+export async function obtenerFacturaVentaController(req: Request, res: Response) {
+  const factura = await service.obtenerFacturaVenta(req.params.id);
+  return ok(res, factura);
+}

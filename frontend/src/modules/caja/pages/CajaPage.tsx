@@ -8,6 +8,7 @@ import { formatMoney as formatearMoneda } from "../../../shared/format/money";
 import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPagoModal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type MovimientoCaja, type ResumenTurno } from "../api";
+import { BotonFactura } from "../../migao/components/BotonFactura";
 import { AdministracionModal } from "../components/AdministracionModal";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EgresoModal } from "../components/EgresoModal";
@@ -263,7 +264,21 @@ export function CajaPage() {
                         </div>
 
                         <ul className="flex flex-col gap-2">
-                          {movimientos.map((m) => (
+                          {(() => {
+                            // Una cuenta dividida/mixta genera un movimiento por cada
+                            // línea de pago (misma venta repetida) — el botón de
+                            // factura solo se muestra en la primera, ver mismo
+                            // criterio en CajaHistorialPage.tsx.
+                            const facturaYaMostradaDeVenta = new Set<string>();
+                            return movimientos.map((m) => {
+                            const puedeVerFactura =
+                              m.tipo === "ingreso" &&
+                              !!m.referencia_id &&
+                              ((m.referencia_entidad === "ventas" && m.modulo_origen_slug === "migao") ||
+                                (m.referencia_entidad === "con_sentido_ventas" && m.modulo_origen_slug === "con_sentido")) &&
+                              !facturaYaMostradaDeVenta.has(m.referencia_id);
+                            if (puedeVerFactura) facturaYaMostradaDeVenta.add(m.referencia_id!);
+                            return (
                             <li
                               key={m.id}
                               className={`rounded-lg border-l-4 bg-brand-vanilla p-3 dark:bg-brand-green-900 ${
@@ -301,6 +316,16 @@ export function CajaPage() {
                                     {m.tipo === "egreso" ? "-" : "+"}
                                     {formatearMoneda(Number(m.monto))}
                                   </div>
+                                  {puedeVerFactura && (
+                                    <BotonFactura
+                                      origen={
+                                        m.modulo_origen_slug === "con_sentido"
+                                          ? { tipo: "venta_con_sentido", id: m.referencia_id! }
+                                          : { tipo: "venta", id: m.referencia_id! }
+                                      }
+                                      className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                    />
+                                  )}
                                   {puedeEditarPagos && (
                                     <button
                                       onClick={() => setMovimientoEditando(m)}
@@ -312,7 +337,9 @@ export function CajaPage() {
                                 </div>
                               </div>
                             </li>
-                          ))}
+                            );
+                          });
+                          })()}
                         </ul>
                       </div>
                     );

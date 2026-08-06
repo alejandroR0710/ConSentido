@@ -621,13 +621,14 @@ export function CajaHistorialPage() {
                         const puedeAnular =
                           m.tipo === "ingreso" &&
                           (m.referencia_entidad === "ventas" || m.referencia_entidad === "con_sentido_ventas");
-                        // Factura solo existe para ventas de Migao (ver migao.service.ts::obtenerFacturaVenta) —
-                        // los demás orígenes (Con Sentido, etc.) todavía no tienen este sistema.
+                        // Factura solo existe para ventas de Migao y Con Sentido (los
+                        // únicos módulos que registran una venta con ítems) — otros
+                        // orígenes (talleres, insumos, etc.) todavía no tienen este sistema.
                         const puedeVerFactura =
                           m.tipo === "ingreso" &&
-                          m.referencia_entidad === "ventas" &&
-                          m.modulo_origen_slug === "migao" &&
                           !!m.referencia_id &&
+                          ((m.referencia_entidad === "ventas" && m.modulo_origen_slug === "migao") ||
+                            (m.referencia_entidad === "con_sentido_ventas" && m.modulo_origen_slug === "con_sentido")) &&
                           !facturaYaMostradaDeVenta.has(m.referencia_id);
                         if (puedeVerFactura) facturaYaMostradaDeVenta.add(m.referencia_id!);
                         return (
@@ -667,7 +668,11 @@ export function CajaHistorialPage() {
                               </span>
                               {puedeVerFactura && (
                                 <BotonFactura
-                                  origen={{ tipo: "venta", id: m.referencia_id! }}
+                                  origen={
+                                    m.modulo_origen_slug === "con_sentido"
+                                      ? { tipo: "venta_con_sentido", id: m.referencia_id! }
+                                      : { tipo: "venta", id: m.referencia_id! }
+                                  }
                                   className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                 />
                               )}

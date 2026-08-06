@@ -1,4 +1,5 @@
 import { apiFetch } from "../../shared/api/client";
+import type { FacturaOrden } from "../migao/api";
 
 export interface ProductoConSentido {
   id: string;
@@ -51,6 +52,10 @@ export const conSentidoApi = {
     const query = params.toString();
     return apiFetch<any[]>(`/con-sentido/ventas${query ? `?${query}` : ""}`);
   },
+
+  // Factura imprimible de una venta ya cobrada — mismo formato normalizado
+  // que la factura de Migao (ver con_sentido.service.ts::obtenerFacturaVenta).
+  obtenerFactura: (ventaId: string) => apiFetch<FacturaOrden>(`/con-sentido/ventas/${ventaId}/factura`),
 
   listarProductos: () => apiFetch<ProductoConSentido[]>("/con-sentido/productos"),
   crearProducto: (input: {

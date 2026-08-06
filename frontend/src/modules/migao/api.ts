@@ -263,9 +263,12 @@ export interface LiquidacionPropinas {
   created_at: string;
 }
 
-/** Factura imprimible de una orden ya cobrada — reconstruida en vivo desde
- *  ventas/venta_items/pagos/migao_propinas (ver migao.service.ts::obtenerFacturaOrden).
- *  `pagos` trae UNA línea por método (una cuenta dividida en 3 trae 3 líneas). */
+/** Factura imprimible de una venta ya cobrada — reconstruida en vivo desde
+ *  ventas/venta_items/pagos/migao_propinas (ver migao.service.ts::obtenerFacturaOrden)
+ *  o, para Con Sentido, desde con_sentido_ventas (ver con_sentido.service.ts::
+ *  obtenerFacturaVenta, mismo formato normalizado para reusar este mismo tipo).
+ *  `pagos` trae UNA línea por método (una cuenta dividida en 3 trae 3 líneas).
+ *  Mesa/mesero/comensal quedan `null` cuando la venta no es de Migao. */
 export interface FacturaItem {
   productoNombre: string;
   cantidad: number;
@@ -283,7 +286,7 @@ export interface FacturaOrden {
   mesaNumero: string | null;
   mesaPiso: number | null;
   meseroNombre: string | null;
-  comensalNumero: number;
+  comensalNumero: number | null;
   items: FacturaItem[];
   subtotal: number;
   descuentoPorcentaje: number;

@@ -14,7 +14,7 @@ export function facturaAReciboProps(factura: FacturaOrden): Omit<ReciboImprimibl
     });
   }
   if (factura.meseroNombre) camposEncabezado.push({ etiqueta: "Mesero", valor: factura.meseroNombre });
-  camposEncabezado.push({ etiqueta: "Comensal", valor: `#${factura.comensalNumero}` });
+  if (factura.comensalNumero != null) camposEncabezado.push({ etiqueta: "Comensal", valor: `#${factura.comensalNumero}` });
 
   return {
     tipo: "factura",

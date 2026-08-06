@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { BotonFactura } from "../../migao/components/BotonFactura";
 import { NuevaVentaModal } from "../components/NuevaVentaModal";
 import { conSentidoApi } from "../api";
 
@@ -287,6 +288,14 @@ export function VentasPage() {
                   </div>
                 </div>
               </button>
+
+              {/* Fuera del botón de arriba (que expande/colapsa la venta) para no
+                  anidar un <button> dentro de otro. */}
+              {venta.tipo === "venta" && (
+                <div className="mt-2 flex justify-end">
+                  <BotonFactura origen={{ tipo: "venta_con_sentido", id: venta.id.toString() }} />
+                </div>
+              )}
 
               {venta.tipo === "venta" && ventasExpandidas.has(venta.id.toString()) && (
                 <div className="border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">

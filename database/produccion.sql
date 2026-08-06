@@ -332,6 +332,28 @@ WHERE r.nombre IN ('Cajero', 'Super Root', 'Root')
 
 
 -- ========================================================================
+-- SECCIÓN 8: FACTURA TAMBIÉN PARA VENTAS DE CON SENTIDO
+-- ========================================================================
+-- ⚠️ NO ejecutar contra Supabase todavía — se está probando en local.
+-- La factura no era solo de Migao: Con Sentido tiene su propio flujo de venta
+-- (con_sentido_ventas/con_sentido_venta_items, tabla aparte de la `ventas`
+-- compartida) y también necesita poder imprimir factura. Se agrega una
+-- columna nueva en `facturas` en vez de forzar con_sentido_ventas.id dentro
+-- de `venta_id` (esa columna tiene una FK real a `ventas`, no a
+-- con_sentido_ventas — son tablas distintas). Comparte la misma
+-- facturas_numero_seq de la SECCIÓN 7: un solo número de factura corriendo
+-- para todo el negocio, sin importar de qué módulo venga la venta.
+ALTER TABLE facturas ADD COLUMN IF NOT EXISTS con_sentido_venta_id UUID REFERENCES con_sentido_ventas(id);
+
+ALTER TABLE facturas DROP CONSTRAINT IF EXISTS facturas_check;
+ALTER TABLE facturas ADD CONSTRAINT facturas_check
+  CHECK (venta_id IS NOT NULL OR orden_id IS NOT NULL OR pedido_id IS NOT NULL OR con_sentido_venta_id IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_con_sentido_venta_unica
+  ON facturas(con_sentido_venta_id) WHERE con_sentido_venta_id IS NOT NULL;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

@@ -722,20 +722,24 @@ CREATE INDEX idx_migao_cotizacion_items_cotizacion ON migao_cotizacion_items(cot
 CREATE SEQUENCE facturas_numero_seq;
 
 CREATE TABLE facturas (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venta_id   UUID REFERENCES ventas(id),
-  orden_id   UUID REFERENCES ordenes(id),
-  pedido_id  UUID, -- FK diferida: se agrega tras crear la tabla pedidos
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venta_id            UUID REFERENCES ventas(id),
+  orden_id            UUID REFERENCES ordenes(id),
+  pedido_id           UUID, -- FK diferida: se agrega tras crear la tabla pedidos
+  -- Con Sentido tiene su propia tabla de ventas (con_sentido_ventas), aparte
+  -- de la `ventas` compartida de arriba — ver SECCIÓN 1B de produccion.sql.
+  con_sentido_venta_id UUID REFERENCES con_sentido_ventas(id),
   numero     VARCHAR(30) UNIQUE NOT NULL,
   tipo       VARCHAR(20) NOT NULL DEFAULT 'ticket' CHECK (tipo IN ('ticket','factura')),
   subtotal   NUMERIC(12,2) NOT NULL,
   impuestos  NUMERIC(12,2) NOT NULL DEFAULT 0,
   total      NUMERIC(12,2) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (venta_id IS NOT NULL OR orden_id IS NOT NULL OR pedido_id IS NOT NULL)
+  CHECK (venta_id IS NOT NULL OR orden_id IS NOT NULL OR pedido_id IS NOT NULL OR con_sentido_venta_id IS NOT NULL)
 );
 -- Una sola factura por venta (get-or-create idempotente al reimprimir).
 CREATE UNIQUE INDEX idx_facturas_venta_unica ON facturas(venta_id) WHERE venta_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_facturas_con_sentido_venta_unica ON facturas(con_sentido_venta_id) WHERE con_sentido_venta_id IS NOT NULL;
 
 -- ============================================================================
 -- 7. PEDIDOS / ENCARGOS

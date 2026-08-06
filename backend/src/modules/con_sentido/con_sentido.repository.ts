@@ -261,6 +261,24 @@ export async function getVentaById(id: string) {
   return result.rows[0] ?? null;
 }
 
+/** Get-or-create idempotente de la factura de una venta — mismo patrón que
+ *  migao.repository.ts::getOrCrearFactura, comparte la misma facturas_numero_seq
+ *  (un solo número de factura corriendo para todo el negocio). El índice único
+ *  en con_sentido_venta_id blinda contra doble clic/pedidos simultáneos. */
+export async function getOrCrearFactura(params: { ventaId: string; subtotal: number; total: number }) {
+  const insert = await pool.query(
+    `INSERT INTO facturas (con_sentido_venta_id, numero, tipo, subtotal, total)
+     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $2, $3)
+     ON CONFLICT (con_sentido_venta_id) WHERE con_sentido_venta_id IS NOT NULL DO NOTHING
+     RETURNING *`,
+    [params.ventaId, params.subtotal, params.total],
+  );
+  if (insert.rowCount) return insert.rows[0];
+
+  const existente = await pool.query(`SELECT * FROM facturas WHERE con_sentido_venta_id = $1`, [params.ventaId]);
+  return existente.rows[0];
+}
+
 /**
  * Ingresos registrados a mano desde Caja General con origen "Con Sentido" (ej.
  * alguien cobró por fuera del flujo de "Nueva venta" y lo registró directo en

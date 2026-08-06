@@ -9,6 +9,7 @@ import {
   listarClientesController,
   listarProductosController,
   listarVentasController,
+  obtenerFacturaVentaController,
   obtenerVentaController,
   registrarVentaController,
 } from "./con_sentido.controller";
@@ -30,4 +31,9 @@ conSentidoRouter.post("/clientes", requirePermission("con_sentido.clientes.crear
 
 conSentidoRouter.get("/ventas", requirePermission("con_sentido.ventas.ver"), asyncHandler(listarVentasController));
 conSentidoRouter.get("/ventas/:id", requirePermission("con_sentido.ventas.ver"), asyncHandler(obtenerVentaController));
+conSentidoRouter.get(
+  "/ventas/:id/factura",
+  requirePermission("con_sentido.ventas.ver"),
+  asyncHandler(obtenerFacturaVentaController),
+);
 conSentidoRouter.post("/ventas", requirePermission("con_sentido.ventas.crear"), asyncHandler(registrarVentaController));

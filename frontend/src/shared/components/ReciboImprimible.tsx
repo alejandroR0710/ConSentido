@@ -90,14 +90,12 @@ export function ReciboImprimible({
       <div className="flex flex-col items-center gap-1 text-center">
         {!logoError ? (
           <img
-            src="/logo-recibo.png"
+            // Versión vectorizada (trazo sólido en blanco y negro, sin
+            // degradados) pensada para impresión térmica — no necesita
+            // filtros de grayscale/contraste como el logo a color.
+            src="/con_sentido_vectorizados.svg"
             alt={NOMBRE_NEGOCIO}
-            // La impresora térmica es monocromática: un logo a color con
-            // sombras/degradados se "puntea" (dithering) y sale pixelado. Se
-            // muestra ya en blanco y negro con más contraste (lo más parecido
-            // a lo que realmente va a salir impreso) y más grande (más puntos
-            // físicos para dibujar el trazo = menos bloques visibles).
-            className="h-24 w-24 object-contain grayscale contrast-125"
+            className="h-24 w-24 object-contain"
             onError={() => setLogoError(true)}
           />
         ) : (

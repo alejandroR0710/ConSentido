@@ -17,6 +17,7 @@ import {
   type TurnoCaja,
 } from "../api";
 import { analyticsApi, type AnalyticsGeneral } from "../../general/api";
+import { BotonFactura } from "../../migao/components/BotonFactura";
 import { AgregarMovimientoHistoricoModal } from "../components/AgregarMovimientoHistoricoModal";
 import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BorrarHistorialDiaModal } from "../components/BorrarHistorialDiaModal";
@@ -614,6 +615,13 @@ export function CajaHistorialPage() {
                         const puedeAnular =
                           m.tipo === "ingreso" &&
                           (m.referencia_entidad === "ventas" || m.referencia_entidad === "con_sentido_ventas");
+                        // Factura solo existe para ventas de Migao (ver migao.service.ts::obtenerFacturaVenta) —
+                        // los demás orígenes (Con Sentido, etc.) todavía no tienen este sistema.
+                        const puedeVerFactura =
+                          m.tipo === "ingreso" &&
+                          m.referencia_entidad === "ventas" &&
+                          m.modulo_origen_slug === "migao" &&
+                          !!m.referencia_id;
                         return (
                           <div
                             key={m.id}
@@ -649,6 +657,12 @@ export function CajaHistorialPage() {
                                 {m.tipo === "egreso" ? "-" : "+"}
                                 {formatMoney(m.monto)}
                               </span>
+                              {puedeVerFactura && (
+                                <BotonFactura
+                                  origen={{ tipo: "venta", id: m.referencia_id! }}
+                                  className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                                />
+                              )}
                               {puedeEditar && (
                                 <button
                                   onClick={() => setMovimientoAEditar(m)}

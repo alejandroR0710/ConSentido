@@ -903,6 +903,14 @@ export async function getVentaPorOrdenId(ordenId: string) {
   return result.rowCount ? result.rows[0] : null;
 }
 
+/** Resuelve el orden_id de una venta a partir de su id — usado para reimprimir
+ *  la factura desde Caja General (donde los movimientos guardan `referencia_id`
+ *  = venta.id, no el orden_id). Null si la venta no es de Migao (sin orden). */
+export async function getOrdenIdPorVentaId(ventaId: string) {
+  const result = await pool.query(`SELECT orden_id FROM ventas WHERE id = $1 AND orden_id IS NOT NULL`, [ventaId]);
+  return result.rowCount ? (result.rows[0].orden_id as string) : null;
+}
+
 export async function getOrdenParaFactura(ordenId: string) {
   const result = await pool.query(
     `SELECT o.id, o.comensal_numero, o.numero_personas, o.created_at, o.closed_at,

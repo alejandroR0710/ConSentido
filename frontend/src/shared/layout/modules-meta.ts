@@ -115,7 +115,6 @@ export const NAV_GROUPS: NavGroupMeta[] = [
       "/migao/editor-mesas",
       "/migao/historial-administrativo",
       "/migao/propinas",
-      "/migao/cotizaciones",
     ],
   },
   {

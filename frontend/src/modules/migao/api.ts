@@ -535,6 +535,9 @@ export const migaoApi = {
   // Factura imprimible de una orden ya cobrada — la primera vez que se pide
   // se le asigna número (get-or-create), reimprimir después trae el mismo.
   obtenerFactura: (ordenId: string) => apiFetch<FacturaOrden>(`/migao/ordenes/${ordenId}/factura`),
+  // Igual que arriba, pero desde Caja General: ahí los movimientos guardan el
+  // venta_id (no el orden_id) — ver migao.service.ts::obtenerFacturaVenta.
+  obtenerFacturaPorVenta: (ventaId: string) => apiFetch<FacturaOrden>(`/migao/ventas/${ventaId}/factura`),
 
   // Cotizaciones: presupuesto para un cliente, no toca inventario/caja/ordenes.
   listarCotizaciones: () => apiFetch<CotizacionResumen[]>("/migao/cotizaciones"),

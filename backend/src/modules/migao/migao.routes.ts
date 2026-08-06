@@ -51,6 +51,7 @@ import {
   obtenerCotizacionController,
   obtenerDetalleOrdenController,
   obtenerFacturaOrdenController,
+  obtenerFacturaVentaController,
   obtenerResumenDiarioIngresosController,
   reiniciarTodoController,
   repartirPropinasController,
@@ -168,6 +169,13 @@ migaoRouter.get(
   "/ordenes/:id/factura",
   requirePermission("migao.ordenes.ver"),
   asyncHandler(obtenerFacturaOrdenController),
+);
+// Reimprimir desde Caja General → Historial: ahí cada movimiento guarda el
+// venta_id (referencia_id), no el orden_id — ver migao.service.ts::obtenerFacturaVenta.
+migaoRouter.get(
+  "/ventas/:id/factura",
+  requirePermission("migao.ordenes.ver"),
+  asyncHandler(obtenerFacturaVentaController),
 );
 // El mesero cambia la mesa de una orden abierta (ej. los comensales se
 // cambiaron de mesa a mitad del pedido).

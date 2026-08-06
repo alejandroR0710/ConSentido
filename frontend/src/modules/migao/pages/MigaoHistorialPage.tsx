@@ -313,7 +313,7 @@ export function MigaoHistorialPage() {
                       <td className="px-3 py-2">
                         {h.estado === "cerrada" && (
                           <div className="flex flex-wrap gap-1">
-                            <BotonFactura ordenId={h.id} />
+                            <BotonFactura origen={{ tipo: "orden", id: h.id }} />
                             {h.movimiento_id != null && (
                               <button
                                 onClick={() =>

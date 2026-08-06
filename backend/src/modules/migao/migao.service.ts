@@ -945,6 +945,14 @@ export async function obtenerFacturaOrden(ordenId: string) {
   };
 }
 
+/** Reimprimir la factura desde Caja General: ahí los movimientos guardan el
+ *  venta_id (no el orden_id), así que primero se resuelve cuál orden es. */
+export async function obtenerFacturaVenta(ventaId: string) {
+  const ordenId = await repo.getOrdenIdPorVentaId(ventaId);
+  if (!ordenId) throw Errors.notFound("Esta venta no corresponde a una orden de Migao");
+  return obtenerFacturaOrden(ordenId);
+}
+
 /**
  * Cotización: presupuesto para un cliente ANTES de que exista una orden/venta
  * real — vive completamente aparte, nunca toca ordenes/ventas/inventario/caja.

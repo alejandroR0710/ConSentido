@@ -238,6 +238,13 @@ export async function obtenerFacturaOrdenController(req: Request, res: Response)
   return ok(res, factura);
 }
 
+// Reimprimir desde Caja General: ahí los movimientos guardan venta_id, no
+// orden_id (ver migao.service.ts::obtenerFacturaVenta).
+export async function obtenerFacturaVentaController(req: Request, res: Response) {
+  const factura = await service.obtenerFacturaVenta(req.params.id);
+  return ok(res, factura);
+}
+
 export async function crearCotizacionController(req: Request, res: Response) {
   const data = crearCotizacionSchema.parse(req.body);
   const cotizacion = await service.crearCotizacion(req.auth!.usuarioId, data);

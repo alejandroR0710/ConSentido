@@ -205,7 +205,7 @@ export function HistorialAdministrativoPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <BotonFactura ordenId={h.id} />
+                      <BotonFactura origen={{ tipo: "orden", id: h.id }} />
                     </td>
                   </tr>
                 ));

@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
+import { Modal } from "../../../shared/components/Modal";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
@@ -76,9 +77,11 @@ export function MigaoPage() {
   const [montosRecibidosPartes, setMontosRecibidosPartes] = useState<number[]>([0, 0]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
-  // Al cobrar, se ofrece imprimir la factura recién generada de una vez (el
-  // punto real de uso: la orden todavía "caliente" en el mostrador) — no
-  // bloquea el cobro si falla, solo se le avisa al Cajero.
+  // Al cobrar y cerrar, se PREGUNTA si se quiere imprimir la factura (el punto
+  // real de uso: la orden todavía "caliente" en el mostrador) — recién si dice
+  // que sí se pide la factura y se abre el modal de impresión. No bloquea el
+  // cobro si algo falla, solo se le avisa al Cajero.
+  const [preguntaFacturaOrdenId, setPreguntaFacturaOrdenId] = useState<string | null>(null);
   const [reciboFactura, setReciboFactura] = useState<ReturnType<typeof facturaAReciboProps> | null>(null);
   const [errorFactura, setErrorFactura] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -242,7 +245,7 @@ export function MigaoPage() {
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
       setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}`);
-      await abrirFacturaTrasCobro(ordenSeleccionadaId);
+      setPreguntaFacturaOrdenId(ordenSeleccionadaId);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
       await cargarOrdenes();
@@ -366,7 +369,7 @@ export function MigaoPage() {
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
       setMensaje(`Orden cobrada y cerrada (cuenta dividida en ${numPartes}). Total: ${formatMoney(resultado.total)}`);
-      await abrirFacturaTrasCobro(ordenSeleccionadaId);
+      setPreguntaFacturaOrdenId(ordenSeleccionadaId);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
       reiniciarDivision();
@@ -897,6 +900,30 @@ export function MigaoPage() {
           onCerrar={() => setModalAbierto(null)}
           onAgregado={refrescarDetalle}
         />
+      )}
+
+      {preguntaFacturaOrdenId && (
+        <Modal titulo="Orden cobrada" onCerrar={() => setPreguntaFacturaOrdenId(null)}>
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">¿Deseas imprimir la factura de esta orden?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPreguntaFacturaOrdenId(null)}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-2.5 text-sm font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+            >
+              No, gracias
+            </button>
+            <button
+              onClick={async () => {
+                const ordenId = preguntaFacturaOrdenId;
+                setPreguntaFacturaOrdenId(null);
+                await abrirFacturaTrasCobro(ordenId);
+              }}
+              className="flex-1 rounded-md bg-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+            >
+              Sí, imprimir
+            </button>
+          </div>
+        </Modal>
       )}
 
       {reciboFactura && <ModalImprimir {...reciboFactura} onCerrar={() => setReciboFactura(null)} />}

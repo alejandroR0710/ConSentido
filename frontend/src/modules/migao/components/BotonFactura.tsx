@@ -4,16 +4,20 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { migaoApi } from "../api";
 import { facturaAReciboProps } from "../factura";
 
+type OrigenFactura = { tipo: "orden"; id: string } | { tipo: "venta"; id: string };
+
 interface BotonFacturaProps {
-  ordenId: string;
+  origen: OrigenFactura;
   className?: string;
   etiqueta?: string;
 }
 
 /** Botón reutilizable: trae la factura de una orden ya cobrada (se crea la
  *  primera vez que se pide, ver migao.service.ts::obtenerFacturaOrden) y abre
- *  el modal de impresión — usado en cualquier historial que liste órdenes cerradas. */
-export function BotonFactura({ ordenId, className, etiqueta = "Factura" }: BotonFacturaProps) {
+ *  el modal de impresión — usado en cualquier historial que liste órdenes/ventas
+ *  cerradas. Acepta el origen como orden (historiales de Migao) o como venta
+ *  (Caja General, donde los movimientos guardan venta_id, no orden_id). */
+export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonFacturaProps) {
   const [cargando, setCargando] = useState(false);
   const [recibo, setRecibo] = useState<ReturnType<typeof facturaAReciboProps> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +26,10 @@ export function BotonFactura({ ordenId, className, etiqueta = "Factura" }: Boton
     setCargando(true);
     setError(null);
     try {
-      const factura = await migaoApi.obtenerFactura(ordenId);
+      const factura =
+        origen.tipo === "orden"
+          ? await migaoApi.obtenerFactura(origen.id)
+          : await migaoApi.obtenerFacturaPorVenta(origen.id);
       setRecibo(facturaAReciboProps(factura));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar la factura");

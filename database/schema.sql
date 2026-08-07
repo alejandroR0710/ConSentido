@@ -450,6 +450,127 @@ CREATE TABLE con_sentido_venta_items (
 CREATE INDEX idx_con_sentido_venta_items_venta ON con_sentido_venta_items(venta_id);
 
 -- ============================================================================
+-- 5B. CALCULADORA DE COSTOS DE VELAS (Con Sentido) — exclusivo Root/Super Root
+-- ============================================================================
+-- Tablas maestras editables (precio de compra -> valor por unidad de uso, ya
+-- calculado por Postgres con GENERATED ALWAYS: nunca queda desactualizado
+-- porque no se replica la fórmula en TypeScript, se recalcula solo cuando
+-- cambia el precio de compra). Prefijo `velas_` para no chocar con nada
+-- existente — vive completamente aparte de `insumos`/`productos`.
+
+CREATE TABLE velas_ceras (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre          VARCHAR(80) NOT NULL,
+  presentacion_kg NUMERIC(10,3) NOT NULL CHECK (presentacion_kg > 0),
+  precio_compra   NUMERIC(12,2) NOT NULL CHECK (precio_compra > 0),
+  valor_gramo     NUMERIC(12,4) GENERATED ALWAYS AS (precio_compra / presentacion_kg / 1000) STORED,
+  proveedor       VARCHAR(120),
+  activo          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE velas_fragancias (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre         VARCHAR(80) NOT NULL,
+  presentacion_g NUMERIC(10,2) NOT NULL DEFAULT 1000 CHECK (presentacion_g > 0),
+  precio_compra  NUMERIC(12,2) NOT NULL CHECK (precio_compra > 0),
+  valor_gramo    NUMERIC(12,4) GENERATED ALWAYS AS (precio_compra / presentacion_g) STORED,
+  activo         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE velas_pabilos (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  talla          VARCHAR(10) NOT NULL,
+  longitud_m     NUMERIC(10,2) NOT NULL CHECK (longitud_m > 0),
+  precio_carrete NUMERIC(12,2) NOT NULL CHECK (precio_carrete > 0),
+  valor_cm       NUMERIC(12,4) GENERATED ALWAYS AS (precio_carrete / longitud_m / 100) STORED,
+  activo         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Recipientes, tapas, empaques, decoración, identidad, papelería, protección,
+-- otros — todo lo que no es cera/fragancia/pabilo, ya expresado en su costo
+-- POR unidad de uso (unidad/cm/g/hoja/metro). cantidad_por_paquete/precio_paquete
+-- son solo referencia para que el admin calcule valor_unitario a mano al
+-- crear/editar (ej. "docena a $48.000 = $4.000 c/u") — una receta siempre usa
+-- valor_unitario directo, nunca vuelve a dividir.
+CREATE TABLE velas_insumos (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  codigo               VARCHAR(30),
+  nombre               VARCHAR(120) NOT NULL,
+  categoria            VARCHAR(30) NOT NULL CHECK (categoria IN
+                       ('recipiente','tapa','empaque','decoracion','identidad','papeleria','proteccion','otro')),
+  unidad_costo         VARCHAR(10) NOT NULL CHECK (unidad_costo IN ('unidad','cm','g','hoja','metro')),
+  valor_unitario       NUMERIC(12,2) NOT NULL CHECK (valor_unitario > 0),
+  cantidad_por_paquete NUMERIC(10,2),
+  precio_paquete       NUMERIC(12,2),
+  proveedor            VARCHAR(120),
+  activo               BOOLEAN NOT NULL DEFAULT true,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Fila única de parámetros globales (siempre se actualiza sobre id=true) —
+-- % merma, $/minuto de mano de obra, % indirectos, % margen objetivo por
+-- defecto. Arranca en 0: el PDF de costos los deja como "pendiente por
+-- definir", no hay valor real que precargar todavía.
+CREATE TABLE velas_parametros (
+  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  porcentaje_merma       NUMERIC(5,2) NOT NULL DEFAULT 0,
+  valor_minuto_mano_obra NUMERIC(12,2) NOT NULL DEFAULT 0,
+  porcentaje_indirectos  NUMERIC(5,2) NOT NULL DEFAULT 0,
+  margen_objetivo        NUMERIC(5,2) NOT NULL DEFAULT 0,
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO velas_parametros (id) VALUES (true);
+
+-- Receta/producto guardado — reutilizable, editable, duplicable. El costo NUNCA
+-- se guarda acá (se recalcula en vivo contra los precios vigentes de las
+-- tablas maestras cada vez que se consulta) — lo único persistido es la
+-- composición de la receta y, opcionalmente, el precio final ya autorizado.
+CREATE TABLE velas_productos (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre                  VARCHAR(150) NOT NULL,
+  peso_mezcla_g           NUMERIC(10,2) NOT NULL CHECK (peso_mezcla_g > 0),
+  pabilo_id               UUID REFERENCES velas_pabilos(id),
+  cm_pabilo               NUMERIC(10,2),
+  minutos_mano_obra       NUMERIC(10,2) NOT NULL DEFAULT 0,
+  margen_objetivo         NUMERIC(5,2), -- NULL = usa el global de velas_parametros
+  redondeo                INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0,100,500,1000)),
+  precio_final_autorizado NUMERIC(12,2), -- distinto del precio sugerido calculado
+  notas                   VARCHAR(300),
+  activo                  BOOLEAN NOT NULL DEFAULT true,
+  usuario_id              UUID REFERENCES usuarios(id),
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE velas_producto_ceras (
+  producto_id UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  cera_id     UUID NOT NULL REFERENCES velas_ceras(id),
+  gramos      NUMERIC(10,2) NOT NULL CHECK (gramos > 0),
+  PRIMARY KEY (producto_id, cera_id)
+);
+
+CREATE TABLE velas_producto_fragancias (
+  producto_id  UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  fragancia_id UUID NOT NULL REFERENCES velas_fragancias(id),
+  porcentaje   NUMERIC(5,2) NOT NULL CHECK (porcentaje > 0),
+  PRIMARY KEY (producto_id, fragancia_id)
+);
+
+CREATE TABLE velas_producto_insumos (
+  producto_id UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  insumo_id   UUID NOT NULL REFERENCES velas_insumos(id),
+  cantidad    NUMERIC(10,2) NOT NULL CHECK (cantidad > 0),
+  PRIMARY KEY (producto_id, insumo_id)
+);
+
+-- ============================================================================
 -- Inventario de Migao: catálogo de insumos "tal como los entrega el
 -- proveedor" (ej. una torta de chocolate = 12 porciones, una paca de leche =
 -- 6 unidades) + receta de qué consume cada producto vendible del menú. El

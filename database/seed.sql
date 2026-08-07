@@ -56,7 +56,11 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_clientes',    'con_sentido.clientes.ver'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_cliente',   'con_sentido.clientes.crear'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_ventas',      'con_sentido.ventas.ver'),
-  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_venta',     'con_sentido.ventas.crear');
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_venta',     'con_sentido.ventas.crear'),
+  -- Calculadora de costos de velas: exclusiva de Root/Super Root, nunca se
+  -- agrega a la lista de ningún otro rol (ver bloques de abajo).
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_velas',         'velas.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_velas', 'velas.administrar');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES

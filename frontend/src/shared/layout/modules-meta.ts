@@ -33,6 +33,14 @@ export const MODULES_META: ModuloMeta[] = [
   // las rutas siguen existiendo en App.tsx, solo se llega por ese botón.
   { slug: "insumos", label: "Insumos", path: "/insumos", icon: "📦" },
   { slug: "con_sentido", label: "Caja Con Sentido", path: "/con-sentido", icon: "🛍️" },
+  // Estimador de costo/precio de venta de velas — exclusivo de Root/Super Root.
+  {
+    slug: "con_sentido",
+    label: "Costos de Velas",
+    path: "/con-sentido/velas",
+    icon: "🕯️",
+    roles: ["Super Root", "Root"],
+  },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
@@ -121,7 +129,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "con-sentido-grupo",
     label: "Con Sentido",
     icon: "🛍️",
-    paths: ["/con-sentido", "/pedidos", "/talleres"],
+    paths: ["/con-sentido", "/con-sentido/velas", "/pedidos", "/talleres"],
   },
   { slug: "insumos-grupo", label: "Insumos", icon: "📦", paths: ["/insumos"] },
 ];

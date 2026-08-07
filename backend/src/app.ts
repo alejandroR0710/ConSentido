@@ -9,6 +9,7 @@ import { insumosRouter } from "./modules/insumos/insumos.routes";
 import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
 import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
+import { velasRouter } from "./modules/velas/velas.routes";
 import { errorHandler, notFoundHandler } from "./shared/middlewares/error-handler";
 import { obtenerCarpetaUploads } from "./shared/middlewares/upload.middleware";
 
@@ -69,6 +70,7 @@ export function createApp() {
   app.use("/api/v1/insumos", insumosRouter);
   app.use("/api/v1/caja", cajaRouter);
   app.use("/api/v1/migao", migaoRouter);
+  app.use("/api/v1/velas", velasRouter);
   app.use("/api/v1/analytics", analyticsRouter);
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);

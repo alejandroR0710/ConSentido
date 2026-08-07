@@ -354,6 +354,201 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_con_sentido_venta_unica
 
 
 -- ========================================================================
+-- SECCIÓN 9: CALCULADORA DE COSTOS DE VELAS (Con Sentido, Root/Super Root)
+-- ========================================================================
+-- ⚠️ NO ejecutar contra Supabase todavía — se está probando en local.
+-- Tablas maestras editables + recetas — ver database/schema.sql sección
+-- "5B. CALCULADORA DE COSTOS DE VELAS" para el detalle de cada columna.
+
+CREATE TABLE IF NOT EXISTS velas_ceras (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre          VARCHAR(80) NOT NULL,
+  presentacion_kg NUMERIC(10,3) NOT NULL CHECK (presentacion_kg > 0),
+  precio_compra   NUMERIC(12,2) NOT NULL CHECK (precio_compra > 0),
+  valor_gramo     NUMERIC(12,4) GENERATED ALWAYS AS (precio_compra / presentacion_kg / 1000) STORED,
+  proveedor       VARCHAR(120),
+  activo          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS velas_fragancias (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre         VARCHAR(80) NOT NULL,
+  presentacion_g NUMERIC(10,2) NOT NULL DEFAULT 1000 CHECK (presentacion_g > 0),
+  precio_compra  NUMERIC(12,2) NOT NULL CHECK (precio_compra > 0),
+  valor_gramo    NUMERIC(12,4) GENERATED ALWAYS AS (precio_compra / presentacion_g) STORED,
+  activo         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS velas_pabilos (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  talla          VARCHAR(10) NOT NULL,
+  longitud_m     NUMERIC(10,2) NOT NULL CHECK (longitud_m > 0),
+  precio_carrete NUMERIC(12,2) NOT NULL CHECK (precio_carrete > 0),
+  valor_cm       NUMERIC(12,4) GENERATED ALWAYS AS (precio_carrete / longitud_m / 100) STORED,
+  activo         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS velas_insumos (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  codigo               VARCHAR(30),
+  nombre               VARCHAR(120) NOT NULL,
+  categoria            VARCHAR(30) NOT NULL CHECK (categoria IN
+                       ('recipiente','tapa','empaque','decoracion','identidad','papeleria','proteccion','otro')),
+  unidad_costo         VARCHAR(10) NOT NULL CHECK (unidad_costo IN ('unidad','cm','g','hoja','metro')),
+  valor_unitario       NUMERIC(12,2) NOT NULL CHECK (valor_unitario > 0),
+  cantidad_por_paquete NUMERIC(10,2),
+  precio_paquete       NUMERIC(12,2),
+  proveedor            VARCHAR(120),
+  activo               BOOLEAN NOT NULL DEFAULT true,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS velas_parametros (
+  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  porcentaje_merma       NUMERIC(5,2) NOT NULL DEFAULT 0,
+  valor_minuto_mano_obra NUMERIC(12,2) NOT NULL DEFAULT 0,
+  porcentaje_indirectos  NUMERIC(5,2) NOT NULL DEFAULT 0,
+  margen_objetivo        NUMERIC(5,2) NOT NULL DEFAULT 0,
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO velas_parametros (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS velas_productos (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre                  VARCHAR(150) NOT NULL,
+  peso_mezcla_g           NUMERIC(10,2) NOT NULL CHECK (peso_mezcla_g > 0),
+  pabilo_id               UUID REFERENCES velas_pabilos(id),
+  cm_pabilo               NUMERIC(10,2),
+  minutos_mano_obra       NUMERIC(10,2) NOT NULL DEFAULT 0,
+  margen_objetivo         NUMERIC(5,2),
+  redondeo                INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0,100,500,1000)),
+  precio_final_autorizado NUMERIC(12,2),
+  notas                   VARCHAR(300),
+  activo                  BOOLEAN NOT NULL DEFAULT true,
+  usuario_id              UUID REFERENCES usuarios(id),
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS velas_producto_ceras (
+  producto_id UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  cera_id     UUID NOT NULL REFERENCES velas_ceras(id),
+  gramos      NUMERIC(10,2) NOT NULL CHECK (gramos > 0),
+  PRIMARY KEY (producto_id, cera_id)
+);
+
+CREATE TABLE IF NOT EXISTS velas_producto_fragancias (
+  producto_id  UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  fragancia_id UUID NOT NULL REFERENCES velas_fragancias(id),
+  porcentaje   NUMERIC(5,2) NOT NULL CHECK (porcentaje > 0),
+  PRIMARY KEY (producto_id, fragancia_id)
+);
+
+CREATE TABLE IF NOT EXISTS velas_producto_insumos (
+  producto_id UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  insumo_id   UUID NOT NULL REFERENCES velas_insumos(id),
+  cantidad    NUMERIC(10,2) NOT NULL CHECK (cantidad > 0),
+  PRIMARY KEY (producto_id, insumo_id)
+);
+
+-- Permisos: exclusivos de Root/Super Root (nunca se le dan a Cajero/Mesero/
+-- Cocina/Administrador) — mismo criterio que migao.mesas.administrar.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'con_sentido'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_velas',         'velas.ver'),
+  ('administrar_velas', 'velas.administrar')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo IN ('velas.ver', 'velas.administrar')
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+-- Datos confirmados del PDF de costos (valores de compra reales) — todo lo
+-- que el PDF marcaba "PENDIENTE" (Verbena sin Fresh, Mango Tropical,
+-- recipientes, tapas, bolsas, cintas, stickers, tarjetas, moños, mano de
+-- obra, % merma/indirectos/margen) NO se precarga: se agrega desde el panel
+-- cuando haya precio real, no hay que inventar valores.
+
+INSERT INTO velas_ceras (nombre, presentacion_kg, precio_compra)
+SELECT * FROM (VALUES
+  ('Palma', 25, 420000),
+  ('Arena', 25, 430000),
+  ('Molde - compra por bulto', 15, 250000),
+  ('Soya BPF', 25, 429000),
+  ('Soya APF', 25, 429000),
+  ('Parafina china', 50, 480000),
+  ('Gel', 20, 400000),
+  ('Coco', 20, 600000),
+  ('Cera de vaso', 1, 20000),
+  ('Cera de molde - compra minorista', 1, 18000)
+) AS v(nombre, presentacion_kg, precio_compra)
+WHERE NOT EXISTS (SELECT 1 FROM velas_ceras WHERE velas_ceras.nombre = v.nombre);
+
+INSERT INTO velas_pabilos (talla, longitud_m, precio_carrete)
+SELECT * FROM (VALUES
+  ('S', 550, 385000),
+  ('M', 515, 458350),
+  ('L', 350, 350000)
+) AS v(talla, longitud_m, precio_carrete)
+WHERE NOT EXISTS (SELECT 1 FROM velas_pabilos WHERE velas_pabilos.talla = v.talla);
+
+INSERT INTO velas_fragancias (nombre, precio_compra)
+SELECT * FROM (VALUES
+  ('Citrus Citrus', 130785),
+  ('Lavandín', 137662),
+  ('Eucalipto', 95675),
+  ('Sándalo', 185225),
+  ('Verbena Fresh', 174062),
+  ('Vainilla Francesa', 144373),
+  ('Peony White / Whitemusk', 191878),
+  ('Café Cappuccino', 217024),
+  ('Cereza Roja', 132791)
+) AS v(nombre, precio_compra)
+WHERE NOT EXISTS (SELECT 1 FROM velas_fragancias WHERE velas_fragancias.nombre = v.nombre);
+
+-- Cajas de acetato redondas: precio ya es por unidad, sin paquete.
+INSERT INTO velas_insumos (codigo, nombre, categoria, unidad_costo, valor_unitario, activo)
+SELECT * FROM (VALUES
+  ('ACR-01', 'Caja de acetato redonda 22 x 25 cm', 'empaque', 'unidad', 20000, true),
+  ('ACR-02', 'Caja de acetato redonda 22 x 32 cm', 'empaque', 'unidad', 22000, true),
+  ('ACR-03', 'Caja de acetato redonda 26 x 32 cm', 'empaque', 'unidad', 25000, true)
+) AS v(codigo, nombre, categoria, unidad_costo, valor_unitario, activo)
+WHERE NOT EXISTS (SELECT 1 FROM velas_insumos WHERE velas_insumos.codigo = v.codigo);
+
+-- Cubos de acetato con cinta: costo unitario = precio del paquete ÷ cantidad
+-- (ya viene calculado del PDF). Las dos marcadas "Revisar / tachada" quedan
+-- inactivas hasta que se confirmen.
+INSERT INTO velas_insumos (codigo, nombre, categoria, unidad_costo, valor_unitario, cantidad_por_paquete, precio_paquete, activo)
+SELECT * FROM (VALUES
+  ('ACC-7x7x11', 'Cubo de acetato con cinta 7 x 7 x 11 cm', 'empaque', 'unidad', 2000, 10, 20000, true),
+  ('ACC-12x12x14', 'Cubo de acetato con cinta 12 x 12 x 14 cm', 'empaque', 'unidad', 3500, 12, 42000, true),
+  ('ACC-12x12x17', 'Cubo de acetato con cinta 12 x 12 x 17 cm', 'empaque', 'unidad', 4000, 12, 48000, false),
+  ('ACC-12x12x19', 'Cubo de acetato con cinta 12 x 12 x 19 cm', 'empaque', 'unidad', 4000, 12, 48000, true),
+  ('ACC-15x15x17', 'Cubo de acetato con cinta 15 x 15 x 17 cm', 'empaque', 'unidad', 4000, 12, 48000, true),
+  ('ACC-17x17x30', 'Cubo de acetato con cinta 17 x 17 x 30 cm', 'empaque', 'unidad', 7000, 12, 84000, true),
+  ('ACC-20x20x25', 'Cubo de acetato con cinta 20 x 20 x 25 cm', 'empaque', 'unidad', 7000, 12, 84000, false),
+  ('ACC-22x22x28', 'Cubo de acetato con cinta 22 x 22 x 28 cm', 'empaque', 'unidad', 7500, 12, 90000, true),
+  ('ACC-28x28x36', 'Cubo de acetato con cinta 28 x 28 x 36 cm', 'empaque', 'unidad', 10000, 12, 120000, true),
+  ('ACC-30x30x30', 'Cubo de acetato con cinta 30 x 30 x 30 cm', 'empaque', 'unidad', 12000, 12, 144000, true),
+  ('ACC-30x30x40', 'Cubo de acetato con cinta 30 x 30 x 40 cm', 'empaque', 'unidad', 15000, 12, 180000, true)
+) AS v(codigo, nombre, categoria, unidad_costo, valor_unitario, cantidad_por_paquete, precio_paquete, activo)
+WHERE NOT EXISTS (SELECT 1 FROM velas_insumos WHERE velas_insumos.codigo = v.codigo);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

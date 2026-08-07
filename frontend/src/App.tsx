@@ -21,6 +21,7 @@ import { MeseroPage } from "./modules/migao/pages/MeseroPage";
 import { MigaoHistorialPage } from "./modules/migao/pages/MigaoHistorialPage";
 import { MigaoPage } from "./modules/migao/pages/MigaoPage";
 import { UsuariosPage } from "./modules/general/pages/UsuariosPage";
+import { CalculadoraVelasPage } from "./modules/velas/pages/CalculadoraVelasPage";
 import { RequireAuth } from "./shared/auth/RequireAuth";
 import { AppShell } from "./shared/layout/AppShell";
 
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/con-sentido/ventas" element={<VentasPage />} />
         <Route path="/con-sentido/clientes" element={<ClientesPage />} />
         <Route path="/con-sentido/inventario" element={<InventarioConSentidoPage />} />
+        <Route path="/con-sentido/velas" element={<CalculadoraVelasPage />} />
         <Route path="/insumos" element={<InsumosListPage />} />
         <Route path="/mesero" element={<MeseroPage />} />
         <Route path="/mesero/historial" element={<MeseroHistorialPage />} />

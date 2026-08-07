@@ -494,10 +494,20 @@ function calcularMontoPorUnidades<T extends { id: unknown; precio_unitario: stri
   }, 0);
 }
 
-/** Cuánto de la cuenta entró de verdad en efectivo vs. en banco — para poder
- *  repartir la propina en esa misma proporción (ver cerrarOrden). Cubre las
- *  4 formas de pagar: simple puro, simple mixto, dividida (suma cada parte,
- *  cada una puede ser pura o mixta) y administrativo (sin pago real, {0,0}). */
+/**
+ * Cuánto de la CUENTA (sin la propina) entró de verdad en efectivo vs. en
+ * banco — se usa tanto para registrar el ingreso real en Caja General como
+ * para repartir la propina en esa misma proporción (ver cerrarOrden). Cubre
+ * las 4 formas de pagar: simple puro, simple mixto, dividida (suma cada
+ * parte, cada una puede ser pura o mixta) y administrativo (sin pago real, {0,0}).
+ *
+ * En el cobro simple mixto, lo que el cajero escribe en efectivo/banco es lo
+ * que el cliente entregó de verdad — eso incluye la propina si hay (ver
+ * migao.schema.ts::cerrarOrdenSchema, ahí se valida que la suma dé
+ * total+propina). Por eso acá se reparte `total` proporcional a esos dos
+ * montos, en vez de usarlos tal cual: si se usaran tal cual, la propina se
+ * colaría como ingreso de Caja General.
+ */
 function calcularTotalesPorMetodo<T extends { id: unknown; precio_unitario: string }>(
   input: CerrarOrdenInput,
   items: T[],
@@ -518,7 +528,12 @@ function calcularTotalesPorMetodo<T extends { id: unknown; precio_unitario: stri
     }
     return { efectivo, banco };
   }
-  if (input.metodoPago === "mixto") return { efectivo: input.montoEfectivo, banco: input.montoBanco };
+  if (input.metodoPago === "mixto") {
+    const entregado = input.montoEfectivo + input.montoBanco;
+    if (entregado <= 0) return { efectivo: 0, banco: 0 };
+    const efectivo = Math.round(total * (input.montoEfectivo / entregado));
+    return { efectivo, banco: total - efectivo };
+  }
   if (input.metodoPago === "efectivo") return { efectivo: total, banco: 0 };
   if (input.metodoPago === "banco") return { efectivo: 0, banco: total };
   return { efectivo: 0, banco: 0 }; // administrativo: no hay pago real, se maneja aparte
@@ -734,8 +749,14 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
         }
       }
     } else if (input.metodoPago === "mixto") {
-      if (Math.abs(input.montoEfectivo + input.montoBanco - total) > 0.01) {
-        throw Errors.badRequest(`La suma de efectivo + banco debe ser igual al total (${total})`);
+      // Lo que el cajero escribe acá es lo que el cliente entregó de verdad
+      // (efectivo + tarjeta/transferencia) — si hay propina, esa plata
+      // también viene incluida en esos dos montos, no solo la cuenta.
+      const totalConPropina = total + (input.propina && input.propina > 0 ? input.propina : 0);
+      if (Math.abs(input.montoEfectivo + input.montoBanco - totalConPropina) > 0.01) {
+        throw Errors.badRequest(
+          `La suma de efectivo + banco debe ser igual al total${input.propina ? " con propina incluida" : ""} (${totalConPropina})`,
+        );
       }
     }
 
@@ -855,9 +876,16 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
         usuarioId,
       });
     } else {
+      // Ojo: en mixto, input.montoEfectivo/montoBanco es lo que el cliente
+      // entregó de verdad (puede incluir propina) — para Caja General se usa
+      // SOLO la porción de la cuenta (calcularTotalesPorMetodo ya la separa),
+      // nunca los montos crudos, o la propina se colaría como ingreso.
       const lineas =
         input.metodoPago === "mixto"
-          ? descomponerPago({ metodoPago: "mixto", montoEfectivo: input.montoEfectivo, montoBanco: input.montoBanco })
+          ? (() => {
+              const { efectivo, banco } = calcularTotalesPorMetodo(input, items, total);
+              return descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivo, montoBanco: banco });
+            })()
           : descomponerPago({ metodoPago: input.metodoPago, monto: total });
 
       for (const linea of lineas) {

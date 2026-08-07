@@ -210,7 +210,12 @@ export function MigaoPage() {
   const totalConDescuento = detalle ? detalle.total * (1 - descuentoPorcentaje / 100) : 0;
   // Propina: un solo valor sobre el total de la cuenta (ya con descuento
   // aplicado), sin importar si se divide o no — nunca entra a la validación
-  // de mixto ni al total que ve Caja General, es dinero aparte del mesero.
+  // de mixto en la cuenta DIVIDIDA (ahí cada parte sigue sumando solo su
+  // propio subtotal) ni al total que ve Caja General, es dinero aparte del
+  // mesero. En el cobro SIMPLE mixto sí hay que tenerla en cuenta al validar
+  // efectivo+banco (ver pagoMixtoInvalido): lo que el cliente entrega de
+  // verdad incluye la propina, el backend ya separa esa parte antes de
+  // registrar el ingreso en Caja General (migao.service.ts::calcularTotalesPorMetodo).
   const propinaMonto =
     propinaPorcentaje === 0 ? 0 : propinaPorcentaje === null ? propinaMontoCustom : totalConDescuento * (propinaPorcentaje / 100);
 
@@ -226,7 +231,7 @@ export function MigaoPage() {
     !esAdministrativo &&
     pago.metodoPago === "mixto" &&
     detalle !== null &&
-    Math.abs(pago.montoEfectivo + pago.montoBanco - totalConDescuento) > 0.01;
+    Math.abs(pago.montoEfectivo + pago.montoBanco - (totalConDescuento + propinaMonto)) > 0.01;
 
   /** Trae la factura recién generada y la ofrece para imprimir de una vez —
    *  si falla, solo se avisa aparte, nunca deshace el cobro (ya se cerró). */
@@ -740,11 +745,20 @@ export function MigaoPage() {
                   ) : (
                     <>
                       <label className="-mb-2 block text-xs font-medium">Método de pago</label>
-                      <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalConDescuento} />
+                      {propinaMonto > 0 && pago.metodoPago === "mixto" && (
+                        <p className="-mb-2 text-xs text-amber-700 dark:text-amber-400">
+                          Incluye la propina: entre efectivo y banco deben sumar {formatMoney(totalConDescuento + propinaMonto)}.
+                        </p>
+                      )}
+                      <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalConDescuento + propinaMonto} />
 
                       {pago.metodoPago !== "banco" && (
                         <CalculadoraVuelta
-                          aPagar={montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto}
+                          aPagar={
+                            pago.metodoPago === "mixto"
+                              ? pago.montoEfectivo // ya incluye su parte de la propina (ver validación de arriba)
+                              : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto
+                          }
                           recibido={montoRecibido}
                           onChange={setMontoRecibido}
                         />

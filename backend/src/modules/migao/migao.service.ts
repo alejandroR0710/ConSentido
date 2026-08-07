@@ -494,6 +494,36 @@ function calcularMontoPorUnidades<T extends { id: unknown; precio_unitario: stri
   }, 0);
 }
 
+/** Cuánto de la cuenta entró de verdad en efectivo vs. en banco — para poder
+ *  repartir la propina en esa misma proporción (ver cerrarOrden). Cubre las
+ *  4 formas de pagar: simple puro, simple mixto, dividida (suma cada parte,
+ *  cada una puede ser pura o mixta) y administrativo (sin pago real, {0,0}). */
+function calcularTotalesPorMetodo<T extends { id: unknown; precio_unitario: string }>(
+  input: CerrarOrdenInput,
+  items: T[],
+  total: number,
+): { efectivo: number; banco: number } {
+  if (input.dividir) {
+    let efectivo = 0;
+    let banco = 0;
+    for (const parte of input.partes) {
+      if (parte.metodoPago === "mixto") {
+        efectivo += parte.montoEfectivo;
+        banco += parte.montoBanco;
+      } else {
+        const montoParte = calcularMontoPorUnidades(items, parte.unidades);
+        if (parte.metodoPago === "efectivo") efectivo += montoParte;
+        else banco += montoParte;
+      }
+    }
+    return { efectivo, banco };
+  }
+  if (input.metodoPago === "mixto") return { efectivo: input.montoEfectivo, banco: input.montoBanco };
+  if (input.metodoPago === "efectivo") return { efectivo: total, banco: 0 };
+  if (input.metodoPago === "banco") return { efectivo: 0, banco: total };
+  return { efectivo: 0, banco: 0 }; // administrativo: no hay pago real, se maneja aparte
+}
+
 export async function listarColaDeCocina() {
   return repo.listItemsCocina();
 }
@@ -729,22 +759,57 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
       })),
     );
 
-    // Propina: un solo registro por orden/venta, sin importar si se dividió
-    // o no la cuenta (la división entre personas es solo informativa en
-    // pantalla) — dinero del mesero, nunca entra a cajaService.registrarIngreso
-    // ni a la validación de mixto de arriba.
+    // Propina: se reparte SIEMPRE en la misma proporción efectivo/banco en la
+    // que de verdad entró el pago de la cuenta (una cuenta mixta 60%
+    // efectivo/40% banco reparte la propina 60/40 también) — nunca hay que
+    // preguntarle al cajero, el backend lo calcula solo a partir de cómo se
+    // pagó. Puede terminar en 1 o 2 registros (uno por método), sin importar
+    // si la cuenta se dividió o no — dinero del mesero, nunca entra a
+    // cajaService.registrarIngreso ni a la validación de mixto de arriba.
+    // Única excepción: pago "administrativo" no tiene un pago real detrás,
+    // ahí sigue siendo el cajero quien elige el método a mano.
     if (input.propina && input.propina > 0) {
-      // El frontend siempre manda propinaMetodoPago cuando hay propina; el
-      // default acá es solo defensivo (clientes viejos/llamadas directas).
-      await repo.crearPropina(client, {
-        ordenId,
-        ventaId: venta.id,
-        meseroId: orden.mesero_id,
-        usuarioId,
-        monto: input.propina,
-        porcentaje: input.propinaPorcentaje ?? null,
-        metodoPago: input.propinaMetodoPago ?? "efectivo",
-      });
+      const esAdministrativo = !input.dividir && input.metodoPago === "administrativo";
+      if (esAdministrativo) {
+        await repo.crearPropina(client, {
+          ordenId,
+          ventaId: venta.id,
+          meseroId: orden.mesero_id,
+          usuarioId,
+          monto: input.propina,
+          porcentaje: input.propinaPorcentaje ?? null,
+          metodoPago: input.propinaMetodoPago ?? "efectivo",
+        });
+      } else {
+        const { efectivo: efectivoRecibido, banco: bancoRecibido } = calcularTotalesPorMetodo(input, items, total);
+        const totalRecibido = efectivoRecibido + bancoRecibido;
+        const propinaEfectivo =
+          totalRecibido > 0 ? Math.round((input.propina * efectivoRecibido) / totalRecibido) : input.propina;
+        const propinaBanco = input.propina - propinaEfectivo;
+
+        if (propinaEfectivo > 0) {
+          await repo.crearPropina(client, {
+            ordenId,
+            ventaId: venta.id,
+            meseroId: orden.mesero_id,
+            usuarioId,
+            monto: propinaEfectivo,
+            porcentaje: input.propinaPorcentaje ?? null,
+            metodoPago: "efectivo",
+          });
+        }
+        if (propinaBanco > 0) {
+          await repo.crearPropina(client, {
+            ordenId,
+            ventaId: venta.id,
+            meseroId: orden.mesero_id,
+            usuarioId,
+            monto: propinaBanco,
+            porcentaje: input.propinaPorcentaje ?? null,
+            metodoPago: "banco",
+          });
+        }
+      }
     }
 
     if (input.dividir) {

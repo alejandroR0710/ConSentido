@@ -214,26 +214,13 @@ export function MigaoPage() {
   const propinaMonto =
     propinaPorcentaje === 0 ? 0 : propinaPorcentaje === null ? propinaMontoCustom : totalConDescuento * (propinaPorcentaje / 100);
 
-  // La propina se cobra en el mismo método que la cuenta: si se pagó en
-  // efectivo, la propina es efectivo; si se pagó en banco, es banco. Solo
-  // queda ambiguo (y ahí sí se le pregunta al cajero) cuando el pago es
-  // "mixto", cuando es administrativo (no es un pago real), o cuando la
-  // cuenta se dividió entre partes que no coinciden todas en el mismo método.
-  function metodoUnico(p: MetodoPagoValor): "efectivo" | "banco" | null {
-    return p.metodoPago === "mixto" ? null : p.metodoPago;
-  }
-  const metodoPropinaAutomatico = dividirCuenta
-    ? (() => {
-        const metodos = new Set(pagosPartes.slice(0, numPartes).map(metodoUnico));
-        return metodos.size === 1 ? [...metodos][0] : null;
-      })()
-    : esAdministrativo
-      ? null
-      : metodoUnico(pago);
-
-  useEffect(() => {
-    if (metodoPropinaAutomatico) setPropinaMetodoPago(metodoPropinaAutomatico);
-  }, [metodoPropinaAutomatico]);
+  // La propina se reparte SIEMPRE en la misma proporción efectivo/banco en la
+  // que de verdad se pagó la cuenta (lo calcula el backend, ver
+  // migao.service.ts::calcularTotalesPorMetodo) — cubre pago simple puro,
+  // simple mixto y cuenta dividida con partes de cualquier método. Solo
+  // queda a elección manual del cajero cuando es "administrativo": ahí no
+  // hay un pago real del que derivar la proporción.
+  const propinaEsAutomatica = !esAdministrativo;
 
   const pagoMixtoInvalido =
     !esAdministrativo &&
@@ -686,19 +673,16 @@ export function MigaoPage() {
                   </p>
                 )}
                 {propinaMonto > 0 &&
-                  (metodoPropinaAutomatico ? (
-                    // Se cobra en el mismo método que la cuenta — no hay nada que elegir.
+                  (propinaEsAutomatica ? (
+                    // Se reparte sola según cómo se pague la cuenta (efectivo/banco/mixto/
+                    // dividida) — nada que elegir acá, lo calcula el backend.
                     <p className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                      Propina se carga en:{" "}
-                      <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
-                        {metodoPropinaAutomatico}
-                      </span>{" "}
-                      (mismo método de la cuenta)
+                      La propina se reparte según el método de pago de la cuenta.
                     </p>
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                        Método mixto/varias partes — ¿en qué se cobra la propina?
+                        Pago administrativo — ¿en qué se recibió la propina?
                       </span>
                       {(["efectivo", "banco"] as const).map((m) => (
                         <button

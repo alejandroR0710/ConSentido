@@ -186,6 +186,7 @@ export function MigaoHistorialPage() {
             <tr>
               <th className="px-3 py-2">Mesa</th>
               <th className="px-3 py-2">Mesero</th>
+              <th className="px-3 py-2">Factura</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Método</th>
               <th className="px-3 py-2">Fecha y hora</th>
@@ -196,13 +197,13 @@ export function MigaoHistorialPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={puedeEditarPagos ? 8 : 7} className="px-3 py-4 text-center text-brand-ink/60">
                   Cargando...
                 </td>
               </tr>
             ) : historial.length === 0 ? (
               <tr>
-                <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={puedeEditarPagos ? 8 : 7} className="px-3 py-4 text-center text-brand-ink/60">
                   Todavía no hay órdenes cobradas ni canceladas.
                 </td>
               </tr>
@@ -214,7 +215,7 @@ export function MigaoHistorialPage() {
                     key={`dia-${grupo.fecha}`}
                     className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
                   >
-                    <td colSpan={puedeEditarPagos ? 7 : 6} className="px-3 py-2">
+                    <td colSpan={puedeEditarPagos ? 8 : 7} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                           {formatearFechaLarga(grupo.fecha)}
@@ -240,6 +241,7 @@ export function MigaoHistorialPage() {
                       {h.motivo ?? "Sin mesa (ingreso manual)"}
                     </td>
                     <td className="px-3 py-2">{h.usuario_nombre ?? "—"}</td>
+                    <td className="px-3 py-2 text-brand-ink/40 dark:text-brand-vanilla/40">—</td>
                     <td className="px-3 py-2">
                       <span className="rounded-full bg-brand-green-400 px-2 py-0.5 text-xs font-bold whitespace-nowrap text-white">
                         Ingreso manual
@@ -281,6 +283,9 @@ export function MigaoHistorialPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">{h.mesero_nombre ?? "—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                      {h.numero_factura ?? "—"}
+                    </td>
                     <td className="px-3 py-2">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${

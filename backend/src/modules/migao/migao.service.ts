@@ -780,6 +780,13 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
       })),
     );
 
+    // Factura: se genera acá mismo, al cerrar, no cuando alguien la pide para
+    // imprimir — así CUALQUIER venta ya tiene su número (F-000123) desde el
+    // momento en que se cobra, y ese número puede mostrarse de una en el
+    // historial sin depender de que alguien haya apretado "Factura" antes
+    // (útil para ubicar una venta rápido si llega un reclamo).
+    await repo.getOrCrearFactura({ ventaId: venta.id, ordenId, subtotal: totalBruto, total }, client);
+
     // Propina: se reparte SIEMPRE en la misma proporción efectivo/banco en la
     // que de verdad entró el pago de la cuenta (una cuenta mixta 60%
     // efectivo/40% banco reparte la propina 60/40 también) — nunca hay que

@@ -220,6 +220,7 @@ export async function crearVentaItem(
 const SELECT_VENTA_CON_ITEMS = `
   SELECT
     cv.id, cv.created_at, cv.monto, cv.metodo_pago, cv.monto_efectivo, cv.monto_banco,
+    MAX(f.numero) AS numero_factura,
     COALESCE(
       json_agg(
         json_build_object(
@@ -235,6 +236,7 @@ const SELECT_VENTA_CON_ITEMS = `
     ) AS items
   FROM con_sentido_ventas cv
   LEFT JOIN con_sentido_venta_items cvi ON cv.id = cvi.venta_id
+  LEFT JOIN facturas f ON f.con_sentido_venta_id = cv.id
 `;
 
 export async function listVentas(skip: number, limit: number, fecha?: string) {
@@ -265,8 +267,11 @@ export async function getVentaById(id: string) {
  *  migao.repository.ts::getOrCrearFactura, comparte la misma facturas_numero_seq
  *  (un solo número de factura corriendo para todo el negocio). El índice único
  *  en con_sentido_venta_id blinda contra doble clic/pedidos simultáneos. */
-export async function getOrCrearFactura(params: { ventaId: string; subtotal: number; total: number }) {
-  const insert = await pool.query(
+export async function getOrCrearFactura(
+  params: { ventaId: string; subtotal: number; total: number },
+  executor: Executor = pool,
+) {
+  const insert = await executor.query(
     `INSERT INTO facturas (con_sentido_venta_id, numero, tipo, subtotal, total)
      VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $2, $3)
      ON CONFLICT (con_sentido_venta_id) WHERE con_sentido_venta_id IS NOT NULL DO NOTHING
@@ -275,7 +280,7 @@ export async function getOrCrearFactura(params: { ventaId: string; subtotal: num
   );
   if (insert.rowCount) return insert.rows[0];
 
-  const existente = await pool.query(`SELECT * FROM facturas WHERE con_sentido_venta_id = $1`, [params.ventaId]);
+  const existente = await executor.query(`SELECT * FROM facturas WHERE con_sentido_venta_id = $1`, [params.ventaId]);
   return existente.rows[0];
 }
 

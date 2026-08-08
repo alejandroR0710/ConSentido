@@ -63,6 +63,12 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
       });
     }
 
+    // Factura: se genera acá mismo, al registrar la venta, no cuando alguien
+    // la pide para imprimir — así cualquier venta ya tiene su número
+    // (F-000123) desde el momento en que se cobra (ver mismo criterio en
+    // migao.service.ts::cerrarOrden).
+    await repo.getOrCrearFactura({ ventaId: venta.id, subtotal: input.monto, total: input.monto }, client);
+
     const motivo = `Venta Con Sentido - ${input.items.length} producto(s)`;
     if (input.metodoPago === "mixto") {
       await cajaService.registrarIngreso(

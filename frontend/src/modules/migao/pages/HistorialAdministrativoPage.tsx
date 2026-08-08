@@ -136,6 +136,7 @@ export function HistorialAdministrativoPage() {
             <tr>
               <th className="px-3 py-2">Mesa</th>
               <th className="px-3 py-2">Mesero</th>
+              <th className="px-3 py-2">Factura</th>
               <th className="px-3 py-2">Motivo</th>
               <th className="px-3 py-2">Fecha y hora</th>
               <th className="px-3 py-2">Total</th>
@@ -145,13 +146,13 @@ export function HistorialAdministrativoPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={7} className="px-3 py-4 text-center text-brand-ink/60">
                   Cargando...
                 </td>
               </tr>
             ) : historial.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={7} className="px-3 py-4 text-center text-brand-ink/60">
                   Todavía no hay cuentas con pago administrativo.
                 </td>
               </tr>
@@ -163,7 +164,7 @@ export function HistorialAdministrativoPage() {
                     key={`dia-${grupo.fecha}`}
                     className="border-t-2 border-amber-500 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20"
                   >
-                    <td colSpan={6} className="px-3 py-2">
+                    <td colSpan={7} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <span className="font-semibold capitalize text-amber-700 dark:text-amber-400">
                           {formatearFechaLarga(grupo.fecha)}
@@ -185,6 +186,9 @@ export function HistorialAdministrativoPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">{h.mesero_nombre ?? "—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                      {h.numero_factura ?? "—"}
+                    </td>
                     <td className="px-3 py-2">{h.referencia ?? "—"}</td>
                     <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                     <td className="px-3 py-2">

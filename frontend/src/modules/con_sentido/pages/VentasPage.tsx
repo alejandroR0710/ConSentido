@@ -110,6 +110,7 @@ export function VentasPage() {
         })),
         montoEfectivo: parseFloat(v.monto_efectivo || 0),
         montoBanco: parseFloat(v.monto_banco || 0),
+        numeroFactura: v.numero_factura ?? null,
       }));
       setVentas(ventasMapeadas);
       setError(null);
@@ -256,6 +257,12 @@ export function VentasPage() {
                         minute: "2-digit",
                         second: "2-digit",
                       })}
+                      {venta.numeroFactura && (
+                        <span className="font-mono text-brand-ink/70 dark:text-brand-vanilla/70">
+                          {" "}
+                          · Fact. {venta.numeroFactura}
+                        </span>
+                      )}
                     </div>
                     {venta.tipo === "ingreso_manual" && (venta.motivo || venta.usuarioNombre) && (
                       <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">

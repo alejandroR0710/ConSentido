@@ -117,13 +117,15 @@ export async function listOrdenesHistorial(meseroId?: string) {
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre, MAX(mc.movimiento_id) AS movimiento_id, MAX(mc.metodo_pago) AS metodo_pago,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
-            MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado
+            MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
+            MAX(f.numero) AS numero_factura
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
        LEFT JOIN ventas v ON v.orden_id = o.id
+       LEFT JOIN facturas f ON f.venta_id = v.id
        -- Subconsulta lateral (siempre da 0 o 1 fila por venta) en vez de un JOIN
        -- directo a movimientos_caja: una cuenta dividida genera varios pagos
        -- para la misma venta, y un JOIN directo multiplicaría las filas de
@@ -168,13 +170,15 @@ export async function listOrdenesHistorialAdministrativo() {
             m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
             MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
             MAX(p.referencia) AS referencia,
-            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
+            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
+            MAX(f.numero) AS numero_factura
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
        JOIN ventas v ON v.orden_id = o.id
        JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
+       LEFT JOIN facturas f ON f.venta_id = v.id
       WHERE o.estado = 'cerrada'
       GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
                u.nombre
@@ -959,13 +963,16 @@ export async function getPropinaPorVenta(ventaId: string) {
  *  venta se le asigna el siguiente número de `facturas_numero_seq` (nunca se
  *  reutiliza); reimprimir después siempre devuelve la misma fila. El índice
  *  único en `venta_id` blinda contra doble clic/pedidos simultáneos. */
-export async function getOrCrearFactura(params: {
-  ventaId: string;
-  ordenId: string;
-  subtotal: number;
-  total: number;
-}) {
-  const insert = await pool.query(
+export async function getOrCrearFactura(
+  params: {
+    ventaId: string;
+    ordenId: string;
+    subtotal: number;
+    total: number;
+  },
+  executor: Executor = pool,
+) {
+  const insert = await executor.query(
     `INSERT INTO facturas (venta_id, orden_id, numero, tipo, subtotal, total)
      VALUES ($1, $2, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $3, $4)
      ON CONFLICT (venta_id) WHERE venta_id IS NOT NULL DO NOTHING
@@ -974,7 +981,7 @@ export async function getOrCrearFactura(params: {
   );
   if (insert.rowCount) return insert.rows[0];
 
-  const existente = await pool.query(`SELECT * FROM facturas WHERE venta_id = $1`, [params.ventaId]);
+  const existente = await executor.query(`SELECT * FROM facturas WHERE venta_id = $1`, [params.ventaId]);
   return existente.rows[0];
 }
 

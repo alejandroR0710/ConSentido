@@ -335,12 +335,23 @@ export async function borrarEgresosDelTurno(turnoId: string) {
   return result.rowCount ?? 0;
 }
 
+// Junta la factura de la venta que originó el movimiento (si la hay) — desde
+// que Migao/Con Sentido generan la factura apenas se cobra (no solo al
+// imprimirla), esto casi siempre trae el número; sirve para ubicar rápido de
+// qué venta se trata si llega un reclamo, sin tener que abrir cada una.
+const JOIN_FACTURA_POR_MOVIMIENTO = `
+       LEFT JOIN facturas f ON
+         (mc.referencia_entidad = 'ventas' AND f.venta_id::text = mc.referencia_id) OR
+         (mc.referencia_entidad = 'con_sentido_ventas' AND f.con_sentido_venta_id::text = mc.referencia_id)
+`;
+
 export async function listMovimientosPorTurno(turnoId: string) {
   const result = await pool.query(
-    `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre
+    `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre, f.numero AS numero_factura
        FROM movimientos_caja mc
        LEFT JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+       ${JOIN_FACTURA_POR_MOVIMIENTO}
       WHERE mc.turno_id = $1
       ORDER BY mc.created_at DESC`,
     [turnoId],
@@ -648,10 +659,11 @@ export async function actualizarCierreCalculado(
  *  legible (módulo o categoría de gasto). */
 export async function listMovimientosDelDia(fecha: string) {
   const result = await pool.query(
-    `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre
+    `SELECT mc.*, m.slug AS modulo_origen_slug, cg.nombre AS categoria_gasto_nombre, f.numero AS numero_factura
        FROM movimientos_caja mc
        LEFT JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+       ${JOIN_FACTURA_POR_MOVIMIENTO}
       WHERE to_char(mc.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1
       ORDER BY mc.created_at ASC`,
     [fecha],

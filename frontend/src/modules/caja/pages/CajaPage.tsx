@@ -315,6 +315,12 @@ export function CajaPage() {
                                   )}
                                   <div className="mt-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                                     {formatearHora(m.created_at)}
+                                    {m.numero_factura && (
+                                      <span className="font-mono text-brand-ink/70 dark:text-brand-vanilla/70">
+                                        {" "}
+                                        · Fact. {m.numero_factura}
+                                      </span>
+                                    )}
                                   </div>
                                   {m.descuento_porcentaje != null && (
                                     <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">

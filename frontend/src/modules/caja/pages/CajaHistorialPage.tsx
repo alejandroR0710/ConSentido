@@ -655,6 +655,12 @@ export function CajaHistorialPage() {
                               </div>
                               <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
                                 {formatearHora(m.created_at)} · {m.metodo_pago}
+                                {m.numero_factura && (
+                                  <span className="font-mono text-brand-ink/70 dark:text-brand-vanilla/70">
+                                    {" "}
+                                    · Fact. {m.numero_factura}
+                                  </span>
+                                )}
                               </div>
                               {m.descuento_porcentaje != null && (
                                 <div className="text-amber-700 dark:text-amber-400">

@@ -45,6 +45,9 @@ export interface HistorialEntradaOrden extends OrdenHistorialResumen {
   tipo: "orden";
   movimiento_id: number | null;
   metodo_pago: MetodoPago | null;
+  // Se genera solo al cobrar (ver migao.service.ts::cerrarOrden), así que
+  // siempre debería venir poblado para toda venta ya cerrada.
+  numero_factura: string | null;
 }
 
 /** Cuenta cerrada con pago "administrativo": no generó ingreso en Caja
@@ -61,6 +64,7 @@ export interface HistorialAdministrativoEntrada {
   total: string;
   descuento_porcentaje: number;
   total_cobrado: string;
+  numero_factura: string | null;
 }
 
 /** Cuánto entró de Migao ese día en efectivo/banco, tomado de Caja General —

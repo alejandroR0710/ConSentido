@@ -61,6 +61,9 @@ export interface MovimientoCaja {
   categoria_gasto_nombre: string | null;
   proveedor_id?: string | null;
   proveedor_nombre?: string | null;
+  // De la venta que originó este ingreso, si la hay — se genera solo al
+  // cobrar, no al imprimir (ver migao.service.ts::cerrarOrden).
+  numero_factura?: string | null;
 }
 
 export interface IngresoPorArea {

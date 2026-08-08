@@ -246,6 +246,10 @@ export interface PropinaEntrada {
   mesa_piso: number | null;
   mesero_nombre: string | null;
   created_at: string;
+  // De la venta que generó esta propina — permite ubicar la cuenta exacta
+  // (y agrupar visualmente varias propinas de una misma cuenta dividida,
+  // que comparten el mismo número).
+  numero_factura: string | null;
 }
 
 /** Propina opcional (5%/10%/valor voluntario), calculada una sola vez sobre

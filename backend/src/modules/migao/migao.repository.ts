@@ -764,12 +764,14 @@ export async function listPropinas() {
   const result = await pool.query(
     `SELECT p.id, p.orden_id, p.venta_id, p.monto, p.porcentaje, p.metodo_pago, p.created_at,
             l.created_at AS liquidada_en,
-            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre
+            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
+            f.numero AS numero_factura
        FROM migao_propinas p
        LEFT JOIN ordenes o ON o.id = p.orden_id
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = p.mesero_id
        LEFT JOIN migao_propinas_liquidaciones l ON l.id = p.liquidacion_id
+       LEFT JOIN facturas f ON f.venta_id = p.venta_id
       ORDER BY p.created_at DESC
       LIMIT 500`,
   );

@@ -9,6 +9,7 @@ import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type PropinaEntrada } from "../api";
 import { labelArea } from "../areas";
+import { BotonFactura } from "../components/BotonFactura";
 
 const POLL_MS = 15000;
 
@@ -194,6 +195,7 @@ export function HistorialPropinasPage() {
             <tr>
               <th className="px-3 py-2">Mesa</th>
               <th className="px-3 py-2">Mesero</th>
+              <th className="px-3 py-2">Factura</th>
               <th className="px-3 py-2">Método</th>
               <th className="px-3 py-2">%</th>
               <th className="px-3 py-2">Estado</th>
@@ -204,13 +206,13 @@ export function HistorialPropinasPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
                   Cargando...
                 </td>
               </tr>
             ) : historial.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-4 text-center text-brand-ink/60">
+                <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
                   Todavía no hay propinas registradas.
                 </td>
               </tr>
@@ -222,7 +224,7 @@ export function HistorialPropinasPage() {
                     key={`dia-${grupo.fecha}`}
                     className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
                   >
-                    <td colSpan={7} className="px-3 py-2">
+                    <td colSpan={8} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                           {formatearFechaLarga(grupo.fecha)}
@@ -244,6 +246,19 @@ export function HistorialPropinasPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">{p.mesero_nombre ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                          {p.numero_factura ?? "—"}
+                        </span>
+                        {p.venta_id && (
+                          <BotonFactura
+                            origen={{ tipo: "venta", id: p.venta_id }}
+                            className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                          />
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 capitalize">{p.metodo_pago}</td>
                     <td className="px-3 py-2">{p.porcentaje ? `${p.porcentaje}%` : "Personalizado"}</td>
                     <td className="px-3 py-2">

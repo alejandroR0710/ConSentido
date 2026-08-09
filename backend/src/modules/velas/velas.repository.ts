@@ -211,10 +211,9 @@ export async function getParametros() {
 }
 export async function actualizarParametros(data: ActualizarParametrosInput) {
   const r = await pool.query(
-    `UPDATE velas_parametros SET
-       porcentaje_merma = $1, valor_minuto_mano_obra = $2, porcentaje_indirectos = $3, margen_objetivo = $4, updated_at = now()
+    `UPDATE velas_parametros SET multiplicador_precio = $1, updated_at = now()
      WHERE id = true RETURNING *`,
-    [data.porcentajeMerma, data.valorMinutoManoObra, data.porcentajeIndirectos, data.margenObjetivo],
+    [data.multiplicadorPrecio],
   );
   return r.rows[0];
 }
@@ -225,14 +224,15 @@ export async function actualizarParametros(data: ActualizarParametrosInput) {
 // ============================================================================
 
 export interface ComposicionReceta {
+  tipoVela: "decorativa" | "vaso" | "wax_melt";
   pesoMezclaG: number;
   ceras: { ceraId: string; gramos: number }[];
   fragancias: { fraganciaId: string; porcentaje: number }[];
   pabiloId?: string;
   cmPabilo?: number;
   insumos: { insumoId: string; cantidad: number }[];
-  minutosManoObra: number;
-  margenObjetivo?: number;
+  costoManoObra: number;
+  multiplicadorPrecio?: number;
   redondeo: number;
 }
 
@@ -255,14 +255,16 @@ export async function getProductoById(id: string) {
   return {
     producto: producto.rows[0],
     composicion: {
+      tipoVela: producto.rows[0].tipo_vela,
       pesoMezclaG: Number(producto.rows[0].peso_mezcla_g),
       ceras: ceras.rows.map((c) => ({ ceraId: c.cera_id, gramos: Number(c.gramos) })),
       fragancias: fragancias.rows.map((f) => ({ fraganciaId: f.fragancia_id, porcentaje: Number(f.porcentaje) })),
       pabiloId: producto.rows[0].pabilo_id ?? undefined,
       cmPabilo: producto.rows[0].cm_pabilo != null ? Number(producto.rows[0].cm_pabilo) : undefined,
       insumos: insumos.rows.map((i) => ({ insumoId: i.insumo_id, cantidad: Number(i.cantidad) })),
-      minutosManoObra: Number(producto.rows[0].minutos_mano_obra),
-      margenObjetivo: producto.rows[0].margen_objetivo != null ? Number(producto.rows[0].margen_objetivo) : undefined,
+      costoManoObra: Number(producto.rows[0].costo_mano_obra),
+      multiplicadorPrecio:
+        producto.rows[0].multiplicador_precio != null ? Number(producto.rows[0].multiplicador_precio) : undefined,
       redondeo: Number(producto.rows[0].redondeo),
     } satisfies ComposicionReceta,
   };
@@ -301,16 +303,17 @@ export async function crearProducto(
     await client.query("BEGIN");
     const r = await client.query(
       `INSERT INTO velas_productos
-         (nombre, peso_mezcla_g, pabilo_id, cm_pabilo, minutos_mano_obra, margen_objetivo, redondeo, precio_final_autorizado, notas, usuario_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (nombre, tipo_vela, peso_mezcla_g, pabilo_id, cm_pabilo, costo_mano_obra, multiplicador_precio, redondeo, precio_final_autorizado, notas, usuario_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
       [
         data.nombre,
+        data.tipoVela,
         data.pesoMezclaG,
         data.pabiloId ?? null,
         data.cmPabilo ?? null,
-        data.minutosManoObra,
-        data.margenObjetivo ?? null,
+        data.costoManoObra,
+        data.multiplicadorPrecio ?? null,
         data.redondeo,
         data.precioFinalAutorizado ?? null,
         data.notas ?? null,
@@ -339,25 +342,27 @@ export async function actualizarProducto(
     const r = await client.query(
       `UPDATE velas_productos SET
          nombre = COALESCE($2, nombre),
-         peso_mezcla_g = COALESCE($3, peso_mezcla_g),
-         pabilo_id = COALESCE($4, pabilo_id),
-         cm_pabilo = COALESCE($5, cm_pabilo),
-         minutos_mano_obra = COALESCE($6, minutos_mano_obra),
-         margen_objetivo = COALESCE($7, margen_objetivo),
-         redondeo = COALESCE($8, redondeo),
-         precio_final_autorizado = COALESCE($9, precio_final_autorizado),
-         notas = COALESCE($10, notas),
-         activo = COALESCE($11, activo),
+         tipo_vela = COALESCE($3, tipo_vela),
+         peso_mezcla_g = COALESCE($4, peso_mezcla_g),
+         pabilo_id = COALESCE($5, pabilo_id),
+         cm_pabilo = COALESCE($6, cm_pabilo),
+         costo_mano_obra = COALESCE($7, costo_mano_obra),
+         multiplicador_precio = COALESCE($8, multiplicador_precio),
+         redondeo = COALESCE($9, redondeo),
+         precio_final_autorizado = COALESCE($10, precio_final_autorizado),
+         notas = COALESCE($11, notas),
+         activo = COALESCE($12, activo),
          updated_at = now()
        WHERE id = $1 RETURNING id`,
       [
         id,
         data.nombre ?? null,
+        data.tipoVela ?? null,
         data.pesoMezclaG ?? null,
         data.pabiloId ?? null,
         data.cmPabilo ?? null,
-        data.minutosManoObra ?? null,
-        data.margenObjetivo ?? null,
+        data.costoManoObra ?? null,
+        data.multiplicadorPrecio ?? null,
         data.redondeo ?? null,
         data.precioFinalAutorizado ?? null,
         data.notas ?? null,
@@ -373,14 +378,15 @@ export async function actualizarProducto(
     if (data.ceras || data.fragancias || data.insumos) {
       const actual = await getProductoById(id);
       await reemplazarComposicion(client, id, {
+        tipoVela: data.tipoVela ?? actual!.composicion.tipoVela,
         pesoMezclaG: data.pesoMezclaG ?? actual!.composicion.pesoMezclaG,
         ceras: data.ceras ?? actual!.composicion.ceras,
         fragancias: data.fragancias ?? actual!.composicion.fragancias,
         pabiloId: data.pabiloId ?? actual!.composicion.pabiloId,
         cmPabilo: data.cmPabilo ?? actual!.composicion.cmPabilo,
         insumos: data.insumos ?? actual!.composicion.insumos,
-        minutosManoObra: data.minutosManoObra ?? actual!.composicion.minutosManoObra,
-        margenObjetivo: data.margenObjetivo ?? actual!.composicion.margenObjetivo,
+        costoManoObra: data.costoManoObra ?? actual!.composicion.costoManoObra,
+        multiplicadorPrecio: data.multiplicadorPrecio ?? actual!.composicion.multiplicadorPrecio,
         redondeo: data.redondeo ?? actual!.composicion.redondeo,
       });
     }

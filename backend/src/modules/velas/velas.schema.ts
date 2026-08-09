@@ -60,18 +60,23 @@ export const actualizarInsumoVelaSchema = crearInsumoVelaSchema.partial().extend
 export type ActualizarInsumoVelaInput = z.infer<typeof actualizarInsumoVelaSchema>;
 
 export const actualizarParametrosSchema = z.object({
-  porcentajeMerma: z.number().min(0).max(100),
-  valorMinutoManoObra: z.number().nonnegative(),
-  porcentajeIndirectos: z.number().min(0).max(100),
-  margenObjetivo: z.number().min(0).max(99),
+  multiplicadorPrecio: z.number().positive(),
 });
 export type ActualizarParametrosInput = z.infer<typeof actualizarParametrosSchema>;
+
+// Determina qué % del peso total NO queda como cera aprovechable (se pierde
+// en el proceso) — cada tipo de vela tiene su propia merma de fabricación,
+// ver TIPO_VELA_MERMA_PORCENTAJE en velas.service.ts.
+const TIPOS_VELA = ["decorativa", "vaso", "wax_melt"] as const;
 
 // Composición de una receta — la misma forma la usa tanto POST /calcular
 // (no persiste nada) como crear/editar una receta guardada, para que el
 // cálculo sea EXACTAMENTE el mismo en los dos casos (una sola función en el
 // service, ver velas.service.ts::calcularCostoReceta).
 const recetaBaseSchema = z.object({
+  tipoVela: z.enum(TIPOS_VELA).default("decorativa"),
+  // Peso TOTAL pesado (bruto) — el peso de cera realmente aprovechable se
+  // deriva descontando la merma del tipo de vela, nunca se pide aparte.
   pesoMezclaG: z.number().positive(),
   ceras: z.array(z.object({ ceraId: z.string().uuid(), gramos: z.number().positive() })).min(
     1,
@@ -83,9 +88,10 @@ const recetaBaseSchema = z.object({
   pabiloId: z.string().uuid().optional(),
   cmPabilo: z.number().positive().optional(),
   insumos: z.array(z.object({ insumoId: z.string().uuid(), cantidad: z.number().positive() })).default([]),
-  minutosManoObra: z.number().nonnegative().default(0),
-  // undefined = usa el margen global de velas_parametros.
-  margenObjetivo: z.number().min(0).max(99).optional(),
+  // Monto fijo que el usuario escribe a mano, no minutos × tarifa.
+  costoManoObra: z.number().nonnegative().default(0),
+  // undefined = usa el multiplicador global de velas_parametros.
+  multiplicadorPrecio: z.number().positive().optional(),
   redondeo: z.union([z.literal(0), z.literal(100), z.literal(500), z.literal(1000)]).default(100),
 });
 export const calcularRecetaSchema = recetaBaseSchema;

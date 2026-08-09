@@ -411,23 +411,21 @@ CREATE TABLE IF NOT EXISTS velas_insumos (
 );
 
 CREATE TABLE IF NOT EXISTS velas_parametros (
-  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
-  porcentaje_merma       NUMERIC(5,2) NOT NULL DEFAULT 0,
-  valor_minuto_mano_obra NUMERIC(12,2) NOT NULL DEFAULT 0,
-  porcentaje_indirectos  NUMERIC(5,2) NOT NULL DEFAULT 0,
-  margen_objetivo        NUMERIC(5,2) NOT NULL DEFAULT 0,
-  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                   BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  multiplicador_precio NUMERIC(6,2) NOT NULL DEFAULT 4,
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO velas_parametros (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS velas_productos (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre                  VARCHAR(150) NOT NULL,
+  tipo_vela               VARCHAR(20) NOT NULL DEFAULT 'decorativa' CHECK (tipo_vela IN ('decorativa','vaso','wax_melt')),
   peso_mezcla_g           NUMERIC(10,2) NOT NULL CHECK (peso_mezcla_g > 0),
   pabilo_id               UUID REFERENCES velas_pabilos(id),
   cm_pabilo               NUMERIC(10,2),
-  minutos_mano_obra       NUMERIC(10,2) NOT NULL DEFAULT 0,
-  margen_objetivo         NUMERIC(5,2),
+  costo_mano_obra         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  multiplicador_precio    NUMERIC(6,2),
   redondeo                INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0,100,500,1000)),
   precio_final_autorizado NUMERIC(12,2),
   notas                   VARCHAR(300),

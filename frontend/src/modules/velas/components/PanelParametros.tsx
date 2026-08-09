@@ -1,16 +1,12 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
-import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { velasApi } from "../api";
 
-/** Parámetros globales que usa la calculadora cuando una receta no trae los
- *  suyos propios (% merma, $/minuto mano de obra, % indirectos, % margen).
- *  Fila única en la base — siempre se actualiza, nunca se crea otra. */
+/** Multiplicador global que usa la calculadora cuando una receta no trae el
+ *  suyo propio: precio = (cera+fragancia+pabilo+mano de obra) × multiplicador
+ *  + empaque. Fila única en la base — siempre se actualiza, nunca se crea otra. */
 export function PanelParametros() {
-  const [porcentajeMerma, setPorcentajeMerma] = useState(0);
-  const [valorMinutoManoObra, setValorMinutoManoObra] = useState(0);
-  const [porcentajeIndirectos, setPorcentajeIndirectos] = useState(0);
-  const [margenObjetivo, setMargenObjetivo] = useState(0);
+  const [multiplicadorPrecio, setMultiplicadorPrecio] = useState(4);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +15,7 @@ export function PanelParametros() {
   useEffect(() => {
     velasApi
       .obtenerParametros()
-      .then((p) => {
-        setPorcentajeMerma(Number(p.porcentaje_merma));
-        setValorMinutoManoObra(Number(p.valor_minuto_mano_obra));
-        setPorcentajeIndirectos(Number(p.porcentaje_indirectos));
-        setMargenObjetivo(Number(p.margen_objetivo));
-      })
+      .then((p) => setMultiplicadorPrecio(Number(p.multiplicador_precio)))
       .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar los parámetros"))
       .finally(() => setLoading(false));
   }, []);
@@ -34,12 +25,7 @@ export function PanelParametros() {
     setError(null);
     setMensaje(null);
     try {
-      await velasApi.actualizarParametros({
-        porcentajeMerma,
-        valorMinutoManoObra,
-        porcentajeIndirectos,
-        margenObjetivo,
-      });
+      await velasApi.actualizarParametros({ multiplicadorPrecio });
       setMensaje("Parámetros guardados.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar");
@@ -53,53 +39,18 @@ export function PanelParametros() {
   return (
     <div className="flex max-w-md flex-col gap-4 rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
       <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-        Estos valores se aplican por defecto a toda receta que no traiga los suyos propios.
+        Precio sugerido = (cera + fragancia + pabilo + mano de obra) × multiplicador, más el empaque aparte. Este
+        multiplicador se aplica por defecto a toda receta que no traiga el suyo propio.
       </p>
 
       <div>
-        <label className="mb-1 block text-xs font-medium">% Merma (desperdicio sobre el costo directo)</label>
+        <label className="mb-1 block text-xs font-medium">Multiplicador de precio</label>
         <input
           type="number"
           min={0}
-          max={100}
           step="0.1"
-          value={porcentajeMerma || ""}
-          onChange={(e) => setPorcentajeMerma(Number(e.target.value))}
-          className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium">Valor por minuto de mano de obra</label>
-        <MoneyInput
-          value={valorMinutoManoObra}
-          onChange={setValorMinutoManoObra}
-          className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium">% Costos indirectos</label>
-        <input
-          type="number"
-          min={0}
-          max={100}
-          step="0.1"
-          value={porcentajeIndirectos || ""}
-          onChange={(e) => setPorcentajeIndirectos(Number(e.target.value))}
-          className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium">% Margen de utilidad objetivo</label>
-        <input
-          type="number"
-          min={0}
-          max={99}
-          step="0.1"
-          value={margenObjetivo || ""}
-          onChange={(e) => setMargenObjetivo(Number(e.target.value))}
+          value={multiplicadorPrecio || ""}
+          onChange={(e) => setMultiplicadorPrecio(Number(e.target.value))}
           className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
         />
       </div>

@@ -63,24 +63,27 @@ export interface InsumoVela {
 }
 
 export interface ParametrosVela {
-  porcentaje_merma: string;
-  valor_minuto_mano_obra: string;
-  porcentaje_indirectos: string;
-  margen_objetivo: string;
+  multiplicador_precio: string;
   updated_at: string;
 }
+
+export type TipoVela = "decorativa" | "vaso" | "wax_melt";
 
 // Composición de una receta — misma forma para /calcular (no persiste) y
 // para crear/editar una receta guardada.
 export interface RecetaInput {
+  tipoVela: TipoVela;
+  // Peso TOTAL pesado (bruto) — el servidor descuenta la merma del tipo de
+  // vela para obtener el peso de cera realmente aprovechable.
   pesoMezclaG: number;
   ceras: { ceraId: string; gramos: number }[];
   fragancias: { fraganciaId: string; porcentaje: number }[];
   pabiloId?: string;
   cmPabilo?: number;
   insumos: { insumoId: string; cantidad: number }[];
-  minutosManoObra: number;
-  margenObjetivo?: number;
+  // Monto fijo escrito a mano, no minutos × tarifa.
+  costoManoObra: number;
+  multiplicadorPrecio?: number;
   redondeo: 0 | 100 | 500 | 1000;
 }
 
@@ -112,20 +115,18 @@ export interface LineaCostoInsumo {
 }
 
 export interface CalculoReceta {
+  tipoVela: TipoVela;
+  pesoMermaPorcentaje: number;
+  pesoEfectivoG: number;
   lineasCera: LineaCostoCera[];
   lineasFragancia: LineaCostoFragancia[];
   lineaPabilo: LineaCostoPabilo | null;
   lineasInsumo: LineaCostoInsumo[];
-  subtotalDirecto: number;
-  porcentajeMerma: number;
-  costoMerma: number;
-  minutosManoObra: number;
-  valorMinutoManoObra: number;
+  costoBase: number;
   costoManoObra: number;
-  porcentajeIndirectos: number;
-  costoIndirectos: number;
+  costoInsumos: number;
   costoTotal: number;
-  margenAplicado: number;
+  multiplicadorAplicado: number;
   redondeo: number;
   precioVenta: number;
   alertas: string[];
@@ -211,12 +212,8 @@ export const velasApi = {
 
   // Parámetros globales
   obtenerParametros: () => apiFetch<ParametrosVela>("/velas/parametros"),
-  actualizarParametros: (input: {
-    porcentajeMerma: number;
-    valorMinutoManoObra: number;
-    porcentajeIndirectos: number;
-    margenObjetivo: number;
-  }) => apiFetch<ParametrosVela>("/velas/parametros", { method: "PUT", body: input }),
+  actualizarParametros: (input: { multiplicadorPrecio: number }) =>
+    apiFetch<ParametrosVela>("/velas/parametros", { method: "PUT", body: input }),
 
   // Calculadora (no persiste)
   calcular: (input: RecetaInput) => apiFetch<CalculoReceta>("/velas/calcular", { method: "POST", body: input }),

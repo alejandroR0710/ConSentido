@@ -515,16 +515,13 @@ CREATE TABLE velas_insumos (
 );
 
 -- Fila única de parámetros globales (siempre se actualiza sobre id=true) —
--- % merma, $/minuto de mano de obra, % indirectos, % margen objetivo por
--- defecto. Arranca en 0: el PDF de costos los deja como "pendiente por
--- definir", no hay valor real que precargar todavía.
+-- multiplicador de precio por defecto (costo_base × multiplicador + empaque,
+-- ver velas.service.ts::calcularCostoReceta). Arranca en 4, el valor que ya
+-- usa el negocio a mano.
 CREATE TABLE velas_parametros (
-  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
-  porcentaje_merma       NUMERIC(5,2) NOT NULL DEFAULT 0,
-  valor_minuto_mano_obra NUMERIC(12,2) NOT NULL DEFAULT 0,
-  porcentaje_indirectos  NUMERIC(5,2) NOT NULL DEFAULT 0,
-  margen_objetivo        NUMERIC(5,2) NOT NULL DEFAULT 0,
-  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  multiplicador_precio NUMERIC(6,2) NOT NULL DEFAULT 4,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO velas_parametros (id) VALUES (true);
 
@@ -532,14 +529,19 @@ INSERT INTO velas_parametros (id) VALUES (true);
 -- se guarda acá (se recalcula en vivo contra los precios vigentes de las
 -- tablas maestras cada vez que se consulta) — lo único persistido es la
 -- composición de la receta y, opcionalmente, el precio final ya autorizado.
+-- `tipo_vela` determina qué % del peso total NO es cera aprovechable
+-- (decorativa -6%, vaso -12%, wax_melt -10%, ver calcularCostoReceta) —
+-- `peso_mezcla_g` siempre guarda el peso TOTAL que se pesó, nunca el ya
+-- descontado, para no perder el dato de origen.
 CREATE TABLE velas_productos (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre                  VARCHAR(150) NOT NULL,
+  tipo_vela               VARCHAR(20) NOT NULL DEFAULT 'decorativa' CHECK (tipo_vela IN ('decorativa','vaso','wax_melt')),
   peso_mezcla_g           NUMERIC(10,2) NOT NULL CHECK (peso_mezcla_g > 0),
   pabilo_id               UUID REFERENCES velas_pabilos(id),
   cm_pabilo               NUMERIC(10,2),
-  minutos_mano_obra       NUMERIC(10,2) NOT NULL DEFAULT 0,
-  margen_objetivo         NUMERIC(5,2), -- NULL = usa el global de velas_parametros
+  costo_mano_obra         NUMERIC(12,2) NOT NULL DEFAULT 0, -- monto fijo, no minutos × tarifa
+  multiplicador_precio    NUMERIC(6,2), -- NULL = usa el global de velas_parametros
   redondeo                INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0,100,500,1000)),
   precio_final_autorizado NUMERIC(12,2), -- distinto del precio sugerido calculado
   notas                   VARCHAR(300),

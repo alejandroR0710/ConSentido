@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
@@ -12,6 +12,7 @@ import {
   type Pabilo,
   type ProductoVelaResumen,
   type RecetaInput,
+  type TipoVela,
 } from "../api";
 import { recetaAReciboProps } from "../factura";
 
@@ -39,17 +40,32 @@ const REDONDEOS = [
   { valor: 1000, label: "A $1.000" },
 ] as const;
 
+// Debe coincidir con TIPO_VELA_MERMA_PORCENTAJE en velas.service.ts (backend)
+// — acá solo se usa para mostrar el cálculo en vivo mientras se escribe, el
+// servidor siempre recalcula con su propia copia como fuente de verdad.
+const TIPOS_VELA: { valor: TipoVela; label: string; mermaPorcentaje: number }[] = [
+  { valor: "decorativa", label: "Decorativa", mermaPorcentaje: 6 },
+  { valor: "vaso", label: "Vaso", mermaPorcentaje: 12 },
+  { valor: "wax_melt", label: "Wax melt", mermaPorcentaje: 10 },
+];
+
+function pesoEfectivoCera(pesoTotal: number, tipoVela: TipoVela): number {
+  const merma = TIPOS_VELA.find((t) => t.valor === tipoVela)?.mermaPorcentaje ?? 0;
+  return pesoTotal * (1 - merma / 100);
+}
+
 function formArmarInicial() {
   return {
     nombreReceta: "",
+    tipoVela: "decorativa" as TipoVela,
     pesoMezclaG: 0,
     lineasCera: [{ key: siguienteKey++, ceraId: "", gramos: 0 }] as LineaCeraForm[],
     lineasFragancia: [] as LineaFraganciaForm[],
     pabiloId: "",
     cmPabilo: 0,
     lineasInsumo: [] as LineaInsumoForm[],
-    minutosManoObra: 0,
-    margenObjetivo: "" as number | "",
+    costoManoObra: 0,
+    multiplicadorPrecio: "" as number | "",
     redondeo: 100 as 0 | 100 | 500 | 1000,
     notas: "",
     precioFinalAutorizado: "" as number | "",
@@ -74,6 +90,10 @@ export function CalculadoraTab() {
 
   const [form, setForm] = useState(formArmarInicial);
   const [recetaIdActual, setRecetaIdActual] = useState<string | null>(null);
+  // Recuerda el último valor que la propia calculadora autocompletó en la
+  // única línea de cera, para no pisar un valor que el usuario ya cambió a
+  // mano (ver efecto de autocompletar más abajo).
+  const ultimoGramosAutocompletado = useRef<number | null>(null);
 
   const [calculo, setCalculo] = useState<CalculoReceta | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -115,6 +135,23 @@ export function CalculadoraTab() {
     cargarRecetas();
   }, []);
 
+  // Autocompletar el gramaje de la cera: cuando hay una sola línea de cera,
+  // su valor tiene que ser el peso total menos la merma propia del tipo de
+  // vela (decorativa -6%, vaso -12%, wax melt -10%) — nunca el peso total
+  // "en bruto" tal cual se escribió. Si el usuario ya tocó ese campo a mano
+  // (su valor no coincide con lo último que la calculadora puso ahí), se
+  // respeta y no se vuelve a pisar.
+  useEffect(() => {
+    if (form.lineasCera.length !== 1 || form.pesoMezclaG <= 0) return;
+    const [linea] = form.lineasCera;
+    const yaTocadoAMano = linea.gramos > 0 && linea.gramos !== ultimoGramosAutocompletado.current;
+    if (yaTocadoAMano) return;
+    const gramos = Math.round(pesoEfectivoCera(form.pesoMezclaG, form.tipoVela) * 100) / 100;
+    ultimoGramosAutocompletado.current = gramos;
+    setForm((f) => ({ ...f, lineasCera: f.lineasCera.map((x) => (x.key === linea.key ? { ...x, gramos } : x)) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.pesoMezclaG, form.tipoVela]);
+
   // Desglose en vivo: recalcula contra el servidor cada vez que cambia algo
   // de la receta, con un pequeño debounce para no saturar mientras se escribe.
   useEffect(() => {
@@ -124,6 +161,7 @@ export function CalculadoraTab() {
       return;
     }
     const payload: RecetaInput = {
+      tipoVela: form.tipoVela,
       pesoMezclaG: form.pesoMezclaG,
       ceras: ceraLineas,
       fragancias: form.lineasFragancia
@@ -134,8 +172,8 @@ export function CalculadoraTab() {
       insumos: form.lineasInsumo
         .filter((l) => l.insumoId && l.cantidad > 0)
         .map((l) => ({ insumoId: l.insumoId, cantidad: l.cantidad })),
-      minutosManoObra: form.minutosManoObra,
-      margenObjetivo: form.margenObjetivo === "" ? undefined : form.margenObjetivo,
+      costoManoObra: form.costoManoObra,
+      multiplicadorPrecio: form.multiplicadorPrecio === "" ? undefined : form.multiplicadorPrecio,
       redondeo: form.redondeo,
     };
     const timeout = setTimeout(async () => {
@@ -152,7 +190,7 @@ export function CalculadoraTab() {
     }, 400);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.pesoMezclaG, form.lineasCera, form.lineasFragancia, form.pabiloId, form.cmPabilo, form.lineasInsumo, form.minutosManoObra, form.margenObjetivo, form.redondeo]);
+  }, [form.tipoVela, form.pesoMezclaG, form.lineasCera, form.lineasFragancia, form.pabiloId, form.cmPabilo, form.lineasInsumo, form.costoManoObra, form.multiplicadorPrecio, form.redondeo]);
 
   function nuevaReceta() {
     setForm(formArmarInicial());
@@ -166,16 +204,20 @@ export function CalculadoraTab() {
     setErrorGuardar(null);
     try {
       const detalle = await velasApi.obtenerProducto(id);
+      // Evita que el efecto de autocompletar pise el gramaje ya guardado de
+      // la receta al abrirla (se considera "ya tocado a mano").
+      ultimoGramosAutocompletado.current = null;
       setForm({
         nombreReceta: detalle.nombre,
+        tipoVela: detalle.composicion.tipoVela,
         pesoMezclaG: detalle.composicion.pesoMezclaG,
         lineasCera: detalle.composicion.ceras.map((c) => ({ key: siguienteKey++, ceraId: c.ceraId, gramos: c.gramos })),
         lineasFragancia: detalle.composicion.fragancias.map((f) => ({ key: siguienteKey++, fraganciaId: f.fraganciaId, porcentaje: f.porcentaje })),
         pabiloId: detalle.composicion.pabiloId ?? "",
         cmPabilo: detalle.composicion.cmPabilo ?? 0,
         lineasInsumo: detalle.composicion.insumos.map((i) => ({ key: siguienteKey++, insumoId: i.insumoId, cantidad: i.cantidad })),
-        minutosManoObra: detalle.composicion.minutosManoObra,
-        margenObjetivo: detalle.composicion.margenObjetivo ?? "",
+        costoManoObra: detalle.composicion.costoManoObra,
+        multiplicadorPrecio: detalle.composicion.multiplicadorPrecio ?? "",
         redondeo: detalle.composicion.redondeo as 0 | 100 | 500 | 1000,
         notas: detalle.notas ?? "",
         precioFinalAutorizado: detalle.precioFinalAutorizado ?? "",
@@ -191,6 +233,7 @@ export function CalculadoraTab() {
   function payloadReceta(): RecetaInput & { nombre: string; notas?: string; precioFinalAutorizado?: number } {
     return {
       nombre: form.nombreReceta.trim(),
+      tipoVela: form.tipoVela,
       pesoMezclaG: form.pesoMezclaG,
       ceras: form.lineasCera.filter((l) => l.ceraId && l.gramos > 0).map((l) => ({ ceraId: l.ceraId, gramos: l.gramos })),
       fragancias: form.lineasFragancia
@@ -199,8 +242,8 @@ export function CalculadoraTab() {
       pabiloId: form.pabiloId || undefined,
       cmPabilo: form.cmPabilo > 0 ? form.cmPabilo : undefined,
       insumos: form.lineasInsumo.filter((l) => l.insumoId && l.cantidad > 0).map((l) => ({ insumoId: l.insumoId, cantidad: l.cantidad })),
-      minutosManoObra: form.minutosManoObra,
-      margenObjetivo: form.margenObjetivo === "" ? undefined : form.margenObjetivo,
+      costoManoObra: form.costoManoObra,
+      multiplicadorPrecio: form.multiplicadorPrecio === "" ? undefined : form.multiplicadorPrecio,
       redondeo: form.redondeo,
       notas: form.notas.trim() || undefined,
       precioFinalAutorizado: form.precioFinalAutorizado === "" ? undefined : form.precioFinalAutorizado,
@@ -275,16 +318,39 @@ export function CalculadoraTab() {
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium">Peso total de la mezcla (g)</label>
-            <input
-              type="number"
-              min={0}
-              value={form.pesoMezclaG || ""}
-              onChange={(e) => setForm({ ...form, pesoMezclaG: Number(e.target.value) })}
-              className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-            />
+          <div className="flex gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium">Tipo de vela</label>
+              <select
+                value={form.tipoVela}
+                onChange={(e) => setForm({ ...form, tipoVela: e.target.value as TipoVela })}
+                className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+              >
+                {TIPOS_VELA.map((t) => (
+                  <option key={t.valor} value={t.valor}>
+                    {t.label} (-{t.mermaPorcentaje}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium">Peso total pesado (g)</label>
+              <input
+                type="number"
+                min={0}
+                value={form.pesoMezclaG || ""}
+                onChange={(e) => setForm({ ...form, pesoMezclaG: Number(e.target.value) })}
+                className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+              />
+            </div>
           </div>
+          {form.pesoMezclaG > 0 && (
+            <p className="-mt-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Cera aprovechable: {pesoEfectivoCera(form.pesoMezclaG, form.tipoVela).toFixed(1)}g (peso total menos la
+              merma del tipo de vela)
+              {form.lineasCera.length === 1 && " · ya se puso sola en la línea de cera de abajo"}
+            </p>
+          )}
 
           {/* Ceras */}
           <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50/40 p-3 dark:bg-amber-950/10">
@@ -462,27 +528,25 @@ export function CalculadoraTab() {
             ))}
           </div>
 
-          {/* Mano de obra, margen, redondeo */}
+          {/* Mano de obra, multiplicador, redondeo */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium">Minutos de mano de obra</label>
-              <input
-                type="number"
-                min={0}
-                value={form.minutosManoObra || ""}
-                onChange={(e) => setForm({ ...form, minutosManoObra: Number(e.target.value) })}
+              <label className="mb-1 block text-xs font-medium">Costo de mano de obra</label>
+              <MoneyInput
+                value={form.costoManoObra}
+                onChange={(v) => setForm({ ...form, costoManoObra: v })}
                 className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium">Margen (vacío = usa el global)</label>
+              <label className="mb-1 block text-xs font-medium">Multiplicador (vacío = usa el global)</label>
               <input
                 type="number"
                 min={0}
-                max={99}
-                placeholder="%"
-                value={form.margenObjetivo}
-                onChange={(e) => setForm({ ...form, margenObjetivo: e.target.value === "" ? "" : Number(e.target.value) })}
+                step="0.1"
+                placeholder="×4"
+                value={form.multiplicadorPrecio}
+                onChange={(e) => setForm({ ...form, multiplicadorPrecio: e.target.value === "" ? "" : Number(e.target.value) })}
                 className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
               />
             </div>
@@ -614,33 +678,35 @@ export function CalculadoraTab() {
                 </div>
 
                 <div className="flex flex-col gap-1 border-t border-brand-vanilla-dark pt-2 dark:border-brand-green-700">
-                  <div className="flex justify-between">
-                    <span>Subtotal directo</span>
-                    <span className="font-medium">{formatMoney(calculo.subtotalDirecto)}</span>
-                  </div>
                   <div className="flex justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
-                    <span>Merma ({calculo.porcentajeMerma}%)</span>
-                    <span>{formatMoney(calculo.costoMerma)}</span>
-                  </div>
-                  <div className="flex justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
-                    <span>Mano de obra ({calculo.minutosManoObra} min)</span>
+                    <span>👷 Mano de obra</span>
                     <span>{formatMoney(calculo.costoManoObra)}</span>
                   </div>
-                  <div className="flex justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
-                    <span>Indirectos ({calculo.porcentajeIndirectos}%)</span>
-                    <span>{formatMoney(calculo.costoIndirectos)}</span>
+                  <div className="flex justify-between">
+                    <span>Costo base (cera + fragancia + pabilo + mano de obra)</span>
+                    <span className="font-medium">{formatMoney(calculo.costoBase)}</span>
                   </div>
+                  <div className="flex justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+                    <span>× multiplicador ({calculo.multiplicadorAplicado})</span>
+                    <span>{formatMoney(calculo.costoBase * calculo.multiplicadorAplicado)}</span>
+                  </div>
+                  {calculo.costoInsumos > 0 && (
+                    <div className="flex justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+                      <span>📦 + Empaque (no lleva multiplicador)</span>
+                      <span>{formatMoney(calculo.costoInsumos)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between rounded-md bg-brand-green-50 px-3 py-2 dark:bg-brand-green-700/20">
-                  <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">COSTO TOTAL</span>
+                  <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">COSTO TOTAL (real)</span>
                   <span className="text-xl font-bold text-brand-green-700 dark:text-brand-vanilla">{formatMoney(calculo.costoTotal)}</span>
                 </div>
 
                 <div className="flex items-center justify-between rounded-md border-2 border-brand-green-700 bg-white px-3 py-3 dark:bg-brand-green-900">
                   <div>
                     <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-                      Precio sugerido (margen {calculo.margenAplicado}%)
+                      Precio sugerido (×{calculo.multiplicadorAplicado} + empaque)
                     </div>
                     <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">{formatMoney(calculo.precioVenta)}</div>
                   </div>

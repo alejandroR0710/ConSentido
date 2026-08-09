@@ -72,6 +72,15 @@ function redondear(valor: number, multiplo: number): number {
   return Math.ceil(valor / multiplo) * multiplo;
 }
 
+// % del peso total que NO queda como cera aprovechable en el producto final
+// (se pierde en el proceso propio de cada tipo) — cada tipo tiene su propia
+// merma de fabricación, confirmado por el negocio.
+const TIPO_VELA_MERMA_PORCENTAJE: Record<"decorativa" | "vaso" | "wax_melt", number> = {
+  decorativa: 6,
+  vaso: 12,
+  wax_melt: 10,
+};
+
 export async function calcularCostoReceta(input: CalcularRecetaInput | ComposicionReceta) {
   const ceraIds = input.ceras.map((c) => c.ceraId);
   const fraganciaIds = input.fragancias.map((f) => f.fraganciaId);
@@ -91,6 +100,11 @@ export async function calcularCostoReceta(input: CalcularRecetaInput | Composici
 
   const alertas: string[] = [];
 
+  // Peso realmente aprovechable como cera — el peso total (bruto) menos la
+  // merma propia del tipo de vela, ver TIPO_VELA_MERMA_PORCENTAJE arriba.
+  const pesoMermaPorcentaje = TIPO_VELA_MERMA_PORCENTAJE[input.tipoVela];
+  const pesoEfectivoG = input.pesoMezclaG * (1 - pesoMermaPorcentaje / 100);
+
   const lineasCera = input.ceras.map((linea) => {
     const cera = mapCeras.get(linea.ceraId);
     if (!cera) throw Errors.badRequest("Una de las ceras seleccionadas ya no existe");
@@ -104,7 +118,7 @@ export async function calcularCostoReceta(input: CalcularRecetaInput | Composici
     if (!fragancia) throw Errors.badRequest("Una de las fragancias seleccionadas ya no existe");
     if (!fragancia.activo) alertas.push(`La fragancia "${fragancia.nombre}" está inactiva`);
     const valorGramo = Number(fragancia.valor_gramo);
-    const gramos = (input.pesoMezclaG * linea.porcentaje) / 100;
+    const gramos = (pesoEfectivoG * linea.porcentaje) / 100;
     return { nombre: fragancia.nombre as string, porcentaje: linea.porcentaje, gramos, valorGramo, costo: gramos * valorGramo };
   });
 
@@ -131,48 +145,38 @@ export async function calcularCostoReceta(input: CalcularRecetaInput | Composici
     };
   });
 
-  const subtotalDirecto =
+  const costoManoObra = input.costoManoObra;
+
+  // Solo cera + fragancia + pabilo + mano de obra entran al multiplicador —
+  // el empaque/recipiente es adicional, se suma DESPUÉS (nunca se le aplica
+  // el multiplicador, si no la vela quedaría carísima).
+  const costoBase =
     lineasCera.reduce((acc, l) => acc + l.costo, 0) +
     lineasFragancia.reduce((acc, l) => acc + l.costo, 0) +
     (lineaPabilo?.costo ?? 0) +
-    lineasInsumo.reduce((acc, l) => acc + l.costo, 0);
+    costoManoObra;
+  const costoInsumos = lineasInsumo.reduce((acc, l) => acc + l.costo, 0);
+  const costoTotal = costoBase + costoInsumos;
 
-  const porcentajeMerma = Number(parametros.porcentaje_merma);
-  const valorMinutoManoObra = Number(parametros.valor_minuto_mano_obra);
-  const porcentajeIndirectos = Number(parametros.porcentaje_indirectos);
-  const margenGlobal = Number(parametros.margen_objetivo);
-  const margen = input.margenObjetivo ?? margenGlobal;
+  const multiplicadorGlobal = Number(parametros.multiplicador_precio);
+  const multiplicador = input.multiplicadorPrecio ?? multiplicadorGlobal;
 
-  const costoMerma = (subtotalDirecto * porcentajeMerma) / 100;
-  const costoManoObra = input.minutosManoObra * valorMinutoManoObra;
-  const costoIndirectos = ((subtotalDirecto + costoMerma + costoManoObra) * porcentajeIndirectos) / 100;
-  const costoTotal = subtotalDirecto + costoMerma + costoManoObra + costoIndirectos;
-
-  // Margen 100% (o más) haría la división por cero/negativa — se topa en 99
-  // ya desde el schema, esto es solo defensivo.
-  const margenSeguro = Math.min(Math.max(margen, 0), 99);
-  const precioSinRedondeo = margenSeguro > 0 ? costoTotal / (1 - margenSeguro / 100) : costoTotal;
+  const precioSinRedondeo = costoBase * multiplicador + costoInsumos;
   const precioVenta = redondear(precioSinRedondeo, input.redondeo);
 
-  if (porcentajeMerma === 0 && valorMinutoManoObra === 0 && porcentajeIndirectos === 0 && margenGlobal === 0 && input.margenObjetivo === undefined) {
-    alertas.push("Los parámetros globales (merma, mano de obra, indirectos, margen) todavía no se han definido");
-  }
-
   return {
+    tipoVela: input.tipoVela,
+    pesoMermaPorcentaje,
+    pesoEfectivoG,
     lineasCera,
     lineasFragancia,
     lineaPabilo,
     lineasInsumo,
-    subtotalDirecto,
-    porcentajeMerma,
-    costoMerma,
-    minutosManoObra: input.minutosManoObra,
-    valorMinutoManoObra,
+    costoBase,
     costoManoObra,
-    porcentajeIndirectos,
-    costoIndirectos,
+    costoInsumos,
     costoTotal,
-    margenAplicado: margenSeguro,
+    multiplicadorAplicado: multiplicador,
     redondeo: input.redondeo,
     precioVenta,
     alertas,
@@ -245,19 +249,20 @@ export async function duplicarProducto(id: string) {
 }
 
 export async function editarProducto(id: string, data: ActualizarProductoVelaInput) {
-  if (data.ceras || data.fragancias || data.insumos || data.pesoMezclaG) {
+  if (data.ceras || data.fragancias || data.insumos || data.pesoMezclaG || data.tipoVela) {
     // Si se toca la composición, se valida completa antes de guardar.
     const actual = await repo.getProductoById(id);
     if (!actual) throw Errors.notFound("Receta no encontrada");
     await calcularCostoReceta({
+      tipoVela: data.tipoVela ?? actual.composicion.tipoVela,
       pesoMezclaG: data.pesoMezclaG ?? actual.composicion.pesoMezclaG,
       ceras: data.ceras ?? actual.composicion.ceras,
       fragancias: data.fragancias ?? actual.composicion.fragancias,
       pabiloId: data.pabiloId ?? actual.composicion.pabiloId,
       cmPabilo: data.cmPabilo ?? actual.composicion.cmPabilo,
       insumos: data.insumos ?? actual.composicion.insumos,
-      minutosManoObra: data.minutosManoObra ?? actual.composicion.minutosManoObra,
-      margenObjetivo: data.margenObjetivo ?? actual.composicion.margenObjetivo,
+      costoManoObra: data.costoManoObra ?? actual.composicion.costoManoObra,
+      multiplicadorPrecio: data.multiplicadorPrecio ?? actual.composicion.multiplicadorPrecio,
       redondeo: data.redondeo ?? actual.composicion.redondeo,
     });
   }

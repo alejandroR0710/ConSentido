@@ -26,8 +26,8 @@ export function recetaAReciboProps(nombre: string, calculo: CalculoReceta): Omit
     folio: nombre,
     fecha: new Date().toISOString(),
     items,
-    subtotal: calculo.subtotalDirecto,
+    subtotal: calculo.costoBase,
     total: calculo.precioVenta,
-    nota: `Costo total de producción: ${new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(calculo.costoTotal)} · Margen aplicado: ${calculo.margenAplicado}%`,
+    nota: `Costo total de producción: ${new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(calculo.costoTotal)} · Multiplicador aplicado: ×${calculo.multiplicadorAplicado}`,
   };
 }

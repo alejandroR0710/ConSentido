@@ -121,160 +121,94 @@ ON CONFLICT (nombre) DO NOTHING;
 
 
 -- ========================================================================
--- SECCIÓN 2C: AMASIJOS Y BASES DE MIGAO (Inventario de preparación)
+-- SECCIÓN 2C: AMASIJOS Y BASES DE MIGAO — YA VIVEN EN EL INVENTARIO GENERAL
 -- ========================================================================
--- Tipos de amasijos completos (se compran y se pueden vender completos)
-CREATE TABLE IF NOT EXISTS migao_amasijo_tipos (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL UNIQUE,
-  activo BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- El primer intento de este módulo (más abajo, ahora borrado) duplicaba el
+-- stock de amasijos/bases en tablas propias — pero los amasijos (Almojábana,
+-- Arepa boyacense, Arepa garulla, Buñuelo, Pan de yuca) y las bases (Base
+-- casa, Base Valluno, Base Boyacense, Base Migadito) YA existen como
+-- productos normales en migao_inventario_productos, con su propio stock y
+-- stock mínimo — no hay que duplicar nada, solo conectar:
+--  1. migao_base_recetas: qué amasijos (y cuánto) arma cada base.
+--  2. migao_producto_ingredientes: qué producto del menú consume qué
+--     amasijo/base al venderse — ya existe ese mecanismo para cualquier
+--     receta, se usa tal cual (ver inventario.service.ts::aplicarConsumoPorProducto).
+-- DROP de las tablas del primer intento — no-op si nunca se llegaron a crear
+-- en esta base (nunca se aplicó esta sección contra Supabase antes de este cambio).
+DROP TABLE IF EXISTS migao_bases_movimientos;
+DROP TABLE IF EXISTS migao_bases_preparadas;
+DROP TABLE IF EXISTS migao_base_recetas;
+DROP TABLE IF EXISTS migao_amasijos_movimientos;
+DROP TABLE IF EXISTS migao_amasijos;
+DROP TABLE IF EXISTS migao_base_tipos;
+DROP TABLE IF EXISTS migao_amasijo_tipos;
 
--- Inventario de amasijos completos
-CREATE TABLE IF NOT EXISTS migao_amasijos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amasijo_tipo_id INT NOT NULL REFERENCES migao_amasijo_tipos(id),
-  cantidad_completa NUMERIC(12,3) NOT NULL DEFAULT 0,
-  cantidad_media NUMERIC(12,3) NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Movimientos de amasijos (entrada/consumo/venta)
-CREATE TABLE IF NOT EXISTS migao_amasijos_movimientos (
-  id BIGSERIAL PRIMARY KEY,
-  amasijo_id UUID NOT NULL REFERENCES migao_amasijos(id),
-  tipo VARCHAR(30) NOT NULL CHECK (tipo IN ('entrada', 'consumo', 'venta_completo', 'venta_medio', 'ajuste')),
-  cantidad_completa NUMERIC(12,3) NOT NULL DEFAULT 0,
-  cantidad_media NUMERIC(12,3) NOT NULL DEFAULT 0,
-  motivo TEXT,
-  usuario_id UUID REFERENCES usuarios(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Tipos de bases preparadas (Migao de la Casa, Valluno, Boyacense, Migadito)
-CREATE TABLE IF NOT EXISTS migao_base_tipos (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL UNIQUE,
-  activo BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Receta de cada base (qué amasijos se usan y cuánto)
 CREATE TABLE IF NOT EXISTS migao_base_recetas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  base_tipo_id INT NOT NULL REFERENCES migao_base_tipos(id) ON DELETE CASCADE,
-  amasijo_tipo_id INT NOT NULL REFERENCES migao_amasijo_tipos(id) ON DELETE CASCADE,
-  cantidad_amasijo NUMERIC(12,3) NOT NULL CHECK (cantidad_amasijo > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(base_tipo_id, amasijo_tipo_id)
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  base_producto_id    UUID NOT NULL REFERENCES migao_inventario_productos(id) ON DELETE CASCADE,
+  amasijo_producto_id UUID NOT NULL REFERENCES migao_inventario_productos(id) ON DELETE CASCADE,
+  cantidad_amasijo    NUMERIC(12,3) NOT NULL CHECK (cantidad_amasijo > 0),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(base_producto_id, amasijo_producto_id)
 );
+CREATE INDEX IF NOT EXISTS idx_migao_base_recetas_base ON migao_base_recetas(base_producto_id);
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON migao_base_recetas TO usuario;
+  END IF;
+END $$;
 
--- Inventario de bases preparadas
-CREATE TABLE IF NOT EXISTS migao_bases_preparadas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  base_tipo_id INT NOT NULL REFERENCES migao_base_tipos(id),
-  cantidad_preparada NUMERIC(12,3) NOT NULL DEFAULT 0,
-  cantidad_vendida NUMERIC(12,3) NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Movimientos de bases preparadas (preparación/venta)
-CREATE TABLE IF NOT EXISTS migao_bases_movimientos (
-  id BIGSERIAL PRIMARY KEY,
-  base_id UUID NOT NULL REFERENCES migao_bases_preparadas(id),
-  tipo VARCHAR(30) NOT NULL CHECK (tipo IN ('preparacion', 'venta', 'ajuste')),
-  cantidad NUMERIC(12,3) NOT NULL,
-  motivo TEXT,
-  usuario_id UUID REFERENCES usuarios(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Índices
-CREATE INDEX IF NOT EXISTS idx_migao_amasijos_tipo ON migao_amasijos(amasijo_tipo_id);
-CREATE INDEX IF NOT EXISTS idx_migao_amasijos_movimientos_amasijo ON migao_amasijos_movimientos(amasijo_id);
-CREATE INDEX IF NOT EXISTS idx_migao_amasijos_movimientos_fecha ON migao_amasijos_movimientos(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_migao_base_recetas_tipo ON migao_base_recetas(base_tipo_id);
-CREATE INDEX IF NOT EXISTS idx_migao_bases_preparadas_tipo ON migao_bases_preparadas(base_tipo_id);
-CREATE INDEX IF NOT EXISTS idx_migao_bases_movimientos_base ON migao_bases_movimientos(base_id);
-CREATE INDEX IF NOT EXISTS idx_migao_bases_movimientos_fecha ON migao_bases_movimientos(created_at DESC);
-
--- Triggers para updated_at
-DROP TRIGGER IF EXISTS update_migao_amasijos_updated_at ON migao_amasijos;
-CREATE TRIGGER update_migao_amasijos_updated_at
-BEFORE UPDATE ON migao_amasijos
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS update_migao_bases_preparadas_updated_at ON migao_bases_preparadas;
-CREATE TRIGGER update_migao_bases_preparadas_updated_at
-BEFORE UPDATE ON migao_bases_preparadas
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
--- Insertar tipos de amasijos
-INSERT INTO migao_amasijo_tipos (nombre) VALUES
-('Almojábana'),
-('Pan de yuca'),
-('Buñuelo'),
-('Pan de bono'),
-('Arepa boyacense'),
-('Arepa garulla')
-ON CONFLICT (nombre) DO NOTHING;
-
--- Insertar tipos de bases
-INSERT INTO migao_base_tipos (nombre) VALUES
-('Migao de la Casa'),
-('Migao Valluno'),
-('Migao Boyacense'),
-('Migadito')
-ON CONFLICT (nombre) DO NOTHING;
-
--- Insertar recetas
-INSERT INTO migao_base_recetas (base_tipo_id, amasijo_tipo_id, cantidad_amasijo)
-SELECT b.id, a.id, cantidad
-FROM (
-  VALUES
-    ('Migao de la Casa', 'Almojábana', 0.5),
-    ('Migao de la Casa', 'Pan de yuca', 0.5),
-    ('Migao de la Casa', 'Buñuelo', 0.5),
-    ('Migao Valluno', 'Pan de yuca', 0.5),
-    ('Migao Valluno', 'Pan de bono', 0.5),
-    ('Migao Valluno', 'Arepa garulla', 0.5),
-    ('Migao Boyacense', 'Almojábana', 0.5),
-    ('Migao Boyacense', 'Arepa boyacense', 0.5),
-    ('Migao Boyacense', 'Arepa garulla', 0.5),
-    ('Migadito', 'Almojábana', 0.5)
-) AS recetas(base_nombre, amasijo_nombre, cantidad)
-JOIN migao_base_tipos b ON b.nombre = recetas.base_nombre
-JOIN migao_amasijo_tipos a ON a.nombre = recetas.amasijo_nombre
+-- Recetas confirmadas (Migao Valluno queda con Pan de yuca + Arepa garulla
+-- nada más — el tercer ingrediente que se creía "Pan de bono" no existe en
+-- el inventario real, hay que agregarlo desde la pantalla de Amasijos
+-- cuando se confirme cuál es).
+INSERT INTO migao_base_recetas (base_producto_id, amasijo_producto_id, cantidad_amasijo)
+SELECT b.id, a.id, r.cantidad
+FROM (VALUES
+  ('Base casa', 'Almojabana', 0.5),
+  ('Base casa', 'Pan de yuca', 0.5),
+  ('Base casa', 'Buñuelo', 0.5),
+  ('Base Valluno', 'Pan de yuca', 0.5),
+  ('Base Valluno', 'Arepa Garuya', 0.5),
+  ('Base Boyasence', 'Almojabana', 0.5),
+  ('Base Boyasence', 'Arepa boyasence', 0.5),
+  ('Base Boyasence', 'Arepa Garuya', 0.5),
+  ('Base Migadito', 'Almojabana', 0.5)
+) AS r(base_nombre, amasijo_nombre, cantidad)
+JOIN migao_inventario_productos b ON b.nombre = r.base_nombre
+JOIN migao_inventario_productos a ON a.nombre = r.amasijo_nombre
 WHERE NOT EXISTS (
   SELECT 1 FROM migao_base_recetas
-  WHERE base_tipo_id = b.id AND amasijo_tipo_id = a.id
+  WHERE base_producto_id = b.id AND amasijo_producto_id = a.id
 );
 
--- Inicializar inventario de bases
-INSERT INTO migao_bases_preparadas (base_tipo_id, cantidad_preparada, cantidad_vendida)
-SELECT id, 0, 0 FROM migao_base_tipos
+-- Vincula cada producto del MENÚ con el amasijo/base que consume al
+-- venderse — 1 unidad del producto = 1 unidad de ese inventario. Aditivo:
+-- solo agrega la fila si ese producto todavía no tenía NINGÚN ingrediente
+-- con ese inventario_producto_id — nunca toca ni duplica lo que ya exista.
+INSERT INTO migao_producto_ingredientes (producto_id, inventario_producto_id, cantidad_por_unidad)
+SELECT p.id, ip.id, 1
+FROM (VALUES
+  ('Almojábana', 'Almojabana'),
+  ('Pan de yuca', 'Pan de yuca'),
+  ('Arepa boyacense', 'Arepa boyasence'),
+  ('Arepa garulla', 'Arepa Garuya'),
+  ('Migao de la Casa', 'Base casa'),
+  ('Migao Valluno', 'Base Valluno'),
+  ('Migao Boyacense', 'Base Boyasence'),
+  ('Migadito', 'Base Migadito')
+) AS r(producto_nombre, inventario_nombre)
+JOIN productos p ON p.nombre = r.producto_nombre
+JOIN modulos m ON m.id = p.modulo_id AND m.slug = 'migao'
+JOIN migao_inventario_productos ip ON ip.nombre = r.inventario_nombre
 WHERE NOT EXISTS (
-  SELECT 1 FROM migao_bases_preparadas
-  WHERE base_tipo_id = migao_base_tipos.id
+  SELECT 1 FROM migao_producto_ingredientes
+  WHERE producto_id = p.id AND inventario_producto_id = ip.id
 );
 
--- Permisos de amasijos/bases
-GRANT SELECT, INSERT, UPDATE ON migao_amasijo_tipos TO usuario;
-GRANT SELECT, INSERT, UPDATE ON migao_amasijos TO usuario;
-GRANT SELECT, INSERT ON migao_amasijos_movimientos TO usuario;
-GRANT SELECT, INSERT, UPDATE ON migao_base_tipos TO usuario;
-GRANT SELECT, INSERT, UPDATE, DELETE ON migao_base_recetas TO usuario;
-GRANT SELECT, INSERT, UPDATE ON migao_bases_preparadas TO usuario;
-GRANT SELECT, INSERT ON migao_bases_movimientos TO usuario;
-GRANT USAGE, SELECT ON SEQUENCE migao_amasijos_movimientos_id_seq TO usuario;
-GRANT USAGE, SELECT ON SEQUENCE migao_bases_movimientos_id_seq TO usuario;
-
--- Permisos de amasijos en RBAC
+-- Permisos de amasijos en RBAC — la pantalla de Amasijos sigue existiendo
+-- como calculadora de recomendación + editor de recetas sobre el inventario
+-- general, así que el permiso sigue haciendo falta.
 INSERT INTO permisos (modulo_id, accion, codigo)
 SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
 FROM (VALUES

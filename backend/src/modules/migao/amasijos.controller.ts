@@ -1,56 +1,47 @@
 import { Request, Response } from "express";
+import { created, ok } from "../../shared/utils/response";
 import * as amasijosService from "./amasijos.service";
+import {
+  actualizarRecetaLineaSchema,
+  crearRecetaLineaSchema,
+  prepararBaseSchema,
+} from "./amasijos.schema";
 
-export async function obtenerEstadoAmasijos(req: Request, res: Response) {
-  const estado = await amasijosService.obtenerEstadoAmasijos();
-  res.json({ data: estado, error: null, meta: {} });
+export async function obtenerAmasijosController(_req: Request, res: Response) {
+  return ok(res, await amasijosService.obtenerAmasijos());
 }
 
-export async function obtenerEstadoBasesPrepаradas(req: Request, res: Response) {
-  const estado = await amasijosService.obtenerEstadoBasesPrepаradas();
-  res.json({ data: estado, error: null, meta: {} });
+export async function obtenerBasesController(_req: Request, res: Response) {
+  return ok(res, await amasijosService.obtenerBases());
 }
 
-export async function obtenerRecomendaciones(req: Request, res: Response) {
-  const recomendaciones = await amasijosService.obtenerRecomendacionesPreparacion();
-  res.json({ data: recomendaciones, error: null, meta: {} });
+export async function obtenerRecomendacionesController(_req: Request, res: Response) {
+  return ok(res, await amasijosService.obtenerRecomendaciones());
 }
 
-export async function registrarEntrada(req: Request, res: Response) {
-  const { amasijoTipoId, cantidadCompleta = 0, cantidadMedia = 0, motivo } = req.body;
-  const usuarioId = (req as any).user?.id || null;
-
-  const resultado = await amasijosService.registrarEntradaAmasijo(
-    amasijoTipoId,
-    cantidadCompleta,
-    cantidadMedia,
-    motivo,
-    usuarioId
-  );
-
-  res.status(201).json({ data: resultado, error: null, meta: {} });
+export async function prepararBaseController(req: Request, res: Response) {
+  const data = prepararBaseSchema.parse(req.body);
+  const resultado = await amasijosService.prepararBase(data.baseProductoId, data.cantidad, req.auth!.usuarioId);
+  return created(res, resultado);
 }
 
-export async function prepararBases(req: Request, res: Response) {
-  const { baseTipoId, cantidad } = req.body;
-  const usuarioId = (req as any).user?.id || null;
-
-  const resultado = await amasijosService.prepararBases(baseTipoId, cantidad, usuarioId);
-
-  res.status(201).json({ data: resultado, error: null, meta: {} });
+export async function obtenerRecetasController(_req: Request, res: Response) {
+  return ok(res, await amasijosService.obtenerRecetas());
 }
 
-export async function obtenerRecetas(req: Request, res: Response) {
-  const recetas = await amasijosService.obtenerRecetas();
-  res.json({ data: recetas, error: null, meta: {} });
+export async function crearRecetaLineaController(req: Request, res: Response) {
+  const data = crearRecetaLineaSchema.parse(req.body);
+  const resultado = await amasijosService.crearRecetaLinea(data.baseProductoId, data.amasijoProductoId, data.cantidadAmasijo);
+  return created(res, resultado);
 }
 
-export async function actualizarReceta(req: Request, res: Response) {
-  const { id } = req.params;
-  const { cantidadAmasijo } = req.body;
-  const usuarioId = (req as any).user?.id || null;
+export async function actualizarRecetaLineaController(req: Request, res: Response) {
+  const data = actualizarRecetaLineaSchema.parse(req.body);
+  const resultado = await amasijosService.actualizarRecetaLinea(req.params.id, data.cantidadAmasijo);
+  return ok(res, resultado);
+}
 
-  const resultado = await amasijosService.actualizarReceta(id, cantidadAmasijo, usuarioId);
-
-  res.json({ data: resultado, error: null, meta: {} });
+export async function eliminarRecetaLineaController(req: Request, res: Response) {
+  await amasijosService.eliminarRecetaLinea(req.params.id);
+  return ok(res, { eliminada: true });
 }

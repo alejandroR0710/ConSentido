@@ -625,6 +625,27 @@ CREATE TABLE migao_producto_ingredientes (
   UNIQUE (producto_id, inventario_producto_id)
 );
 
+-- Receta de una "base" (bolsita de Migao, ej. Migao Valluno): qué amasijos
+-- y cuánto de cada uno se necesitan para prepararla. Tanto la base como los
+-- amasijos son productos NORMALES de migao_inventario_productos — el mismo
+-- inventario de siempre, con su propio stock y stock mínimo — así que acá
+-- solo se guarda la receta, nunca un stock aparte (a diferencia de un
+-- primer intento de este módulo que sí duplicaba el stock en tablas propias;
+-- se descartó por quedar desincronizado del inventario real del negocio).
+-- Preparar bases consume amasijos y da entrada a la base, con los mismos
+-- movimientos de migao_inventario_movimientos que ya usa cualquier producto;
+-- vender un producto del menú que sea un amasijo/base directo ya se resuelve
+-- solo con una fila en migao_producto_ingredientes (arriba), sin código aparte.
+CREATE TABLE migao_base_recetas (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  base_producto_id    UUID NOT NULL REFERENCES migao_inventario_productos(id) ON DELETE CASCADE,
+  amasijo_producto_id UUID NOT NULL REFERENCES migao_inventario_productos(id) ON DELETE CASCADE,
+  cantidad_amasijo    NUMERIC(12,3) NOT NULL CHECK (cantidad_amasijo > 0),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(base_producto_id, amasijo_producto_id)
+);
+CREATE INDEX idx_migao_base_recetas_base ON migao_base_recetas(base_producto_id);
+
 CREATE TABLE promociones (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   producto_id  UUID NOT NULL REFERENCES productos(id) ON DELETE CASCADE,

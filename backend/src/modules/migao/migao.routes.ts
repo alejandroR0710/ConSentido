@@ -61,13 +61,14 @@ import {
   subirImagenProductoController,
 } from "./migao.controller";
 import {
-  obtenerEstadoAmasijos,
-  obtenerEstadoBasesPrepаradas,
-  obtenerRecomendaciones,
-  registrarEntrada,
-  prepararBases,
-  obtenerRecetas,
-  actualizarReceta,
+  obtenerAmasijosController,
+  obtenerBasesController,
+  obtenerRecomendacionesController,
+  prepararBaseController,
+  obtenerRecetasController,
+  crearRecetaLineaController,
+  actualizarRecetaLineaController,
+  eliminarRecetaLineaController,
 } from "./amasijos.controller";
 
 export const migaoRouter = Router();
@@ -354,51 +355,54 @@ migaoRouter.post(
   asyncHandler(registrarMovimientoInventarioController),
 );
 
-// Amasijos y bases preparadas: inventario y preparación de Migao
-// Estado de amasijos completos (comprado, usado, vendido, disponible)
+// Amasijos y bases: viven como productos normales del inventario general de
+// Migao (arriba) — acá solo la receta de cada base y la recomendación de
+// preparación (ver amasijos.service.ts).
 migaoRouter.get(
-  "/amasijos/estado",
+  "/amasijos",
   requirePermission("migao.amasijos.ver"),
-  asyncHandler(obtenerEstadoAmasijos),
+  asyncHandler(obtenerAmasijosController),
+);
+migaoRouter.get(
+  "/bases",
+  requirePermission("migao.amasijos.ver"),
+  asyncHandler(obtenerBasesController),
 );
 
-// Estado de bases preparadas (preparados, vendidos, disponibles)
-migaoRouter.get(
-  "/bases/estado",
-  requirePermission("migao.amasijos.ver"),
-  asyncHandler(obtenerEstadoBasesPrepаradas),
-);
-
-// Recomendación de cuántas bases preparar según amasijos disponibles
+// Recomendación de cuántas bases preparar sin bajar del stock mínimo de
+// ningún amasijo que necesiten.
 migaoRouter.get(
   "/bases/recomendaciones",
   requirePermission("migao.amasijos.ver"),
-  asyncHandler(obtenerRecomendaciones),
+  asyncHandler(obtenerRecomendacionesController),
 );
 
-// Registrar entrada de amasijos (compra)
-migaoRouter.post(
-  "/amasijos/entrada",
-  requirePermission("migao.amasijos.administrar"),
-  asyncHandler(registrarEntrada),
-);
-
-// Preparar bases (consume amasijos, crea bases preparadas)
+// Preparar bases: consume amasijos según receta, da entrada a la base —
+// mismos movimientos que cualquier entrada/consumo de inventario.
 migaoRouter.post(
   "/bases/preparar",
   requirePermission("migao.amasijos.administrar"),
-  asyncHandler(prepararBases),
+  asyncHandler(prepararBaseController),
 );
 
-// Obtener y editar recetas
+// Recetas de bases (qué amasijos y cuánto arma cada una)
 migaoRouter.get(
   "/recetas",
   requirePermission("migao.amasijos.ver"),
-  asyncHandler(obtenerRecetas),
+  asyncHandler(obtenerRecetasController),
 );
-
+migaoRouter.post(
+  "/recetas",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(crearRecetaLineaController),
+);
 migaoRouter.patch(
   "/recetas/:id",
   requirePermission("migao.amasijos.administrar"),
-  asyncHandler(actualizarReceta),
+  asyncHandler(actualizarRecetaLineaController),
+);
+migaoRouter.delete(
+  "/recetas/:id",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(eliminarRecetaLineaController),
 );

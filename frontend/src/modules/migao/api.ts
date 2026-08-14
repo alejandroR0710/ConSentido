@@ -366,40 +366,36 @@ export interface CotizacionDetalle extends CotizacionResumen {
   items: CotizacionItem[];
 }
 
-// Amasijos y bases preparadas
-export interface EstadoAmasijo {
-  id: number;
+// Amasijos y bases: NO tienen inventario propio — son productos normales del
+// Inventario general de Migao (mismo stock, mismo stock mínimo). Vender un
+// producto del menú que sea un amasijo/base (ej. "Almojábana" o "Migao
+// Valluno") ya descuenta este inventario solo, vía su receta normal en
+// migao_producto_ingredientes — sin código aparte.
+export interface AmasijoInventario {
+  id: string;
   nombre: string;
-  comprado: number;
-  usado: number;
-  vendido: number;
-  disponible: number;
-}
-
-export interface EstadoBase {
-  id: number;
-  nombre: string;
-  preparados: number;
-  vendidos: number;
-  disponibles: number;
+  stockUnidades: number;
+  stockMinimoUnidades: number | null;
 }
 
 export interface RecomendacionBase {
-  baseTipo: string;
+  baseProductoId: string;
+  baseNombre: string;
   cantidadRecomendada: number;
   limitantes: Array<{
-    amasijoTipo: string;
-    disponible: number;
+    amasijoNombre: string;
+    disponibleSobreMinimo: number;
     necesario: number;
-    botellaCuello: boolean;
   }>;
 }
 
-export interface Receta {
+// Receta de una base: qué amasijos (y cuánto de cada uno) hacen falta para
+// prepararla — se edita desde la pantalla de Amasijos.
+export interface RecetaLinea {
   id: string;
-  base_tipo_id: number;
+  base_producto_id: string;
   base_nombre: string;
-  amasijo_tipo_id: number;
+  amasijo_producto_id: string;
   amasijo_nombre: string;
   cantidad_amasijo: number;
 }
@@ -654,21 +650,21 @@ export const migaoApi = {
   eliminarCotizacion: (id: string) =>
     apiFetch<{ eliminada: boolean }>(`/migao/cotizaciones/${id}`, { method: "DELETE" }),
 
-  // Amasijos y bases preparadas
-  obtenerEstadoAmasijos: () => apiFetch<EstadoAmasijo[]>("/migao/amasijos/estado"),
-  obtenerEstadoBasesPrepаradas: () => apiFetch<EstadoBase[]>("/migao/bases/estado"),
+  // Amasijos y bases: viven en el Inventario general de Migao (arriba) — acá
+  // solo la recomendación de preparación y la receta de cada base.
+  listarAmasijos: () => apiFetch<AmasijoInventario[]>("/migao/amasijos"),
+  listarBases: () => apiFetch<AmasijoInventario[]>("/migao/bases"),
   obtenerRecomendacionesPreparacion: () => apiFetch<RecomendacionBase[]>("/migao/bases/recomendaciones"),
-  registrarEntradaAmasijo: (input: { amasijoTipoId: number; cantidadCompleta?: number; cantidadMedia?: number; motivo?: string }) =>
-    apiFetch<{ amasijoId: string; cantidadCompleta: number; cantidadMedia: number }>("/migao/amasijos/entrada", {
+  prepararBase: (input: { baseProductoId: string; cantidad: number }) =>
+    apiFetch<{ baseProductoId: string; cantidad: number; alertas: string[] }>("/migao/bases/preparar", {
       method: "POST",
       body: input,
     }),
-  prepararBases: (input: { baseTipoId: number; cantidad: number }) =>
-    apiFetch<{ baseTipoId: number; cantidad: number }>("/migao/bases/preparar", { method: "POST", body: input }),
-  obtenerRecetas: () => apiFetch<Receta[]>("/migao/recetas"),
-  actualizarReceta: (recetaId: string, cantidadAmasijo: number) =>
-    apiFetch<{ recetaId: string; cantidadAmasijo: number }>(`/migao/recetas/${recetaId}`, {
-      method: "PATCH",
-      body: { cantidadAmasijo },
-    }),
+  obtenerRecetas: () => apiFetch<RecetaLinea[]>("/migao/recetas"),
+  crearRecetaLinea: (input: { baseProductoId: string; amasijoProductoId: string; cantidadAmasijo: number }) =>
+    apiFetch<{ id: string }>("/migao/recetas", { method: "POST", body: input }),
+  actualizarRecetaLinea: (recetaId: string, cantidadAmasijo: number) =>
+    apiFetch<{ id: string }>(`/migao/recetas/${recetaId}`, { method: "PATCH", body: { cantidadAmasijo } }),
+  eliminarRecetaLinea: (recetaId: string) =>
+    apiFetch<{ eliminada: boolean }>(`/migao/recetas/${recetaId}`, { method: "DELETE" }),
 };

@@ -50,6 +50,10 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_cotizaciones',      'migao.cotizaciones.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'crear_cotizacion',      'migao.cotizaciones.crear'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_cotizacion',   'migao.cotizaciones.eliminar'),
+  -- Amasijos y bases: segundo inventario de preparación (aparte del de
+  -- ingredientes), con recomendaciones de cuántas bases armar.
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_amasijos',          'migao.amasijos.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_amasijos',  'migao.amasijos.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_productos',   'con_sentido.productos.ver'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'crear_producto',  'con_sentido.productos.crear'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'editar_producto', 'con_sentido.productos.editar'),
@@ -119,7 +123,9 @@ WHERE p.codigo IN (
   'migao.cocina.ver',
   'migao.cocina.actualizar_estado',
   'migao.inventario.ver',
-  'migao.inventario.administrar'
+  'migao.inventario.administrar',
+  'migao.amasijos.ver',
+  'migao.amasijos.administrar'
 );
 
 -- Mesero: crea, ve, agrega y edita/cancela ítems de órdenes. NO puede cerrar/cobrar

@@ -1,363 +1,201 @@
 import { pool } from "../../shared/db/pool";
-import { PoolClient } from "pg";
+import { Errors } from "../../shared/utils/app-error";
+import * as inventarioRepo from "./inventario.repository";
+
+// ============================================================================
+// Amasijos y bases: NO tienen inventario propio — son productos normales de
+// migao_inventario_productos (el mismo inventario general de Migao, con su
+// propio stock y stock mínimo). Este módulo solo agrega dos cosas que el
+// inventario general no tiene:
+//  1. La receta de cada base (qué amasijos y cuánto la arman) — migao_base_recetas.
+//  2. La recomendación de cuántas bases se pueden preparar sin bajar del
+//     stock mínimo de ningún amasijo.
+// "Preparar una base" consume amasijos y da entrada a la base usando el
+// mismo ajustarStock/insertMovimiento que ya usa cualquier entrada/consumo
+// de inventario. Vender un producto del menú que sea un amasijo o una base
+// (ej. "Almojábana" o "Migao Valluno") ya se resuelve solo con una fila en
+// migao_producto_ingredientes — el mecanismo existente de
+// inventarioService.aplicarConsumoPorProducto, sin código aparte.
+// ============================================================================
 
 interface RecomendacionBase {
-  baseTipo: string;
+  baseProductoId: string;
+  baseNombre: string;
   cantidadRecomendada: number;
   limitantes: Array<{
-    amasijoTipo: string;
-    disponible: number;
+    amasijoNombre: string;
+    disponibleSobreMinimo: number;
     necesario: number;
-    botellaCuello: boolean;
   }>;
 }
 
-/**
- * Obtiene el estado actual de cada amasijo:
- * - Comprado (total entrada)
- * - Usado (total consumo)
- * - Vendido (total venta)
- * - Disponible (comprado - usado - vendido)
- */
-export async function obtenerEstadoAmasijos() {
-  const result = await pool.query(`
-    SELECT
-      at.id,
-      at.nombre,
-      COALESCE(
-        (SELECT SUM(COALESCE(cantidad_completa, 0))
-         FROM migao_amasijos_movimientos
-         WHERE amasijo_id IN (
-           SELECT id FROM migao_amasijos WHERE amasijo_tipo_id = at.id
-         ) AND tipo = 'entrada'),
-        0
-      )::numeric AS comprado,
-      COALESCE(
-        (SELECT SUM(COALESCE(cantidad_completa, 0))
-         FROM migao_amasijos_movimientos
-         WHERE amasijo_id IN (
-           SELECT id FROM migao_amasijos WHERE amasijo_tipo_id = at.id
-         ) AND tipo = 'consumo'),
-        0
-      )::numeric AS usado,
-      COALESCE(
-        (SELECT SUM(COALESCE(cantidad_completa, 0))
-         FROM migao_amasijos_movimientos
-         WHERE amasijo_id IN (
-           SELECT id FROM migao_amasijos WHERE amasijo_tipo_id = at.id
-         ) AND (tipo = 'venta_completo' OR tipo = 'venta_medio')),
-        0
-      )::numeric AS vendido,
-      COALESCE(
-        (SELECT SUM(COALESCE(cantidad_completa, 0) + COALESCE(cantidad_media, 0) * 0.5)
-         FROM migao_amasijos
-         WHERE amasijo_tipo_id = at.id),
-        0
-      )::numeric AS disponible
-    FROM migao_amasijo_tipos at
-    WHERE at.activo = true
-    ORDER BY at.nombre
+export async function obtenerAmasijos() {
+  const r = await pool.query(`
+    SELECT DISTINCT ip.id, ip.nombre, ip.stock_unidades, ip.stock_minimo_unidades
+      FROM migao_base_recetas br
+      JOIN migao_inventario_productos ip ON ip.id = br.amasijo_producto_id
+     ORDER BY ip.nombre
   `);
-
-  return result.rows.map(row => ({
+  return r.rows.map((row) => ({
     id: row.id,
     nombre: row.nombre,
-    comprado: Number(row.comprado),
-    usado: Number(row.usado),
-    vendido: Number(row.vendido),
-    disponible: Number(row.disponible),
+    stockUnidades: Number(row.stock_unidades),
+    stockMinimoUnidades: row.stock_minimo_unidades != null ? Number(row.stock_minimo_unidades) : null,
+  }));
+}
+
+export async function obtenerBases() {
+  const r = await pool.query(`
+    SELECT DISTINCT ip.id, ip.nombre, ip.stock_unidades, ip.stock_minimo_unidades
+      FROM migao_base_recetas br
+      JOIN migao_inventario_productos ip ON ip.id = br.base_producto_id
+     ORDER BY ip.nombre
+  `);
+  return r.rows.map((row) => ({
+    id: row.id,
+    nombre: row.nombre,
+    stockUnidades: Number(row.stock_unidades),
+    stockMinimoUnidades: row.stock_minimo_unidades != null ? Number(row.stock_minimo_unidades) : null,
   }));
 }
 
 /**
- * Obtiene el estado de cada base preparada:
- * - Preparados
- * - Vendidos
- * - Disponibles (preparados - vendidos)
+ * Cuántas bases de cada tipo se pueden preparar sin bajar del stock mínimo
+ * de ningún amasijo que necesite — "disponible" acá es stock actual MENOS
+ * el mínimo (nunca negativo), no el stock crudo.
  */
-export async function obtenerEstadoBasesPrepаradas() {
-  const result = await pool.query(`
+export async function obtenerRecomendaciones(): Promise<RecomendacionBase[]> {
+  const r = await pool.query(`
     SELECT
-      bt.id,
-      bt.nombre,
-      COALESCE(bp.cantidad_preparada, 0)::numeric AS preparados,
-      COALESCE(bp.cantidad_vendida, 0)::numeric AS vendidos,
-      (COALESCE(bp.cantidad_preparada, 0) - COALESCE(bp.cantidad_vendida, 0))::numeric AS disponibles
-    FROM migao_base_tipos bt
-    LEFT JOIN migao_bases_preparadas bp ON bp.base_tipo_id = bt.id
-    WHERE bt.activo = true
-    ORDER BY bt.nombre
-  `);
-
-  return result.rows.map(row => ({
-    id: row.id,
-    nombre: row.nombre,
-    preparados: Number(row.preparados),
-    vendidos: Number(row.vendidos),
-    disponibles: Number(row.disponibles),
-  }));
-}
-
-/**
- * Calcula recomendación de cuántas bases de cada tipo se pueden preparar
- * basado en los amasijos disponibles. Devuelve:
- * - cantidadRecomendada: cuántas bases se pueden hacer
- * - limitantes: qué amasijos son el cuello de botella
- */
-export async function obtenerRecomendacionesPreparacion(): Promise<RecomendacionBase[]> {
-  // Obtener todas las recetas
-  const recetasResult = await pool.query(`
-    SELECT
-      bt.id,
-      bt.nombre,
-      array_agg(
-        jsonb_build_object(
-          'amasijo_tipo_id', at.id,
-          'amasijo_nombre', at.nombre,
-          'cantidad_necesaria', br.cantidad_amasijo
-        )
-      ) AS ingredientes
-    FROM migao_base_tipos bt
-    LEFT JOIN migao_base_recetas br ON br.base_tipo_id = bt.id
-    LEFT JOIN migao_amasijo_tipos at ON at.id = br.amasijo_tipo_id
-    WHERE bt.activo = true
-    GROUP BY bt.id, bt.nombre
-    ORDER BY bt.nombre
-  `);
-
-  // Obtener disponibilidad actual de cada amasijo
-  const estadoAmasijos = await obtenerEstadoAmasijos();
-  const disponiblePorAmasijo = new Map(
-    estadoAmasijos.map(a => [a.id, a.disponible])
-  );
-
-  // Calcular recomendación para cada base
-  return recetasResult.rows.map((row: any) => {
-    const ingredientes = row.ingredientes.filter((ing: any) => ing.amasijo_tipo_id !== null);
-
-    if (ingredientes.length === 0) {
-      return {
-        baseTipo: row.nombre,
-        cantidadRecomendada: 0,
-        limitantes: [],
-      };
-    }
-
-    // Para cada ingrediente, calcular cuántas bases se pueden hacer
-    const limitantes = ingredientes.map((ing: any) => {
-      const disponible = disponiblePorAmasijo.get(ing.amasijo_tipo_id) || 0;
-      const cantidadPorBase = ing.cantidad_necesaria;
-      const posiblesPorIngrediente = Math.floor(disponible / cantidadPorBase);
-
-      return {
-        amasijoTipo: ing.amasijo_nombre,
-        disponible: Number(disponible.toFixed(3)),
-        necesario: cantidadPorBase,
-        posible: posiblesPorIngrediente,
-        botellaCuello: true, // Se marca en el paso siguiente
-      };
-    });
-
-    // La cantidad máxima que se puede preparar es el mínimo entre todos los ingredientes
-    const cantidadRecomendada = Math.min(...limitantes.map((l: any) => l.posible));
-
-    // Marcar solo los que realmente son limitantes
-    limitantes.forEach((l: any) => {
-      l.botellaCuello = l.posible === cantidadRecomendada;
-    });
-
-    return {
-      baseTipo: row.nombre,
-      cantidadRecomendada,
-      limitantes: limitantes.filter((l: any) => l.botellaCuello),
-    };
-  });
-}
-
-/**
- * Registra entrada de amasijos (compra)
- */
-export async function registrarEntradaAmasijo(
-  amasijoTipoId: number,
-  cantidadCompleta: number,
-  cantidadMedia: number,
-  motivo: string,
-  usuarioId: string | null
-) {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // Obtener o crear registro de amasijo
-    let amasijoResult = await client.query(
-      "SELECT id FROM migao_amasijos WHERE amasijo_tipo_id = $1 LIMIT 1",
-      [amasijoTipoId]
-    );
-
-    let amasijoId;
-    if (amasijoResult.rows.length === 0) {
-      const crearResult = await client.query(
-        "INSERT INTO migao_amasijos (amasijo_tipo_id) VALUES ($1) RETURNING id",
-        [amasijoTipoId]
-      );
-      amasijoId = crearResult.rows[0].id;
-    } else {
-      amasijoId = amasijoResult.rows[0].id;
-    }
-
-    // Actualizar inventario
-    await client.query(
-      `UPDATE migao_amasijos
-       SET cantidad_completa = cantidad_completa + $1,
-           cantidad_media = cantidad_media + $2
-       WHERE id = $3`,
-      [cantidadCompleta, cantidadMedia, amasijoId]
-    );
-
-    // Registrar movimiento
-    await client.query(
-      `INSERT INTO migao_amasijos_movimientos
-       (amasijo_id, tipo, cantidad_completa, cantidad_media, motivo, usuario_id)
-       VALUES ($1, 'entrada', $2, $3, $4, $5)`,
-      [amasijoId, cantidadCompleta, cantidadMedia, motivo, usuarioId]
-    );
-
-    await client.query("COMMIT");
-    return { amasijoId, cantidadCompleta, cantidadMedia };
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Prepara bases: consume amasijos según receta y crea bases preparadas
- */
-export async function prepararBases(
-  baseTipoId: number,
-  cantidad: number,
-  usuarioId: string | null
-) {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // Obtener receta
-    const recetaResult = await client.query(
-      `SELECT br.amasijo_tipo_id, br.cantidad_amasijo
-       FROM migao_base_recetas br
-       WHERE br.base_tipo_id = $1`,
-      [baseTipoId]
-    );
-
-    if (recetaResult.rows.length === 0) {
-      throw new Error("No hay receta definida para esta base");
-    }
-
-    // Validar disponibilidad y consumir amasijos
-    for (const receta of recetaResult.rows) {
-      const cantidadNecesaria = receta.cantidad_amasijo * cantidad;
-
-      // Obtener amasijo actual
-      const amasijoResult = await client.query(
-        `SELECT id FROM migao_amasijos WHERE amasijo_tipo_id = $1 LIMIT 1`,
-        [receta.amasijo_tipo_id]
-      );
-
-      if (amasijoResult.rows.length === 0) {
-        throw new Error(`No hay inventario de este amasijo: ${receta.amasijo_tipo_id}`);
-      }
-
-      const amasijoId = amasijoResult.rows[0].id;
-
-      // Restar del inventario
-      await client.query(
-        `UPDATE migao_amasijos
-         SET cantidad_completa = cantidad_completa - $1
-         WHERE id = $2 AND cantidad_completa >= $1`,
-        [cantidadNecesaria, amasijoId]
-      );
-
-      // Registrar consumo
-      await client.query(
-        `INSERT INTO migao_amasijos_movimientos
-         (amasijo_id, tipo, cantidad_completa, motivo, usuario_id)
-         VALUES ($1, 'consumo', $2, $3, $4)`,
-        [amasijoId, cantidadNecesaria, `Preparación de bases`, usuarioId]
-      );
-    }
-
-    // Agregar bases preparadas
-    const baseResult = await client.query(
-      `SELECT id FROM migao_bases_preparadas WHERE base_tipo_id = $1`,
-      [baseTipoId]
-    );
-
-    if (baseResult.rows.length > 0) {
-      const baseId = baseResult.rows[0].id;
-      await client.query(
-        `UPDATE migao_bases_preparadas
-         SET cantidad_preparada = cantidad_preparada + $1
-         WHERE id = $2`,
-        [cantidad, baseId]
-      );
-
-      // Registrar movimiento de preparación
-      await client.query(
-        `INSERT INTO migao_bases_movimientos
-         (base_id, tipo, cantidad, motivo, usuario_id)
-         VALUES ($1, 'preparacion', $2, $3, $4)`,
-        [baseId, cantidad, `Preparación de ${cantidad} bases`, usuarioId]
-      );
-    }
-
-    await client.query("COMMIT");
-    return { baseTipoId, cantidad };
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Obtiene las recetas actuales (configurable)
- */
-export async function obtenerRecetas() {
-  const result = await pool.query(`
-    SELECT
-      br.id,
-      bt.id as base_tipo_id,
-      bt.nombre as base_nombre,
-      at.id as amasijo_tipo_id,
-      at.nombre as amasijo_nombre,
+      bp.id AS base_producto_id, bp.nombre AS base_nombre,
+      ap.nombre AS amasijo_nombre,
+      ap.stock_unidades, ap.stock_minimo_unidades,
       br.cantidad_amasijo
     FROM migao_base_recetas br
-    JOIN migao_base_tipos bt ON bt.id = br.base_tipo_id
-    JOIN migao_amasijo_tipos at ON at.id = br.amasijo_tipo_id
-    ORDER BY bt.nombre, at.nombre
+    JOIN migao_inventario_productos bp ON bp.id = br.base_producto_id
+    JOIN migao_inventario_productos ap ON ap.id = br.amasijo_producto_id
+    ORDER BY bp.nombre, ap.nombre
   `);
 
-  return result.rows;
+  type FilaReceta = (typeof r.rows)[number];
+  const porBase = new Map<string, { baseNombre: string; lineas: FilaReceta[] }>();
+  for (const row of r.rows) {
+    const actual = porBase.get(row.base_producto_id) ?? { baseNombre: row.base_nombre, lineas: [] as FilaReceta[] };
+    actual.lineas.push(row);
+    porBase.set(row.base_producto_id, actual);
+  }
+
+  const resultado: RecomendacionBase[] = [];
+  for (const [baseProductoId, { baseNombre, lineas }] of porBase) {
+    const calculadas = lineas.map((l) => {
+      const disponibleSobreMinimo = Math.max(0, Number(l.stock_unidades) - Number(l.stock_minimo_unidades ?? 0));
+      const necesario = Number(l.cantidad_amasijo);
+      const posible = Math.floor(disponibleSobreMinimo / necesario);
+      return { amasijoNombre: l.amasijo_nombre as string, disponibleSobreMinimo, necesario, posible };
+    });
+    const cantidadRecomendada = Math.min(...calculadas.map((c) => c.posible));
+    resultado.push({
+      baseProductoId,
+      baseNombre,
+      cantidadRecomendada,
+      limitantes: calculadas
+        .filter((c) => c.posible === cantidadRecomendada)
+        .map((c) => ({ amasijoNombre: c.amasijoNombre, disponibleSobreMinimo: c.disponibleSobreMinimo, necesario: c.necesario })),
+    });
+  }
+  return resultado.sort((a, b) => a.baseNombre.localeCompare(b.baseNombre));
 }
 
 /**
- * Actualiza una receta (cantidad de amasijo para una base)
+ * Prepara `cantidad` bases: por cada línea de la receta, descuenta del
+ * amasijo lo que haga falta y le da entrada a la base — usa el mismo
+ * ajustarStock/insertMovimiento del inventario general, nunca bloquea (si
+ * algún amasijo queda en negativo, solo se avisa).
  */
-export async function actualizarReceta(
-  recetaId: string,
-  cantidadAmasijo: number,
-  usuarioId: string | null
-) {
-  await pool.query(
-    `UPDATE migao_base_recetas
-     SET cantidad_amasijo = $1
-     WHERE id = $2`,
-    [cantidadAmasijo, recetaId]
+export async function prepararBase(baseProductoId: string, cantidad: number, usuarioId: string) {
+  const recetaResult = await pool.query(
+    `SELECT amasijo_producto_id, cantidad_amasijo FROM migao_base_recetas WHERE base_producto_id = $1`,
+    [baseProductoId],
   );
+  if (recetaResult.rowCount === 0) {
+    throw Errors.badRequest("Esta base todavía no tiene receta — agrégale al menos un amasijo antes de prepararla");
+  }
 
-  return { recetaId, cantidadAmasijo };
+  const client = await pool.connect();
+  const alertas: string[] = [];
+  try {
+    await client.query("BEGIN");
+
+    for (const linea of recetaResult.rows) {
+      const cantidadNecesaria = Number(linea.cantidad_amasijo) * cantidad;
+      const actualizado = await inventarioRepo.ajustarStock(client, linea.amasijo_producto_id, -cantidadNecesaria);
+      await inventarioRepo.insertMovimiento(client, {
+        productoId: linea.amasijo_producto_id,
+        tipo: "consumo",
+        cantidadUnidades: -cantidadNecesaria,
+        motivo: `Preparación de ${cantidad} base(s)`,
+        referenciaEntidad: "preparacion_base",
+        referenciaId: baseProductoId,
+        usuarioId,
+      });
+      if (actualizado && Number(actualizado.stock_unidades) < 0) {
+        alertas.push(`⚠ Sin stock suficiente de "${actualizado.nombre}" — quedan ${actualizado.stock_unidades} ${actualizado.unidad_medida}.`);
+      }
+    }
+
+    await inventarioRepo.ajustarStock(client, baseProductoId, cantidad);
+    await inventarioRepo.insertMovimiento(client, {
+      productoId: baseProductoId,
+      tipo: "entrada",
+      cantidadUnidades: cantidad,
+      motivo: `Preparación de ${cantidad} base(s)`,
+      referenciaEntidad: "preparacion_base",
+      usuarioId,
+    });
+
+    await client.query("COMMIT");
+    return { baseProductoId, cantidad, alertas };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function obtenerRecetas() {
+  const r = await pool.query(`
+    SELECT br.id, bp.id AS base_producto_id, bp.nombre AS base_nombre,
+           ap.id AS amasijo_producto_id, ap.nombre AS amasijo_nombre, br.cantidad_amasijo
+      FROM migao_base_recetas br
+      JOIN migao_inventario_productos bp ON bp.id = br.base_producto_id
+      JOIN migao_inventario_productos ap ON ap.id = br.amasijo_producto_id
+     ORDER BY bp.nombre, ap.nombre
+  `);
+  return r.rows;
+}
+
+export async function crearRecetaLinea(baseProductoId: string, amasijoProductoId: string, cantidadAmasijo: number) {
+  const r = await pool.query(
+    `INSERT INTO migao_base_recetas (base_producto_id, amasijo_producto_id, cantidad_amasijo)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (base_producto_id, amasijo_producto_id) DO UPDATE SET cantidad_amasijo = EXCLUDED.cantidad_amasijo
+     RETURNING id`,
+    [baseProductoId, amasijoProductoId, cantidadAmasijo],
+  );
+  return r.rows[0];
+}
+
+export async function actualizarRecetaLinea(id: string, cantidadAmasijo: number) {
+  const r = await pool.query(
+    `UPDATE migao_base_recetas SET cantidad_amasijo = $1 WHERE id = $2 RETURNING id`,
+    [cantidadAmasijo, id],
+  );
+  if (!r.rowCount) throw Errors.notFound("Línea de receta no encontrada");
+  return r.rows[0];
+}
+
+export async function eliminarRecetaLinea(id: string) {
+  const r = await pool.query(`DELETE FROM migao_base_recetas WHERE id = $1`, [id]);
+  if (!r.rowCount) throw Errors.notFound("Línea de receta no encontrada");
 }

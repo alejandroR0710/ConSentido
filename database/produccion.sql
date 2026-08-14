@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS migao_amasijos_movimientos (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Tipos de bases preparadas (Migao de la Casa, Ayuno, Boyacense, Migadito)
+-- Tipos de bases preparadas (Migao de la Casa, Valluno, Boyacense, Migadito)
 CREATE TABLE IF NOT EXISTS migao_base_tipos (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(80) NOT NULL UNIQUE,
@@ -227,7 +227,7 @@ ON CONFLICT (nombre) DO NOTHING;
 -- Insertar tipos de bases
 INSERT INTO migao_base_tipos (nombre) VALUES
 ('Migao de la Casa'),
-('Migao Ayuno'),
+('Migao Valluno'),
 ('Migao Boyacense'),
 ('Migadito')
 ON CONFLICT (nombre) DO NOTHING;
@@ -240,9 +240,9 @@ FROM (
     ('Migao de la Casa', 'Almojábana', 0.5),
     ('Migao de la Casa', 'Pan de yuca', 0.5),
     ('Migao de la Casa', 'Buñuelo', 0.5),
-    ('Migao Ayuno', 'Pan de yuca', 0.5),
-    ('Migao Ayuno', 'Pan de bono', 0.5),
-    ('Migao Ayuno', 'Arepa garulla', 0.5),
+    ('Migao Valluno', 'Pan de yuca', 0.5),
+    ('Migao Valluno', 'Pan de bono', 0.5),
+    ('Migao Valluno', 'Arepa garulla', 0.5),
     ('Migao Boyacense', 'Almojábana', 0.5),
     ('Migao Boyacense', 'Arepa boyacense', 0.5),
     ('Migao Boyacense', 'Arepa garulla', 0.5),

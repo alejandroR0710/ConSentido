@@ -58,6 +58,15 @@ import {
   resetearOrdenesController,
   subirImagenProductoController,
 } from "./migao.controller";
+import {
+  obtenerEstadoAmasijos,
+  obtenerEstadoBasesPrepаradas,
+  obtenerRecomendaciones,
+  registrarEntrada,
+  prepararBases,
+  obtenerRecetas,
+  actualizarReceta,
+} from "./amasijos.controller";
 
 export const migaoRouter = Router();
 const subirImagenProducto = crearUploaderImagen("productos");
@@ -327,4 +336,53 @@ migaoRouter.post(
   "/inventario/movimientos",
   requirePermission("migao.inventario.administrar"),
   asyncHandler(registrarMovimientoInventarioController),
+);
+
+// Amasijos y bases preparadas: inventario y preparación de Migao
+// Estado de amasijos completos (comprado, usado, vendido, disponible)
+migaoRouter.get(
+  "/amasijos/estado",
+  requirePermission("migao.amasijos.ver"),
+  asyncHandler(obtenerEstadoAmasijos),
+);
+
+// Estado de bases preparadas (preparados, vendidos, disponibles)
+migaoRouter.get(
+  "/bases/estado",
+  requirePermission("migao.amasijos.ver"),
+  asyncHandler(obtenerEstadoBasesPrepаradas),
+);
+
+// Recomendación de cuántas bases preparar según amasijos disponibles
+migaoRouter.get(
+  "/bases/recomendaciones",
+  requirePermission("migao.amasijos.ver"),
+  asyncHandler(obtenerRecomendaciones),
+);
+
+// Registrar entrada de amasijos (compra)
+migaoRouter.post(
+  "/amasijos/entrada",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(registrarEntrada),
+);
+
+// Preparar bases (consume amasijos, crea bases preparadas)
+migaoRouter.post(
+  "/bases/preparar",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(prepararBases),
+);
+
+// Obtener y editar recetas
+migaoRouter.get(
+  "/recetas",
+  requirePermission("migao.amasijos.ver"),
+  asyncHandler(obtenerRecetas),
+);
+
+migaoRouter.patch(
+  "/recetas/:id",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(actualizarReceta),
 );

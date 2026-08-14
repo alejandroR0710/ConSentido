@@ -328,6 +328,44 @@ export interface CotizacionDetalle extends CotizacionResumen {
   items: CotizacionItem[];
 }
 
+// Amasijos y bases preparadas
+export interface EstadoAmasijo {
+  id: number;
+  nombre: string;
+  comprado: number;
+  usado: number;
+  vendido: number;
+  disponible: number;
+}
+
+export interface EstadoBase {
+  id: number;
+  nombre: string;
+  preparados: number;
+  vendidos: number;
+  disponibles: number;
+}
+
+export interface RecomendacionBase {
+  baseTipo: string;
+  cantidadRecomendada: number;
+  limitantes: Array<{
+    amasijoTipo: string;
+    disponible: number;
+    necesario: number;
+    botellaCuello: boolean;
+  }>;
+}
+
+export interface Receta {
+  id: string;
+  base_tipo_id: number;
+  base_nombre: string;
+  amasijo_tipo_id: number;
+  amasijo_nombre: string;
+  cantidad_amasijo: number;
+}
+
 export const migaoApi = {
   listarOrdenesAbiertas: () => apiFetch<OrdenResumen[]>("/migao/ordenes"),
   listarHistorialOrdenes: () => apiFetch<HistorialOrdenEntrada[]>("/migao/ordenes/historial"),
@@ -561,4 +599,22 @@ export const migaoApi = {
   }) => apiFetch<CotizacionDetalle>("/migao/cotizaciones", { method: "POST", body: input }),
   eliminarCotizacion: (id: string) =>
     apiFetch<{ eliminada: boolean }>(`/migao/cotizaciones/${id}`, { method: "DELETE" }),
+
+  // Amasijos y bases preparadas
+  obtenerEstadoAmasijos: () => apiFetch<EstadoAmasijo[]>("/migao/amasijos/estado"),
+  obtenerEstadoBasesPrepаradas: () => apiFetch<EstadoBase[]>("/migao/bases/estado"),
+  obtenerRecomendacionesPreparacion: () => apiFetch<RecomendacionBase[]>("/migao/bases/recomendaciones"),
+  registrarEntradaAmasijo: (input: { amasijoTipoId: number; cantidadCompleta?: number; cantidadMedia?: number; motivo?: string }) =>
+    apiFetch<{ amasijoId: string; cantidadCompleta: number; cantidadMedia: number }>("/migao/amasijos/entrada", {
+      method: "POST",
+      body: input,
+    }),
+  prepararBases: (input: { baseTipoId: number; cantidad: number }) =>
+    apiFetch<{ baseTipoId: number; cantidad: number }>("/migao/bases/preparar", { method: "POST", body: input }),
+  obtenerRecetas: () => apiFetch<Receta[]>("/migao/recetas"),
+  actualizarReceta: (recetaId: string, cantidadAmasijo: number) =>
+    apiFetch<{ recetaId: string; cantidadAmasijo: number }>(`/migao/recetas/${recetaId}`, {
+      method: "PATCH",
+      body: { cantidadAmasijo },
+    }),
 };

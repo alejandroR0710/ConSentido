@@ -8,6 +8,7 @@ import { VentasPage } from "./modules/con_sentido/pages/VentasPage";
 import { HomeRoute } from "./modules/general/pages/HomeRoute";
 import { LoginPage } from "./modules/general/pages/LoginPage";
 import { InsumosListPage } from "./modules/insumos/pages/InsumosListPage";
+import { AmasijosPage } from "./modules/migao/pages/AmasijosPage";
 import { CocinaHistorialPage } from "./modules/migao/pages/CocinaHistorialPage";
 import { CocinaPage } from "./modules/migao/pages/CocinaPage";
 import { CotizacionesPage } from "./modules/migao/pages/CotizacionesPage";
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/migao/historial-administrativo" element={<HistorialAdministrativoPage />} />
         <Route path="/migao/propinas" element={<HistorialPropinasPage />} />
         <Route path="/migao/inventario" element={<InventarioPage />} />
+        <Route path="/migao/amasijos" element={<AmasijosPage />} />
         <Route path="/migao/editor-mesas" element={<EditorMesasPage />} />
         <Route path="/migao/cotizaciones" element={<CotizacionesPage />} />
         <Route path="/cocina" element={<CocinaPage />} />

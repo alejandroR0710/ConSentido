@@ -159,10 +159,10 @@ export async function obtenerRecomendacionesPreparacion(): Promise<Recomendacion
     });
 
     // La cantidad máxima que se puede preparar es el mínimo entre todos los ingredientes
-    const cantidadRecomendada = Math.min(...limitantes.map(l => l.posible));
+    const cantidadRecomendada = Math.min(...limitantes.map((l: any) => l.posible));
 
     // Marcar solo los que realmente son limitantes
-    limitantes.forEach(l => {
+    limitantes.forEach((l: any) => {
       l.botellaCuello = l.posible === cantidadRecomendada;
     });
 

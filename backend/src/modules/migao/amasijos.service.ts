@@ -169,7 +169,7 @@ export async function obtenerRecomendacionesPreparacion(): Promise<Recomendacion
     return {
       baseTipo: row.nombre,
       cantidadRecomendada,
-      limitantes: limitantes.filter(l => l.botellaCuello),
+      limitantes: limitantes.filter((l: any) => l.botellaCuello),
     };
   });
 }

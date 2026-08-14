@@ -34,6 +34,7 @@ import {
   listarCategoriasController,
   listarColaDeCocinaController,
   listarCotizacionesController,
+  listarEntregasPropinasController,
   listarHistorialAdministrativoController,
   listarHistorialDespachadosController,
   listarHistorialOrdenesController,
@@ -41,6 +42,7 @@ import {
   listarItemsActivosController,
   listarMesasController,
   listarOrdenesAbiertasController,
+  listarPendientesPropinasPorDiaController,
   listarProductosAdminController,
   listarProductosController,
   listarProductosParaLlevarController,
@@ -157,12 +159,26 @@ migaoRouter.get(
 // Historial separado de propinas — dinero del mesero/personal, exclusivo de
 // Root/Super Root.
 migaoRouter.get("/propinas", requirePermission("migao.propinas.ver"), asyncHandler(listarPropinasController));
+// Pendiente de un método agrupado por día, para elegir qué días concretos
+// entran en el reparto — registrada antes de /propinas/:id (no existe esa
+// ruta hoy, pero mismo criterio que el resto del archivo).
+migaoRouter.get(
+  "/propinas/pendientes-por-dia",
+  requirePermission("migao.propinas.ver"),
+  asyncHandler(listarPendientesPropinasPorDiaController),
+);
 // Repartir (liquidar) las propinas pendientes de un método — mismo permiso
 // que ver el historial, ya que esta pantalla ya es exclusiva de Root/Super Root.
 migaoRouter.post(
   "/propinas/repartir",
   requirePermission("migao.propinas.ver"),
   asyncHandler(repartirPropinasController),
+);
+// Historial de a quién se le entregó cuánto — mismo permiso que ver propinas.
+migaoRouter.get(
+  "/propinas/entregas",
+  requirePermission("migao.propinas.ver"),
+  asyncHandler(listarEntregasPropinasController),
 );
 // Subtotal por día y método de pago (efectivo/banco), para agrupar el
 // historial de órdenes por día — mismo permiso que ver el historial.

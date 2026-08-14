@@ -296,6 +296,37 @@ WHERE r.nombre IN ('Super Root', 'Root', 'Cocina')
 
 
 -- ========================================================================
+-- SECCIÓN 2D: REPARTO DE PROPINAS POR DÍA + HISTORIAL POR PERSONA
+-- ========================================================================
+-- Antes, "Repartir" tomaba TODO lo pendiente de un método sin poder elegir
+-- fechas, y quedaba como un solo monto sin desglose de a quién se le entregó.
+-- Ahora se puede elegir qué días concretos (una semana completa o sueltos)
+-- se van a repartir, y esa liquidación se desglosa en una o más "entregas"
+-- por persona, con su propia fecha y motivo/mensaje opcional.
+ALTER TABLE migao_propinas_liquidaciones ADD COLUMN IF NOT EXISTS fecha_desde DATE;
+ALTER TABLE migao_propinas_liquidaciones ADD COLUMN IF NOT EXISTS fecha_hasta DATE;
+
+CREATE TABLE IF NOT EXISTS migao_propinas_entregas (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  liquidacion_id  UUID NOT NULL REFERENCES migao_propinas_liquidaciones(id) ON DELETE CASCADE,
+  nombre_persona  VARCHAR(120) NOT NULL,
+  monto           NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  fecha_entrega   DATE NOT NULL DEFAULT CURRENT_DATE,
+  motivo          VARCHAR(300),
+  usuario_id      UUID REFERENCES usuarios(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_migao_propinas_entregas_liquidacion ON migao_propinas_entregas(liquidacion_id);
+CREATE INDEX IF NOT EXISTS idx_migao_propinas_entregas_fecha ON migao_propinas_entregas(fecha_entrega DESC);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+    GRANT SELECT, INSERT ON migao_propinas_entregas TO usuario;
+  END IF;
+END $$;
+
+
+-- ========================================================================
 -- SECCIÓN 3: PERMISOS DE CON SENTIDO (productos/clientes/ventas)
 -- ========================================================================
 -- Antes de esto, Con Sentido no tenía permisos propios: cualquier usuario

@@ -151,10 +151,23 @@ export type CerrarOrdenInput = z.infer<typeof cerrarOrdenSchema>;
 
 // Repartir las propinas pendientes de UN método (efectivo o banco) por
 // separado — cada uno con su propia periodicidad, ver
-// migao.service.ts::repartirPropinas.
+// migao.service.ts::repartirPropinas. `fechas` (YYYY-MM-DD, hora Colombia)
+// deja elegir qué días concretos entran en el reparto — sin mandarlo, se
+// reparte TODO lo pendiente (comportamiento original). `entregas` desglosa
+// el monto repartido entre las personas del equipo: la suma de sus montos
+// debe dar exactamente el total pendiente de los días elegidos (se valida
+// en el service, no acá, porque ese total depende de una consulta a la BD).
+const entregaPropinaSchema = z.object({
+  nombrePersona: z.string().trim().min(1, "El nombre es obligatorio").max(120),
+  monto: z.number().positive("El monto debe ser mayor a 0"),
+  fechaEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida").optional(),
+  motivo: z.string().trim().max(300).optional(),
+});
 export const repartirPropinasSchema = z.object({
   metodoPago: z.enum(["efectivo", "banco"]),
+  fechas: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida")).optional(),
   nota: z.string().max(200).optional(),
+  entregas: z.array(entregaPropinaSchema).min(1, "Debe registrar al menos una entrega"),
 });
 export type RepartirPropinasInput = z.infer<typeof repartirPropinasSchema>;
 

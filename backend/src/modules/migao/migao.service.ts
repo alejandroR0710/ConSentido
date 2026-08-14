@@ -136,34 +136,85 @@ export async function listarPropinas() {
   return repo.listPropinas();
 }
 
-/** Reparte (liquida) todas las propinas pendientes de UN método de pago —
- *  efectivo y banco se reparten por separado, cada uno con su propia
- *  periodicidad. Nunca borra migao_propinas: las marca como liquidadas, así
- *  el "pendiente por repartir" de ese método vuelve a 0 sin perder el
- *  historial de cada propina individual. */
+/** Pendiente de repartir de un método, agrupado por día — el panel de
+ *  reparto lo usa para dejar elegir qué días concretos (una semana completa
+ *  o sueltos) entran en el reparto. */
+export async function listarPendientesPropinasPorDia(metodoPago: "efectivo" | "banco") {
+  return repo.listPendientesPropinasPorDia(metodoPago);
+}
+
+/** Reparte (liquida) las propinas pendientes de UN método de pago — efectivo
+ *  y banco se reparten por separado, cada uno con su propia periodicidad.
+ *  Si `fechas` viene, solo cuenta lo pendiente de esos días (hora Colombia);
+ *  si no, es TODO lo pendiente (comportamiento original). Nunca borra
+ *  migao_propinas: las marca como liquidadas, así el "pendiente por
+ *  repartir" de ese método/días baja sin perder el historial de cada propina
+ *  individual. El monto liquidado se desglosa en `entregas` (quién recibió
+ *  cuánto, con su propia fecha y motivo opcional) — la suma de las entregas
+ *  tiene que dar EXACTAMENTE el monto pendiente, para que el historial por
+ *  persona siempre cuadre con la plata real repartida. */
 export async function repartirPropinas(usuarioId: string, input: RepartirPropinasInput) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const pendiente = await repo.sumPropinasPendientes(client, input.metodoPago);
+    const pendiente = await repo.sumPropinasPendientes(client, input.metodoPago, input.fechas);
     if (pendiente <= 0) {
-      throw Errors.conflict(`No hay propinas pendientes de ${input.metodoPago} por repartir`);
+      throw Errors.conflict(
+        `No hay propinas pendientes de ${input.metodoPago}${input.fechas?.length ? " en los días seleccionados" : ""} por repartir`,
+      );
     }
+
+    const sumaEntregas = input.entregas.reduce((acc, e) => acc + e.monto, 0);
+    if (Math.abs(sumaEntregas - pendiente) > 0.01) {
+      throw Errors.badRequest(
+        `La suma de las entregas (${sumaEntregas}) debe ser igual al total pendiente seleccionado (${pendiente})`,
+      );
+    }
+
+    const fechasOrdenadas = input.fechas?.length ? [...input.fechas].sort() : null;
     const liquidacion = await repo.crearLiquidacionPropinas(client, {
       metodoPago: input.metodoPago,
       monto: pendiente,
       nota: input.nota,
       usuarioId,
+      fechaDesde: fechasOrdenadas?.[0] ?? null,
+      fechaHasta: fechasOrdenadas?.at(-1) ?? null,
     });
-    await repo.marcarPropinasLiquidadas(client, { metodoPago: input.metodoPago, liquidacionId: liquidacion.id });
+
+    await repo.marcarPropinasLiquidadas(client, {
+      metodoPago: input.metodoPago,
+      liquidacionId: liquidacion.id,
+      fechas: input.fechas,
+    });
+
+    const entregas = [];
+    for (const entrega of input.entregas) {
+      entregas.push(
+        await repo.crearEntregaPropina(client, {
+          liquidacionId: liquidacion.id,
+          nombrePersona: entrega.nombrePersona,
+          monto: entrega.monto,
+          fechaEntrega: entrega.fechaEntrega,
+          motivo: entrega.motivo,
+          usuarioId,
+        }),
+      );
+    }
+
     await client.query("COMMIT");
-    return liquidacion;
+    return { ...liquidacion, entregas };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+/** Historial de a quién se le entregó cuánto, en todas las liquidaciones —
+ *  pantalla aparte del historial de propinas individuales por cuenta. */
+export async function listarEntregasPropinas() {
+  return repo.listEntregasPropinas();
 }
 
 /** Cuánto entró de Migao por día y método de pago (efectivo/banco) — para

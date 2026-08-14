@@ -92,12 +92,27 @@ export async function listarPropinasController(_req: Request, res: Response) {
   return ok(res, propinas);
 }
 
+// Pendiente de repartir de un método, agrupado por día — para elegir qué
+// días concretos entran en el reparto (ver PropinasPage).
+export async function listarPendientesPropinasPorDiaController(req: Request, res: Response) {
+  const metodoPago = req.query.metodoPago as "efectivo" | "banco";
+  const pendientes = await service.listarPendientesPropinasPorDia(metodoPago);
+  return ok(res, pendientes);
+}
+
 // Reparte (liquida) las propinas pendientes de un método — efectivo y banco
 // por separado, ver migao.service.ts::repartirPropinas.
 export async function repartirPropinasController(req: Request, res: Response) {
   const data = repartirPropinasSchema.parse(req.body);
   const liquidacion = await service.repartirPropinas(req.auth!.usuarioId, data);
   return ok(res, liquidacion);
+}
+
+// Historial de a quién se le entregó cuánto — mismo permiso que ver el
+// historial general de propinas.
+export async function listarEntregasPropinasController(_req: Request, res: Response) {
+  const entregas = await service.listarEntregasPropinas();
+  return ok(res, entregas);
 }
 
 export async function obtenerResumenDiarioIngresosController(_req: Request, res: Response) {

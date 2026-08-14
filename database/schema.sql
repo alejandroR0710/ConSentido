@@ -788,9 +788,32 @@ CREATE TABLE migao_propinas_liquidaciones (
   metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
   nota        VARCHAR(200),
+  -- Rango (min/max) de los días de propinas que se incluyeron en este reparto
+  -- — NULL en liquidaciones viejas, de antes de poder elegir días concretos
+  -- (esas repartían TODO lo pendiente sin filtro de fecha).
+  fecha_desde DATE,
+  fecha_hasta DATE,
   usuario_id  UUID REFERENCES usuarios(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Cómo se repartió el monto de una liquidación entre las personas del
+-- equipo: una fila por persona/entrega, con su propia fecha (puede diferir
+-- de created_at, ej. se registra unos días después) y motivo/mensaje libre.
+-- La suma de sus montos debe ser igual al monto de la liquidación a la que
+-- pertenecen (se valida en el backend al crearlas, no con un CHECK de BD).
+CREATE TABLE migao_propinas_entregas (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  liquidacion_id  UUID NOT NULL REFERENCES migao_propinas_liquidaciones(id) ON DELETE CASCADE,
+  nombre_persona  VARCHAR(120) NOT NULL,
+  monto           NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+  fecha_entrega   DATE NOT NULL DEFAULT CURRENT_DATE,
+  motivo          VARCHAR(300),
+  usuario_id      UUID REFERENCES usuarios(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_migao_propinas_entregas_liquidacion ON migao_propinas_entregas(liquidacion_id);
+CREATE INDEX idx_migao_propinas_entregas_fecha ON migao_propinas_entregas(fecha_entrega DESC);
 
 -- Propina opcional al cobrar una cuenta de Migao: dinero del mesero/personal,
 -- NUNCA se mezcla con movimientos_caja/turnos_caja (no cuenta para el cuadre

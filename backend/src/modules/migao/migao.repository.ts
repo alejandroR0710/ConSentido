@@ -778,38 +778,127 @@ export async function listPropinas() {
   return result.rows;
 }
 
-/** Cuánto hay pendiente de repartir de un método (efectivo/banco) — se
- *  recalcula siempre en vivo, nunca se guarda aparte (ver migao_propinas.liquidacion_id). */
-export async function sumPropinasPendientes(client: PoolClient, metodoPago: "efectivo" | "banco") {
+/** Pendiente de repartir de un método, agrupado por día (hora Colombia) — el
+ *  Root/Super Root elige con esto qué días concretos (una semana completa o
+ *  sueltos) va a incluir en el reparto, sin obligarlo a repartir TODO lo
+ *  pendiente de una sola vez. */
+export async function listPendientesPropinasPorDia(metodoPago: "efectivo" | "banco") {
+  const result = await pool.query(
+    `SELECT to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+            COALESCE(SUM(monto), 0) AS monto
+       FROM migao_propinas
+      WHERE metodo_pago = $1 AND liquidacion_id IS NULL
+      GROUP BY fecha
+      ORDER BY fecha DESC`,
+    [metodoPago],
+  );
+  return result.rows.map((r) => ({ fecha: r.fecha as string, monto: Number(r.monto) }));
+}
+
+/** Cuánto hay pendiente de repartir de un método (efectivo/banco), opcionalmente
+ *  acotado a un subconjunto de días (hora Colombia) — sin `fechas`, es TODO lo
+ *  pendiente (comportamiento original, se recalcula siempre en vivo, nunca se
+ *  guarda aparte, ver migao_propinas.liquidacion_id). */
+export async function sumPropinasPendientes(
+  client: PoolClient,
+  metodoPago: "efectivo" | "banco",
+  fechas?: string[],
+) {
   const result = await client.query(
     `SELECT COALESCE(SUM(monto), 0) AS pendiente
        FROM migao_propinas
-      WHERE metodo_pago = $1 AND liquidacion_id IS NULL`,
-    [metodoPago],
+      WHERE metodo_pago = $1 AND liquidacion_id IS NULL
+        AND ($2::text[] IS NULL OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = ANY($2::text[]))`,
+    [metodoPago, fechas ?? null],
   );
   return Number(result.rows[0].pendiente);
 }
 
 export async function crearLiquidacionPropinas(
   client: PoolClient,
-  params: { metodoPago: "efectivo" | "banco"; monto: number; nota?: string; usuarioId: string },
+  params: {
+    metodoPago: "efectivo" | "banco";
+    monto: number;
+    nota?: string;
+    usuarioId: string;
+    fechaDesde?: string | null;
+    fechaHasta?: string | null;
+  },
 ) {
   const result = await client.query(
-    `INSERT INTO migao_propinas_liquidaciones (metodo_pago, monto, nota, usuario_id)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [params.metodoPago, params.monto, params.nota ?? null, params.usuarioId],
+    `INSERT INTO migao_propinas_liquidaciones (metodo_pago, monto, nota, usuario_id, fecha_desde, fecha_hasta)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [
+      params.metodoPago,
+      params.monto,
+      params.nota ?? null,
+      params.usuarioId,
+      params.fechaDesde ?? null,
+      params.fechaHasta ?? null,
+    ],
   );
   return result.rows[0];
 }
 
+/** Marca como repartidas solo las propinas pendientes de ese método — si se
+ *  pasan `fechas`, solo las de esos días (hora Colombia); si no, TODAS las
+ *  pendientes (compatibilidad con el reparto original). */
 export async function marcarPropinasLiquidadas(
   client: PoolClient,
-  params: { metodoPago: "efectivo" | "banco"; liquidacionId: string },
+  params: { metodoPago: "efectivo" | "banco"; liquidacionId: string; fechas?: string[] },
 ) {
   await client.query(
-    `UPDATE migao_propinas SET liquidacion_id = $1 WHERE metodo_pago = $2 AND liquidacion_id IS NULL`,
-    [params.liquidacionId, params.metodoPago],
+    `UPDATE migao_propinas
+        SET liquidacion_id = $1
+      WHERE metodo_pago = $2 AND liquidacion_id IS NULL
+        AND ($3::text[] IS NULL OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = ANY($3::text[]))`,
+    [params.liquidacionId, params.metodoPago, params.fechas ?? null],
   );
+}
+
+/** Una entrega = a quién se le dio cuánto de una liquidación ya hecha — su
+ *  propia fecha (puede registrarse días después de la liquidación) y un
+ *  motivo/mensaje libre y opcional. */
+export async function crearEntregaPropina(
+  client: PoolClient,
+  params: {
+    liquidacionId: string;
+    nombrePersona: string;
+    monto: number;
+    fechaEntrega?: string;
+    motivo?: string;
+    usuarioId: string;
+  },
+) {
+  const result = await client.query(
+    `INSERT INTO migao_propinas_entregas (liquidacion_id, nombre_persona, monto, fecha_entrega, motivo, usuario_id)
+     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6) RETURNING *`,
+    [
+      params.liquidacionId,
+      params.nombrePersona,
+      params.monto,
+      params.fechaEntrega ?? null,
+      params.motivo ?? null,
+      params.usuarioId,
+    ],
+  );
+  return result.rows[0];
+}
+
+/** Historial completo de entregas por persona, con el contexto de la
+ *  liquidación (método, nota, rango de fechas repartidas) a la que pertenecen. */
+export async function listEntregasPropinas() {
+  const result = await pool.query(
+    `SELECT e.id, e.liquidacion_id, e.nombre_persona, e.monto, e.fecha_entrega, e.motivo, e.created_at,
+            l.metodo_pago, l.fecha_desde AS liquidacion_fecha_desde, l.fecha_hasta AS liquidacion_fecha_hasta,
+            u.nombre AS usuario_nombre
+       FROM migao_propinas_entregas e
+       JOIN migao_propinas_liquidaciones l ON l.id = e.liquidacion_id
+       LEFT JOIN usuarios u ON u.id = e.usuario_id
+      ORDER BY e.fecha_entrega DESC, e.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
 }
 
 /**

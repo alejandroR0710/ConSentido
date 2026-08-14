@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
-import { Modal } from "../../../shared/components/Modal";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type PropinaEntrada } from "../api";
+import { migaoApi, type EntregaPropina, type PropinaEntrada } from "../api";
 import { labelArea } from "../areas";
 import { BotonFactura } from "../components/BotonFactura";
+import { RepartirPropinasModal } from "../components/RepartirPropinasModal";
 
 const POLL_MS = 15000;
 
@@ -44,8 +44,8 @@ const MESES = [
   "diciembre",
 ];
 
-/** `fecha` ya es 'YYYY-MM-DD' en hora Colombia — se arma con el constructor de
- *  3 argumentos para que quede en hora LOCAL del navegador sin correrse un día. */
+/** `fecha` ya es 'YYYY-MM-DD' — se arma con el constructor de 3 argumentos
+ *  para que quede en hora LOCAL del navegador sin correrse un día. */
 function formatearFechaLarga(fecha: string) {
   const [anio, mes, dia] = fecha.split("-").map(Number);
   const d = new Date(anio, mes - 1, dia);
@@ -73,6 +73,27 @@ function agruparPorDia(historial: PropinaEntrada[]): GrupoDiaPropinas[] {
   return grupos;
 }
 
+interface GrupoDiaEntregas {
+  fecha: string;
+  entregas: EntregaPropina[];
+}
+
+/** Mismo criterio que agruparPorDia, pero por `fecha_entrega` (ya viene como
+ *  'YYYY-MM-DD', no como timestamp) — el historial de entregas ya llega
+ *  ordenado por esa fecha DESC desde el backend. */
+function agruparEntregasPorDia(entregas: EntregaPropina[]): GrupoDiaEntregas[] {
+  const grupos: GrupoDiaEntregas[] = [];
+  for (const e of entregas) {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.fecha === e.fecha_entrega) {
+      ultimo.entregas.push(e);
+    } else {
+      grupos.push({ fecha: e.fecha_entrega, entregas: [e] });
+    }
+  }
+  return grupos;
+}
+
 /** Propinas: dinero del mesero/personal, nunca cuenta para Caja General —
  *  vive en su propio historial con su propia sumatoria. El "pendiente por
  *  repartir" se calcula en vivo filtrando las que no tienen `liquidada_en`
@@ -83,19 +104,19 @@ export function HistorialPropinasPage() {
   const puedeVer = tieneAccesoTotal(usuario?.rol);
 
   const [historial, setHistorial] = useState<PropinaEntrada[]>([]);
+  const [entregasPropinas, setEntregasPropinas] = useState<EntregaPropina[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [repartiendo, setRepartiendo] = useState<"efectivo" | "banco" | null>(null);
-  const [notaReparto, setNotaReparto] = useState("");
-  const [procesandoReparto, setProcesandoReparto] = useState(false);
-  const [errorReparto, setErrorReparto] = useState<string | null>(null);
 
   // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
   // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
   async function cargar() {
     try {
-      setHistorial(await migaoApi.listarPropinas());
+      const [propinas, entregas] = await Promise.all([migaoApi.listarPropinas(), migaoApi.listarEntregasPropinas()]);
+      setHistorial(propinas);
+      setEntregasPropinas(entregas);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el historial de propinas");
@@ -125,22 +146,7 @@ export function HistorialPropinasPage() {
     .filter((p) => p.metodo_pago === "banco")
     .reduce((acc, p) => acc + Number(p.monto), 0);
   const grupos = agruparPorDia(historial);
-
-  async function confirmarReparto() {
-    if (!repartiendo) return;
-    setProcesandoReparto(true);
-    setErrorReparto(null);
-    try {
-      await migaoApi.repartirPropinas(repartiendo, notaReparto.trim() || undefined);
-      setRepartiendo(null);
-      setNotaReparto("");
-      await cargar();
-    } catch (err) {
-      setErrorReparto(err instanceof ApiError ? err.message : "No se pudo repartir la propina");
-    } finally {
-      setProcesandoReparto(false);
-    }
-  }
+  const gruposEntregas = agruparEntregasPorDia(entregasPropinas);
 
   return (
     <div className="flex flex-col gap-6">
@@ -189,133 +195,181 @@ export function HistorialPropinasPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
-            <tr>
-              <th className="px-3 py-2">Mesa</th>
-              <th className="px-3 py-2">Mesero</th>
-              <th className="px-3 py-2">Factura</th>
-              <th className="px-3 py-2">Método</th>
-              <th className="px-3 py-2">%</th>
-              <th className="px-3 py-2">Estado</th>
-              <th className="px-3 py-2">Fecha y hora</th>
-              <th className="px-3 py-2">Monto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      <div>
+        <h2 className="mb-2 text-base font-semibold text-brand-green-700 dark:text-brand-vanilla">
+          Propinas por cuenta
+        </h2>
+        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
-                  Cargando...
-                </td>
+                <th className="px-3 py-2">Mesa</th>
+                <th className="px-3 py-2">Mesero</th>
+                <th className="px-3 py-2">Factura</th>
+                <th className="px-3 py-2">Método</th>
+                <th className="px-3 py-2">%</th>
+                <th className="px-3 py-2">Estado</th>
+                <th className="px-3 py-2">Fecha y hora</th>
+                <th className="px-3 py-2">Monto</th>
               </tr>
-            ) : historial.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
-                  Todavía no hay propinas registradas.
-                </td>
-              </tr>
-            ) : (
-              grupos.flatMap((grupo) => {
-                const totalDelDia = grupo.entradas.reduce((acc, p) => acc + Number(p.monto), 0);
-                const filaEncabezado = (
-                  <tr
-                    key={`dia-${grupo.fecha}`}
-                    className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
-                  >
-                    <td colSpan={8} className="px-3 py-2">
-                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                        <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
-                          {formatearFechaLarga(grupo.fecha)}
-                        </span>
-                        <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                          Total {formatMoney(totalDelDia)}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
+                    Cargando...
+                  </td>
+                </tr>
+              ) : historial.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-4 text-center text-brand-ink/60">
+                    Todavía no hay propinas registradas.
+                  </td>
+                </tr>
+              ) : (
+                grupos.flatMap((grupo) => {
+                  const totalDelDia = grupo.entradas.reduce((acc, p) => acc + Number(p.monto), 0);
+                  const filaEncabezado = (
+                    <tr
+                      key={`dia-${grupo.fecha}`}
+                      className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
+                    >
+                      <td colSpan={8} className="px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                          <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
+                            {formatearFechaLarga(grupo.fecha)}
+                          </span>
+                          <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            Total {formatMoney(totalDelDia)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
 
-                const filasDelDia = grupo.entradas.map((p) => (
-                  <tr key={p.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
-                    <td className="px-3 py-2">
-                      {p.mesa_numero ?? "—"}
-                      {p.mesa_piso && (
-                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> ({labelArea(p.mesa_piso)})</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{p.mesero_nombre ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                          {p.numero_factura ?? "—"}
-                        </span>
-                        {p.venta_id && (
-                          <BotonFactura
-                            origen={{ tipo: "venta", id: p.venta_id }}
-                            className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                          />
+                  const filasDelDia = grupo.entradas.map((p) => (
+                    <tr key={p.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
+                      <td className="px-3 py-2">
+                        {p.mesa_numero ?? "—"}
+                        {p.mesa_piso && (
+                          <span className="text-brand-ink/60 dark:text-brand-vanilla/60"> ({labelArea(p.mesa_piso)})</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 capitalize">{p.metodo_pago}</td>
-                    <td className="px-3 py-2">{p.porcentaje ? `${p.porcentaje}%` : "Personalizado"}</td>
-                    <td className="px-3 py-2">
-                      {p.liquidada_en ? (
-                        <span className="rounded-full bg-brand-green-100 px-2 py-0.5 text-xs font-medium text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
-                          Repartida {formatearFechaHora(p.liquidada_en)}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-                          Pendiente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{formatearFechaHora(p.created_at)}</td>
-                    <td className="px-3 py-2 font-semibold">{formatMoney(p.monto)}</td>
-                  </tr>
-                ));
+                      </td>
+                      <td className="px-3 py-2">{p.mesero_nombre ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                            {p.numero_factura ?? "—"}
+                          </span>
+                          {p.venta_id && (
+                            <BotonFactura
+                              origen={{ tipo: "venta", id: p.venta_id }}
+                              className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                            />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 capitalize">{p.metodo_pago}</td>
+                      <td className="px-3 py-2">{p.porcentaje ? `${p.porcentaje}%` : "Personalizado"}</td>
+                      <td className="px-3 py-2">
+                        {p.liquidada_en ? (
+                          <span className="rounded-full bg-brand-green-100 px-2 py-0.5 text-xs font-medium text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+                            Repartida {formatearFechaHora(p.liquidada_en)}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                            Pendiente
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{formatearFechaHora(p.created_at)}</td>
+                      <td className="px-3 py-2 font-semibold">{formatMoney(p.monto)}</td>
+                    </tr>
+                  ));
 
-                return [filaEncabezado, ...filasDelDia];
-              })
-            )}
-          </tbody>
-        </table>
+                  return [filaEncabezado, ...filasDelDia];
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-base font-semibold text-brand-green-700 dark:text-brand-vanilla">
+          Historial de entregas por persona
+        </h2>
+        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+          <table className="w-full min-w-[560px] text-left text-sm">
+            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+              <tr>
+                <th className="px-3 py-2">Persona</th>
+                <th className="px-3 py-2">Método</th>
+                <th className="px-3 py-2">Motivo</th>
+                <th className="px-3 py-2">Registrado por</th>
+                <th className="px-3 py-2">Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                    Cargando...
+                  </td>
+                </tr>
+              ) : entregasPropinas.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                    Todavía no se ha repartido ninguna propina.
+                  </td>
+                </tr>
+              ) : (
+                gruposEntregas.flatMap((grupo) => {
+                  const totalDelDia = grupo.entregas.reduce((acc, e) => acc + Number(e.monto), 0);
+                  const filaEncabezado = (
+                    <tr
+                      key={`dia-entrega-${grupo.fecha}`}
+                      className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
+                    >
+                      <td colSpan={5} className="px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                          <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
+                            {formatearFechaLarga(grupo.fecha)}
+                          </span>
+                          <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            Total {formatMoney(totalDelDia)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+
+                  const filasDelDia = grupo.entregas.map((e) => (
+                    <tr key={e.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
+                      <td className="px-3 py-2 font-medium">{e.nombre_persona}</td>
+                      <td className="px-3 py-2 capitalize">{e.metodo_pago}</td>
+                      <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">{e.motivo ?? "—"}</td>
+                      <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
+                        {e.usuario_nombre ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">{formatMoney(e.monto)}</td>
+                    </tr>
+                  ));
+
+                  return [filaEncabezado, ...filasDelDia];
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {repartiendo && (
-        <Modal
-          titulo={`Repartir propinas en ${repartiendo}`}
-          onCerrar={() => {
-            setRepartiendo(null);
-            setErrorReparto(null);
-          }}
-        >
-          <p className="mb-3 text-sm text-brand-ink dark:text-brand-vanilla">
-            Se va a marcar como repartido{" "}
-            <span className="font-bold">
-              {formatMoney(repartiendo === "efectivo" ? pendienteEfectivo : pendienteBanco)}
-            </span>{" "}
-            en {repartiendo}. El historial de cada propina individual no se borra, solo deja de contar como
-            pendiente.
-          </p>
-          <label className="mb-1 block text-xs font-medium">Nota (opcional)</label>
-          <input
-            value={notaReparto}
-            onChange={(e) => setNotaReparto(e.target.value)}
-            placeholder="Ej. repartido entre meseros de turno"
-            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
-          {errorReparto && <p className="mb-3 text-sm text-red-600">{errorReparto}</p>}
-          <button
-            onClick={confirmarReparto}
-            disabled={procesandoReparto}
-            className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-          >
-            {procesandoReparto ? "Repartiendo..." : "Confirmar reparto"}
-          </button>
-        </Modal>
+        <RepartirPropinasModal
+          metodoPago={repartiendo}
+          onCerrar={() => setRepartiendo(null)}
+          onRepartido={cargar}
+        />
       )}
     </div>
   );

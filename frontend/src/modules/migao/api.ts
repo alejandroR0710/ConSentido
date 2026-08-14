@@ -262,13 +262,51 @@ export interface PropinaInput {
 }
 
 /** Reparto (liquidación) de las propinas pendientes de UN método — efectivo
- *  y banco se reparten por separado. */
+ *  y banco se reparten por separado. `fecha_desde`/`fecha_hasta` son el rango
+ *  de los días elegidos para ese reparto (null en liquidaciones viejas, de
+ *  antes de poder elegir días concretos). */
 export interface LiquidacionPropinas {
   id: string;
   metodo_pago: "efectivo" | "banco";
   monto: string;
   nota: string | null;
+  fecha_desde: string | null;
+  fecha_hasta: string | null;
   created_at: string;
+}
+
+/** Pendiente de un método en UN día concreto (hora Colombia) — el panel de
+ *  reparto lo usa para dejar elegir qué días entran (una semana completa o
+ *  sueltos), en vez de forzar a repartir TODO lo pendiente de una vez. */
+export interface PendientePropinaDia {
+  fecha: string;
+  monto: number;
+}
+
+/** Una persona a la que se le entrega parte del monto repartido — la suma de
+ *  todas las entregas de un reparto debe dar exactamente el monto pendiente
+ *  que se seleccionó. */
+export interface EntregaPropinaInput {
+  nombrePersona: string;
+  monto: number;
+  fechaEntrega?: string;
+  motivo?: string;
+}
+
+/** Historial de a quién se le entregó cuánto — desglose de una liquidación,
+ *  con su propia fecha (puede registrarse días después) y motivo opcional. */
+export interface EntregaPropina {
+  id: string;
+  liquidacion_id: string;
+  nombre_persona: string;
+  monto: string;
+  fecha_entrega: string;
+  motivo: string | null;
+  created_at: string;
+  metodo_pago: "efectivo" | "banco";
+  liquidacion_fecha_desde: string | null;
+  liquidacion_fecha_hasta: string | null;
+  usuario_nombre: string | null;
 }
 
 /** Factura imprimible de una venta ya cobrada — reconstruida en vivo desde
@@ -375,10 +413,26 @@ export const migaoApi = {
     apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
   // Historial aparte de propinas — exclusivo de Root/Super Root.
   listarPropinas: () => apiFetch<PropinaEntrada[]>("/migao/propinas"),
+  // Pendiente de un método agrupado por día — para elegir qué días concretos
+  // (una semana completa o sueltos) entran en el reparto.
+  obtenerPendientesPropinasPorDia: (metodoPago: "efectivo" | "banco") =>
+    apiFetch<PendientePropinaDia[]>(`/migao/propinas/pendientes-por-dia?metodoPago=${metodoPago}`),
   // Reparte (liquida) las propinas pendientes de un método — efectivo y
-  // banco por separado, cada uno con su propia periodicidad.
-  repartirPropinas: (metodoPago: "efectivo" | "banco", nota?: string) =>
-    apiFetch<LiquidacionPropinas>("/migao/propinas/repartir", { method: "POST", body: { metodoPago, nota } }),
+  // banco por separado, cada uno con su propia periodicidad. `fechas` deja
+  // elegir qué días concretos entran (sin mandarlo, reparte TODO lo
+  // pendiente). `entregas` desglosa el monto entre las personas del equipo —
+  // la suma de sus montos debe dar exactamente el total pendiente elegido.
+  repartirPropinas: (input: {
+    metodoPago: "efectivo" | "banco";
+    fechas?: string[];
+    nota?: string;
+    entregas: EntregaPropinaInput[];
+  }) => apiFetch<LiquidacionPropinas & { entregas: EntregaPropina[] }>("/migao/propinas/repartir", {
+    method: "POST",
+    body: input,
+  }),
+  // Historial de a quién se le entregó cuánto, en todas las liquidaciones.
+  listarEntregasPropinas: () => apiFetch<EntregaPropina[]>("/migao/propinas/entregas"),
   obtenerResumenDiarioIngresos: () =>
     apiFetch<ResumenDiarioIngreso[]>("/migao/ordenes/historial-resumen-diario"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),

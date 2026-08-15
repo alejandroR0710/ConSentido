@@ -60,15 +60,24 @@ export async function obtenerBases() {
 }
 
 /**
- * Cuántas bases de cada tipo se pueden preparar sin bajar del stock mínimo
- * de ningún amasijo que necesite — "disponible" acá es stock actual MENOS
- * el mínimo (nunca negativo), no el stock crudo.
+ * Cuántas bases de cada tipo conviene preparar, repartiendo un mismo cupo de
+ * amasijos entre las 4 recetas (no cada una calculada como si tuviera el
+ * sobrante entero para ella sola — varias recetas suelen compartir el mismo
+ * amasijo, así que sumar sus recomendaciones independientes puede pedir de
+ * más). "Disponible" es stock actual MENOS el mínimo (nunca negativo); ese
+ * cupo se va reduciendo a medida que se reparte, respetando el mínimo de
+ * cada amasijo en todo momento.
+ *
+ * Reparto round-robin: se recorren las bases (orden alfabético, fijo) una y
+ * otra vez, sumando 1 unidad a la primera que todavía alcance con lo que
+ * queda del cupo compartido — así ninguna receta se queda con todo un
+ * amasijo compartido solo por calcularse primero.
  */
 export async function obtenerRecomendaciones(): Promise<RecomendacionBase[]> {
   const r = await pool.query(`
     SELECT
       bp.id AS base_producto_id, bp.nombre AS base_nombre,
-      ap.nombre AS amasijo_nombre,
+      ap.id AS amasijo_producto_id, ap.nombre AS amasijo_nombre,
       ap.stock_unidades, ap.stock_minimo_unidades,
       br.cantidad_amasijo
     FROM migao_base_recetas br
@@ -85,25 +94,52 @@ export async function obtenerRecomendaciones(): Promise<RecomendacionBase[]> {
     porBase.set(row.base_producto_id, actual);
   }
 
-  const resultado: RecomendacionBase[] = [];
-  for (const [baseProductoId, { baseNombre, lineas }] of porBase) {
-    const calculadas = lineas.map((l) => {
-      const disponibleSobreMinimo = Math.max(0, Number(l.stock_unidades) - Number(l.stock_minimo_unidades ?? 0));
-      const necesario = Number(l.cantidad_amasijo);
-      const posible = Math.floor(disponibleSobreMinimo / necesario);
-      return { amasijoNombre: l.amasijo_nombre as string, disponibleSobreMinimo, necesario, posible };
-    });
-    const cantidadRecomendada = Math.min(...calculadas.map((c) => c.posible));
-    resultado.push({
-      baseProductoId,
-      baseNombre,
-      cantidadRecomendada,
-      limitantes: calculadas
-        .filter((c) => c.posible === cantidadRecomendada)
-        .map((c) => ({ amasijoNombre: c.amasijoNombre, disponibleSobreMinimo: c.disponibleSobreMinimo, necesario: c.necesario })),
-    });
+  // Cupo compartido por amasijo — una sola vez por amasijo, sin importar en
+  // cuántas recetas aparezca.
+  const cupoAmasijos = new Map<string, number>();
+  for (const row of r.rows) {
+    if (!cupoAmasijos.has(row.amasijo_producto_id)) {
+      cupoAmasijos.set(
+        row.amasijo_producto_id,
+        Math.max(0, Number(row.stock_unidades) - Number(row.stock_minimo_unidades ?? 0)),
+      );
+    }
   }
-  return resultado.sort((a, b) => a.baseNombre.localeCompare(b.baseNombre));
+
+  const bases = Array.from(porBase.entries())
+    .map(([baseProductoId, { baseNombre, lineas }]) => ({ baseProductoId, baseNombre, lineas, cantidadRecomendada: 0 }))
+    .sort((a, b) => a.baseNombre.localeCompare(b.baseNombre));
+
+  let huboAvance = true;
+  while (huboAvance) {
+    huboAvance = false;
+    for (const base of bases) {
+      const alcanza = base.lineas.every(
+        (l) => (cupoAmasijos.get(l.amasijo_producto_id) ?? 0) >= Number(l.cantidad_amasijo),
+      );
+      if (!alcanza) continue;
+      for (const l of base.lineas) {
+        cupoAmasijos.set(l.amasijo_producto_id, (cupoAmasijos.get(l.amasijo_producto_id) ?? 0) - Number(l.cantidad_amasijo));
+      }
+      base.cantidadRecomendada += 1;
+      huboAvance = true;
+    }
+  }
+
+  // Con qué se topó cada base para no poder sumar una unidad más — con el
+  // cupo YA repartido, no con el sobrante original.
+  return bases.map((base) => ({
+    baseProductoId: base.baseProductoId,
+    baseNombre: base.baseNombre,
+    cantidadRecomendada: base.cantidadRecomendada,
+    limitantes: base.lineas
+      .filter((l) => (cupoAmasijos.get(l.amasijo_producto_id) ?? 0) < Number(l.cantidad_amasijo))
+      .map((l) => ({
+        amasijoNombre: l.amasijo_nombre as string,
+        disponibleSobreMinimo: cupoAmasijos.get(l.amasijo_producto_id) ?? 0,
+        necesario: Number(l.cantidad_amasijo),
+      })),
+  }));
 }
 
 /**

@@ -31,6 +31,7 @@ import {
   eliminarMesaController,
   empezarPrepararController,
   entregarItemController,
+  iniciarCobroController,
   listarCategoriasController,
   listarColaDeCocinaController,
   listarCotizacionesController,
@@ -51,10 +52,12 @@ import {
   marcarOrdenListaController,
   moverMesaController,
   obtenerCotizacionController,
+  obtenerCuentaController,
   obtenerDetalleOrdenController,
   obtenerFacturaOrdenController,
   obtenerFacturaVentaController,
   obtenerResumenDiarioIngresosController,
+  registrarAbonoController,
   reiniciarTodoController,
   repartirPropinasController,
   resetearOrdenesController,
@@ -244,6 +247,25 @@ migaoRouter.post(
   "/ordenes/:id/cerrar",
   requirePermission("migao.ordenes.cerrar"),
   asyncHandler(cerrarOrdenController),
+);
+// Motor nuevo de pagos parciales / cuenta dividida por igual — mismo permiso
+// que cerrar la cuenta normal, ya que también involucra cobrar plata real.
+// POST inicia el cobro (fija cómo queda partida la cuenta, idempotente);
+// GET reabre una orden en 'pagando' con su estado real (partes/pendientes).
+migaoRouter.post(
+  "/ordenes/:id/cobro",
+  requirePermission("migao.ordenes.cerrar"),
+  asyncHandler(iniciarCobroController),
+);
+migaoRouter.get(
+  "/ordenes/:id/cobro",
+  requirePermission("migao.ordenes.cerrar"),
+  asyncHandler(obtenerCuentaController),
+);
+migaoRouter.post(
+  "/cuentas/partes/:parteId/abonos",
+  requirePermission("migao.ordenes.cerrar"),
+  asyncHandler(registrarAbonoController),
 );
 // Cancelar la orden completa (ej. el cliente ya no quiere pedir) también es del Cajero.
 migaoRouter.post(

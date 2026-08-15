@@ -93,7 +93,14 @@ export async function listOrdenesAbiertas() {
     `SELECT o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre,
-            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total
+            COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
+            -- Solo distinto de 0 en 'pagando' (motor de pagos parciales/cuenta
+            -- dividida) — recalculado en vivo, nunca guardado aparte.
+            (SELECT COALESCE(SUM(cp.monto_debido - COALESCE(
+                       (SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0)), 0)
+               FROM migao_cuenta_partes cp
+               JOIN ventas v ON v.id = cp.venta_id
+              WHERE v.orden_id = o.id) AS pendiente_cobro
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -720,12 +727,24 @@ export async function crearPago(
     monto: number;
     referencia?: string;
     usuarioId: string;
+    // NULL en el cobro simple de cerrarOrden — solo se llena cuando el pago
+    // viene de un abono del motor nuevo de pagos parciales/cuenta dividida
+    // por igual (ver migao_cuenta_partes).
+    parteId?: string;
   },
 ) {
   const result = await client.query(
-    `INSERT INTO pagos (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [params.ordenId, params.ventaId, params.metodoPago, params.monto, params.referencia ?? null, params.usuarioId],
+    `INSERT INTO pagos (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id, parte_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [
+      params.ordenId,
+      params.ventaId,
+      params.metodoPago,
+      params.monto,
+      params.referencia ?? null,
+      params.usuarioId,
+      params.parteId ?? null,
+    ],
   );
   return result.rows[0];
 }
@@ -742,11 +761,12 @@ export async function crearPropina(
     monto: number;
     porcentaje: number | null;
     metodoPago: "efectivo" | "banco";
+    parteId?: string;
   },
 ) {
   const result = await client.query(
-    `INSERT INTO migao_propinas (orden_id, venta_id, mesero_id, usuario_id, monto, porcentaje, metodo_pago)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO migao_propinas (orden_id, venta_id, mesero_id, usuario_id, monto, porcentaje, metodo_pago, parte_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
     [
       params.ordenId,
       params.ventaId,
@@ -755,9 +775,148 @@ export async function crearPropina(
       params.monto,
       params.porcentaje,
       params.metodoPago,
+      params.parteId ?? null,
     ],
   );
   return result.rows[0];
+}
+
+/**
+ * Motor nuevo de pagos parciales / cuenta dividida por igual — las "partes"
+ * en que quedó repartida la cuenta al iniciar el cobro (1 fila si no se
+ * divide). `unidades` solo aplica a modo='producto', es puramente informativo
+ * (el monto a cobrar ya quedó fijo en montoDebido, calculado del lado del
+ * servidor al crear la parte).
+ */
+export async function crearPartes(
+  client: PoolClient,
+  ventaId: string,
+  partes: { modo: "producto" | "igual"; montoDebido: number; unidades?: { itemId: number; cantidad: number }[] }[],
+) {
+  const filas = [];
+  for (const [idx, parte] of partes.entries()) {
+    const result = await client.query(
+      `INSERT INTO migao_cuenta_partes (venta_id, indice, modo, monto_debido)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [ventaId, idx + 1, parte.modo, parte.montoDebido],
+    );
+    const fila = result.rows[0];
+    if (parte.unidades) {
+      for (const u of parte.unidades) {
+        await client.query(
+          `INSERT INTO migao_cuenta_parte_unidades (parte_id, orden_item_id, cantidad) VALUES ($1, $2, $3)`,
+          [fila.id, u.itemId, u.cantidad],
+        );
+      }
+    }
+    filas.push(fila);
+  }
+  return filas;
+}
+
+/** Venta ya iniciada (por iniciarCobro) para esta orden, sin importar si ya
+ *  se terminó de pagar — usado para el idempotente de iniciarCobro y para
+ *  reabrir una orden en 'pagando' y seguir cobrándole abonos. */
+export async function getVentaAbiertaPorOrden(ordenId: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT v.*, o.estado AS orden_estado
+       FROM ventas v
+       JOIN ordenes o ON o.id = v.orden_id
+      WHERE v.orden_id = $1`,
+    [ordenId],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+/** Si esta orden ya tiene al menos un abono real cobrado (venta con pagos) —
+ *  usado para bloquear cancelarOrden, que no puede simplemente descartar
+ *  plata ya cobrada (ver anularVenta en Caja General para eso). */
+export async function existenPagosPorOrden(ordenId: string) {
+  const result = await pool.query(
+    `SELECT 1 FROM pagos p JOIN ventas v ON v.id = p.venta_id WHERE v.orden_id = $1 LIMIT 1`,
+    [ordenId],
+  );
+  return result.rowCount! > 0;
+}
+
+/**
+ * Estado completo de una cuenta en cobro: la venta, cada parte con lo debido/
+ * pagado/pendiente (recalculado en vivo, nunca guardado aparte) y sus
+ * unidades si aplica, y el historial de abonos (pagos + propinas) ya hechos.
+ */
+export async function getCuentaPorOrden(ordenId: string) {
+  const venta = await getVentaAbiertaPorOrden(ordenId);
+  if (!venta) return null;
+
+  const partesResult = await pool.query(
+    `SELECT cp.*,
+            COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0) AS monto_pagado
+       FROM migao_cuenta_partes cp
+      WHERE cp.venta_id = $1
+      ORDER BY cp.indice ASC`,
+    [venta.id],
+  );
+
+  const unidadesResult = await pool.query(
+    `SELECT cpu.parte_id, cpu.orden_item_id, cpu.cantidad, p.nombre AS producto_nombre
+       FROM migao_cuenta_parte_unidades cpu
+       JOIN orden_items oi ON oi.id = cpu.orden_item_id
+       JOIN productos p ON p.id = oi.producto_id
+      WHERE cpu.parte_id = ANY($1::uuid[])`,
+    [partesResult.rows.map((r) => r.id)],
+  );
+  const unidadesPorParte = new Map<string, typeof unidadesResult.rows>();
+  for (const u of unidadesResult.rows) {
+    const lista = unidadesPorParte.get(u.parte_id) ?? [];
+    lista.push(u);
+    unidadesPorParte.set(u.parte_id, lista);
+  }
+
+  // Pagos y propinas de cada abono se guardan como filas separadas (mismo
+  // criterio que cerrarOrden) — se devuelven así, sin intentar adivinar cuál
+  // propina "pertenece" a cuál pago, el frontend solo necesita el total de
+  // cada uno por parte para mostrar el historial.
+  const pagosResult = await pool.query(
+    `SELECT id, parte_id, metodo_pago, monto, created_at
+       FROM pagos WHERE venta_id = $1 AND parte_id IS NOT NULL
+      ORDER BY created_at ASC`,
+    [venta.id],
+  );
+  const propinasResult = await pool.query(
+    `SELECT id, parte_id, metodo_pago, monto, created_at
+       FROM migao_propinas WHERE venta_id = $1 AND parte_id IS NOT NULL
+      ORDER BY created_at ASC`,
+    [venta.id],
+  );
+
+  const partes = partesResult.rows.map((p) => ({
+    id: p.id as string,
+    indice: p.indice as number,
+    modo: p.modo as "producto" | "igual",
+    montoDebido: Number(p.monto_debido),
+    montoPagado: Number(p.monto_pagado),
+    pendiente: Math.max(0, Number(p.monto_debido) - Number(p.monto_pagado)),
+    unidades: (unidadesPorParte.get(p.id) ?? []).map((u) => ({
+      itemId: Number(u.orden_item_id),
+      cantidad: Number(u.cantidad),
+      productoNombre: u.producto_nombre as string,
+    })),
+  }));
+
+  const pagos = pagosResult.rows.map((p) => ({
+    parteId: p.parte_id as string,
+    metodoPago: p.metodo_pago as string,
+    monto: Number(p.monto),
+    fecha: p.created_at as Date,
+  }));
+  const propinas = propinasResult.rows.map((p) => ({
+    parteId: p.parte_id as string,
+    metodoPago: p.metodo_pago as string,
+    monto: Number(p.monto),
+    fecha: p.created_at as Date,
+  }));
+
+  return { venta, ordenEstado: venta.orden_estado as string, partes, pagos, propinas };
 }
 
 export async function listPropinas() {

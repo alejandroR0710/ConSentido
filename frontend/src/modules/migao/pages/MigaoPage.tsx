@@ -9,7 +9,16 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type ItemActivo, type Mesa, type OrdenDetalle, type OrdenResumen, type PagoInput } from "../api";
+import {
+  migaoApi,
+  type CuentaDetalle,
+  type DivisionInput,
+  type ItemActivo,
+  type Mesa,
+  type OrdenDetalle,
+  type OrdenResumen,
+  type RegistrarAbonoInput,
+} from "../api";
 import { AREAS_MESA, labelArea } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
@@ -70,11 +79,21 @@ export function MigaoPage() {
   // dos claves asignables por separado, para poder repartir "2x Americano"
   // entre dos personas en vez de mandarlo entero a una sola.
   const [asignaciones, setAsignaciones] = useState<Record<string, number>>({});
-  const [pagosPartes, setPagosPartes] = useState<MetodoPagoValor[]>([
-    { metodoPago: "efectivo" },
-    { metodoPago: "efectivo" },
-  ]);
-  const [montosRecibidosPartes, setMontosRecibidosPartes] = useState<number[]>([0, 0]);
+  // Motor NUEVO y aparte del cobro simple de arriba: pagos parciales y/o
+  // cuenta dividida por igual (no solo por producto). "Dividir cuenta" y
+  // "Pago parcial" se pueden combinar — cualquiera de los dos activa este
+  // motor, que trata una cuenta sin dividir como 1 sola "parte".
+  const [pagoParcial, setPagoParcial] = useState(false);
+  const [modoDivisionCuenta, setModoDivisionCuenta] = useState<"producto" | "igual">("producto");
+  const [cuenta, setCuenta] = useState<CuentaDetalle | null>(null);
+  const [iniciandoCobro, setIniciandoCobro] = useState(false);
+  // Formulario de abono por parte, clave = parte.id — se resincroniza cada
+  // vez que cambia `cuenta` (nueva parte creada, o pendiente ya actualizado
+  // tras un abono anterior), preservando lo que el cajero ya haya escrito si
+  // sigue siendo válido (ver el useEffect más abajo).
+  const [abonoForms, setAbonoForms] = useState<
+    Record<string, { pago: MetodoPagoValor; montoPagarAhora: number; propina: number; montoRecibido: number }>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   // Al cobrar y cerrar, se PREGUNTA si se quiere imprimir la factura (el punto
@@ -162,8 +181,10 @@ export function MigaoPage() {
     setDividirCuenta(false);
     setNumPartes(2);
     setAsignaciones({});
-    setPagosPartes([{ metodoPago: "efectivo" }, { metodoPago: "efectivo" }]);
-    setMontosRecibidosPartes([0, 0]);
+    setModoDivisionCuenta("producto");
+    setPagoParcial(false);
+    setCuenta(null);
+    setAbonoForms({});
   }
 
   async function seleccionarOrden(ordenId: string) {
@@ -180,7 +201,16 @@ export function MigaoPage() {
     setEsAdministrativo(false);
     reiniciarDivision();
     try {
-      setDetalle(await migaoApi.obtenerDetalle(ordenId));
+      const detalleData = await migaoApi.obtenerDetalle(ordenId);
+      setDetalle(detalleData);
+      // La orden ya tenía un cobro en marcha (motor nuevo) — se reabre donde
+      // se quedó, en vez de ofrecer el formulario de cobro desde cero.
+      if (detalleData.orden.estado === "pagando") {
+        setPagoParcial(true);
+        const cuentaCargada = await migaoApi.obtenerCuenta(ordenId);
+        setCuenta(cuentaCargada);
+        if (cuentaCargada.partes.length > 1) setDividirCuenta(true);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el detalle de la orden");
     }
@@ -302,19 +332,17 @@ export function MigaoPage() {
   const todosAsignados =
     unidadesCobrables.length > 0 && unidadesCobrables.every((u) => asignaciones[u.key] !== undefined);
 
+  // Por producto, no tiene sentido tener más partes que unidades cobrables
+  // (cada parte necesita al menos 1 unidad); por igual no hay esa relación,
+  // el tope es solo el que ya valida el backend (iniciarCobroSchema).
+  const MAX_PARTES_IGUAL = 20;
+  function topeNumPartes() {
+    return modoDivisionCuenta === "igual" ? MAX_PARTES_IGUAL : Math.max(2, unidadesCobrables.length);
+  }
+
   function cambiarNumPartes(n: number) {
-    const nuevo = Math.max(2, n);
+    const nuevo = Math.min(topeNumPartes(), Math.max(2, n));
     setNumPartes(nuevo);
-    setPagosPartes((actual) => {
-      const copia = actual.slice(0, nuevo);
-      while (copia.length < nuevo) copia.push({ metodoPago: "efectivo" });
-      return copia;
-    });
-    setMontosRecibidosPartes((actual) => {
-      const copia = actual.slice(0, nuevo);
-      while (copia.length < nuevo) copia.push(0);
-      return copia;
-    });
     // Las unidades que quedaron asignadas a una parte que ya no existe vuelven a quedar sin asignar.
     setAsignaciones((actual) => {
       const copia: Record<string, number> = {};
@@ -357,38 +385,128 @@ export function MigaoPage() {
     return Array.from(porItem.entries()).map(([itemId, cantidad]) => ({ itemId, cantidad }));
   }
 
-  const algunaParteMixtaInvalida = Array.from({ length: numPartes }, (_, idx) => {
-    const pagoParte = pagosPartes[idx];
-    if (pagoParte.metodoPago !== "mixto") return false;
-    return Math.abs(pagoParte.montoEfectivo + pagoParte.montoBanco - subtotalParte(idx)) > 0.01;
-  }).some(Boolean);
+  // "Dividir cuenta" y/o "Pago parcial" activan el motor nuevo — una cuenta
+  // sin dividir es, para él, una división de 1 sola parte.
+  const usarMotorNuevo = dividirCuenta || pagoParcial;
 
-  async function cerrarYCobrarDividido() {
-    if (!ordenSeleccionadaId || !todosAsignados || algunaParteMixtaInvalida) return;
-    const partes: (PagoInput & { unidades: { itemId: number; cantidad: number }[] })[] = Array.from(
-      { length: numPartes },
-      (_, idx) => ({
-        ...pagosPartes[idx],
-        unidades: unidadesAsignadasAParte(idx),
-      }),
-    );
+  function construirDivisionInput(): DivisionInput {
+    if (!dividirCuenta) return { modo: "igual", numPartes: 1 };
+    if (modoDivisionCuenta === "igual") return { modo: "igual", numPartes };
+    return {
+      modo: "producto",
+      partes: Array.from({ length: numPartes }, (_, idx) => ({ unidades: unidadesAsignadasAParte(idx) })),
+    };
+  }
+
+  /** Fija cómo queda partida la cuenta y crea la venta+factura — todavía no
+   *  cobra nada, eso lo hace registrarPagos() con uno o más abonos. */
+  async function iniciarCobroMotor() {
+    if (!ordenSeleccionadaId) return;
+    setIniciandoCobro(true);
+    setError(null);
+    try {
+      setCuenta(await migaoApi.iniciarCobro(ordenSeleccionadaId, construirDivisionInput(), descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo iniciar el cobro de esta cuenta");
+    } finally {
+      setIniciandoCobro(false);
+    }
+  }
+
+  // Se resincroniza cada vez que cambia `cuenta` (partes recién creadas, o
+  // pendiente ya actualizado tras un abono) — conserva lo que el cajero ya
+  // haya escrito si sigue siendo válido (no supera el nuevo pendiente); si
+  // no, prellena con el pendiente completo y la propina repartida por igual
+  // (atajo por defecto, sigue editable por abono).
+  useEffect(() => {
+    if (!cuenta) return;
+    setAbonoForms((actual) => {
+      const nuevo: typeof actual = {};
+      const propinaPorParte = cuenta.partes.length > 0 ? Math.round((propinaMonto / cuenta.partes.length) * 100) / 100 : 0;
+      for (const parte of cuenta.partes) {
+        const previo = actual[parte.id];
+        nuevo[parte.id] =
+          previo && previo.montoPagarAhora <= parte.pendiente
+            ? previo
+            : { pago: { metodoPago: "efectivo" }, montoPagarAhora: parte.pendiente, propina: propinaPorParte, montoRecibido: 0 };
+      }
+      return nuevo;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuenta]);
+
+  function actualizarAbonoForm(
+    parteId: string,
+    cambios: Partial<{ pago: MetodoPagoValor; montoPagarAhora: number; propina: number; montoRecibido: number }>,
+  ) {
+    setAbonoForms((actual) => ({ ...actual, [parteId]: { ...actual[parteId], ...cambios } }));
+  }
+
+  /** Atajo: reparte la propina total elegida arriba por igual entre TODAS las
+   *  partes — solo prellena, cada abono la sigue pudiendo editar después. */
+  function repartirPropinaIgual() {
+    if (!cuenta || cuenta.partes.length === 0) return;
+    const porParte = Math.round((propinaMonto / cuenta.partes.length) * 100) / 100;
+    setAbonoForms((actual) => {
+      const nuevo = { ...actual };
+      for (const parte of cuenta.partes) nuevo[parte.id] = { ...nuevo[parte.id], propina: porParte };
+      return nuevo;
+    });
+  }
+
+  /** Atajo: le asigna la propina COMPLETA a una sola parte, deja las demás en 0. */
+  function asignarPropinaCompletaA(parteId: string) {
+    if (!cuenta) return;
+    setAbonoForms((actual) => {
+      const nuevo = { ...actual };
+      for (const parte of cuenta.partes) nuevo[parte.id] = { ...nuevo[parte.id], propina: parte.id === parteId ? propinaMonto : 0 };
+      return nuevo;
+    });
+  }
+
+  const algunAbonoMixtoInvalido = cuenta
+    ? cuenta.partes.some((parte) => {
+        const form = abonoForms[parte.id];
+        if (!form || form.pago.metodoPago !== "mixto") return false;
+        return Math.abs(form.pago.montoEfectivo + form.pago.montoBanco - (form.montoPagarAhora + form.propina)) > 0.01;
+      })
+    : false;
+  const totalAPagarAhora = Object.values(abonoForms).reduce((acc, f) => acc + f.montoPagarAhora, 0);
+
+  /** Registra un abono por cada parte que tenga algo que pagar ahora — puede
+   *  ser el pago completo de todas (cierra la orden) o parcial de alguna(s)
+   *  (la orden queda en 'pagando' hasta el próximo abono). */
+  async function registrarPagos() {
+    if (!ordenSeleccionadaId || !cuenta) return;
     setCobrando(true);
     setError(null);
     setMensaje(null);
     try {
-      const resultado = await migaoApi.cerrarOrdenDividida(
-        ordenSeleccionadaId,
-        partes,
-        propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
-      );
-      setMensaje(`Orden cobrada y cerrada (cuenta dividida en ${numPartes}). Total: ${formatMoney(resultado.total)}`);
-      setPreguntaFacturaOrdenId(ordenSeleccionadaId);
-      setDetalle(null);
-      setOrdenSeleccionadaId(null);
-      reiniciarDivision();
+      let cuentaActual = cuenta;
+      for (const parte of cuenta.partes) {
+        const form = abonoForms[parte.id];
+        if (!form || form.montoPagarAhora <= 0) continue;
+        const propinaInput = form.propina > 0 ? { monto: form.propina, porcentaje: propinaPorcentaje } : undefined;
+        const input: RegistrarAbonoInput =
+          form.pago.metodoPago === "mixto"
+            ? { metodoPago: "mixto", montoEfectivo: form.pago.montoEfectivo, montoBanco: form.pago.montoBanco, propina: propinaInput }
+            : { metodoPago: form.pago.metodoPago, monto: form.montoPagarAhora, propina: propinaInput };
+        cuentaActual = await migaoApi.registrarAbono(parte.id, input);
+      }
+      setCuenta(cuentaActual);
+      if (cuentaActual.ordenEstado === "cerrada") {
+        setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(Number(cuentaActual.venta.total))}`);
+        setPreguntaFacturaOrdenId(ordenSeleccionadaId);
+        setDetalle(null);
+        setOrdenSeleccionadaId(null);
+        reiniciarDivision();
+      } else {
+        const pendienteTotal = cuentaActual.partes.reduce((acc, p) => acc + p.pendiente, 0);
+        setMensaje(`Quedó pendiente ${formatMoney(pendienteTotal)} — la mesa sigue abierta hasta completarlo.`);
+      }
       await cargarOrdenes();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cerrar la orden");
+      setError(err instanceof ApiError ? err.message : "No se pudo registrar el pago");
     } finally {
       setCobrando(false);
     }
@@ -504,6 +622,11 @@ export function MigaoPage() {
                         </span>
                       )}
                     </div>
+                    {o.estado === "pagando" && (
+                      <div className="mt-1 inline-block rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
+                        Pago parcial — falta {formatMoney(o.pendiente_cobro)}
+                      </div>
+                    )}
                     <div className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
                       {o.mesero_nombre && <span>Mesero: {o.mesero_nombre} · </span>}
                       {o.cliente_nombre && <span>Cliente: {o.cliente_nombre} · </span>}
@@ -571,12 +694,18 @@ export function MigaoPage() {
                 ))}
               </div>
 
-              <button
-                onClick={() => setModalAbierto("para-llevar")}
-                className="w-full rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
-              >
-                🥡 Agregar para llevar
-              </button>
+              {cuenta ? (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                  Esta cuenta ya tiene un cobro en marcha — no se pueden agregar más productos.
+                </p>
+              ) : (
+                <button
+                  onClick={() => setModalAbierto("para-llevar")}
+                  className="w-full rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                >
+                  🥡 Agregar para llevar
+                </button>
+              )}
 
               {detalle.items.some((i) => i.estado === "pendiente" || i.estado === "preparando") && (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
@@ -707,24 +836,36 @@ export function MigaoPage() {
                   ))}
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
-                <input
-                  type="checkbox"
-                  checked={dividirCuenta}
-                  onChange={(e) => (e.target.checked ? activarDivision() : reiniciarDivision())}
-                  disabled={unidadesCobrables.length < 2}
-                  className="h-4 w-4"
-                />
-                Dividir cuenta entre varias personas
-                {!dividirCuenta && Boolean(detalle?.orden.numero_personas) && (
-                  <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-                    (sugerido: {detalle!.orden.numero_personas} comensal
-                    {detalle!.orden.numero_personas === 1 ? "" : "es"})
-                  </span>
-                )}
-              </label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+                  <input
+                    type="checkbox"
+                    checked={dividirCuenta}
+                    onChange={(e) => (e.target.checked ? activarDivision() : reiniciarDivision())}
+                    disabled={unidadesCobrables.length < 2 || cuenta !== null}
+                    className="h-4 w-4"
+                  />
+                  Dividir cuenta entre varias personas
+                  {!dividirCuenta && Boolean(detalle?.orden.numero_personas) && (
+                    <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                      (sugerido: {detalle!.orden.numero_personas} comensal
+                      {detalle!.orden.numero_personas === 1 ? "" : "es"})
+                    </span>
+                  )}
+                </label>
+                <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+                  <input
+                    type="checkbox"
+                    checked={pagoParcial}
+                    onChange={(e) => setPagoParcial(e.target.checked)}
+                    disabled={cuenta !== null}
+                    className="h-4 w-4"
+                  />
+                  ¿Pago parcial?
+                </label>
+              </div>
 
-              {!dividirCuenta ? (
+              {!usarMotorNuevo ? (
                 <>
                   {puedeAdministrativo && (
                     <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
@@ -776,127 +917,250 @@ export function MigaoPage() {
                 </>
               ) : (
                 <div className="flex flex-col gap-4 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                      ¿Entre cuántas partes?
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => cambiarNumPartes(numPartes - 1)}
-                        disabled={numPartes <= 2}
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
-                      >
-                        −
-                      </button>
-                      <span className="w-6 text-center font-semibold text-brand-ink dark:text-brand-vanilla">
-                        {numPartes}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => cambiarNumPartes(numPartes + 1)}
-                        disabled={numPartes >= unidadesCobrables.length}
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
+                  {!cuenta ? (
+                    <>
+                      {dividirCuenta && (
+                        <>
+                          <div className="flex gap-2">
+                            {(["producto", "igual"] as const).map((modo) => (
+                              <button
+                                key={modo}
+                                type="button"
+                                onClick={() => setModoDivisionCuenta(modo)}
+                                className={`flex-1 rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
+                                  modoDivisionCuenta === modo
+                                    ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                                    : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                                }`}
+                              >
+                                {modo === "producto" ? "Por producto" : "Por igual"}
+                              </button>
+                            ))}
+                          </div>
 
-                  <div className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
-                      Toca la parte a la que corresponde cada producto:
-                    </span>
-                    {unidadesCobrables.map((unidad) => (
-                      <div key={unidad.key} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-brand-ink dark:text-brand-vanilla">
-                          {formatCantidad(unidad.cantidadUnidad)}× {unidad.productoNombre}
-                        </span>
-                        <div className="flex shrink-0 gap-1">
-                          {Array.from({ length: numPartes }, (_, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => setAsignaciones((actual) => ({ ...actual, [unidad.key]: idx }))}
-                              className={`flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold ${
-                                asignaciones[unidad.key] === idx
-                                  ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
-                                  : "border-brand-vanilla-dark text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
-                              }`}
-                            >
-                              {idx + 1}
-                            </button>
-                          ))}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                              ¿Entre cuántas partes?
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => cambiarNumPartes(numPartes - 1)}
+                                disabled={numPartes <= 2}
+                                className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
+                              >
+                                −
+                              </button>
+                              <span className="w-6 text-center font-semibold text-brand-ink dark:text-brand-vanilla">
+                                {numPartes}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => cambiarNumPartes(numPartes + 1)}
+                                disabled={numPartes >= topeNumPartes()}
+                                className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {modoDivisionCuenta === "producto" && (
+                            <div className="flex flex-col gap-2">
+                              <span className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+                                Toca la parte a la que corresponde cada producto:
+                              </span>
+                              {unidadesCobrables.map((unidad) => (
+                                <div key={unidad.key} className="flex items-center justify-between gap-2 text-sm">
+                                  <span className="text-brand-ink dark:text-brand-vanilla">
+                                    {formatCantidad(unidad.cantidadUnidad)}× {unidad.productoNombre}
+                                  </span>
+                                  <div className="flex shrink-0 gap-1">
+                                    {Array.from({ length: numPartes }, (_, idx) => (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => setAsignaciones((actual) => ({ ...actual, [unidad.key]: idx }))}
+                                        className={`flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold ${
+                                          asignaciones[unidad.key] === idx
+                                            ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
+                                            : "border-brand-vanilla-dark text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
+                                        }`}
+                                      >
+                                        {idx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="flex flex-col gap-1 border-t border-brand-vanilla-dark pt-2 dark:border-brand-green-700">
+                                {Array.from({ length: numPartes }, (_, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between text-xs text-brand-ink/70 dark:text-brand-vanilla/70"
+                                  >
+                                    <span>Parte {idx + 1}</span>
+                                    <span>{formatMoney(subtotalParte(idx))}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {!todosAsignados && (
+                                <p className="text-xs text-amber-700 dark:text-amber-400">
+                                  Asigna todos los productos a alguna parte antes de continuar.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {modoDivisionCuenta === "igual" && (
+                            <div className="flex flex-col gap-1">
+                              {Array.from({ length: numPartes }, (_, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-sm text-brand-ink dark:text-brand-vanilla">
+                                  <span>Parte {idx + 1}</span>
+                                  <span>≈ {formatMoney(totalConDescuento / numPartes)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <button
+                        onClick={iniciarCobroMotor}
+                        disabled={iniciandoCobro || (dividirCuenta && modoDivisionCuenta === "producto" && !todosAsignados)}
+                        className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                      >
+                        {iniciandoCobro ? "Iniciando..." : "Continuar"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {cuenta.partes.length > 1 && propinaMonto > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-brand-ink/70 dark:text-brand-vanilla/70">Propina:</span>
+                          <button
+                            type="button"
+                            onClick={repartirPropinaIgual}
+                            className="rounded-md border border-brand-green-700 px-2 py-1 font-medium text-brand-green-700 dark:border-brand-vanilla dark:text-brand-vanilla"
+                          >
+                            Repartir por igual
+                          </button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      )}
 
-                  <div className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
-                    {Array.from({ length: numPartes }, (_, idx) => (
-                      <div key={idx} className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                            Parte {idx + 1}
-                          </span>
-                          <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-                            {propinaMonto > 0 ? (
-                              <>
-                                {formatMoney(subtotalParte(idx))}
-                                <span className="ml-1 font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                                  + {formatMoney(propinaMonto / numPartes)} propina =
-                                </span>{" "}
-                                {formatMoney(subtotalParte(idx) + propinaMonto / numPartes)}
-                              </>
+                      {cuenta.partes.map((parte) => {
+                        const form = abonoForms[parte.id];
+                        return (
+                          <div
+                            key={parte.id}
+                            className="flex flex-col gap-2 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                                Parte {parte.indice}
+                                {parte.modo === "producto" && parte.unidades.length > 0 && (
+                                  <span className="ml-1 text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                                    ({parte.unidades.map((u) => `${formatCantidad(u.cantidad)}× ${u.productoNombre}`).join(", ")})
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+                                {formatMoney(parte.montoDebido)}
+                                {parte.montoPagado > 0 && (
+                                  <span className="ml-1 text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                                    (pagado {formatMoney(parte.montoPagado)})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+
+                            {parte.pendiente <= 0.001 || !form ? (
+                              <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
+                                ✓ Pagada por completo
+                              </p>
                             ) : (
-                              formatMoney(subtotalParte(idx))
+                              <>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                    ¿Cuánto se paga ahora?
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={parte.pendiente}
+                                    step="100"
+                                    disabled={!pagoParcial}
+                                    value={form.montoPagarAhora || ""}
+                                    onChange={(e) =>
+                                      actualizarAbonoForm(parte.id, {
+                                        montoPagarAhora: Math.min(parte.pendiente, Math.max(0, Number(e.target.value))),
+                                      })
+                                    }
+                                    className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                  />
+                                  <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                    de {formatMoney(parte.pendiente)} pendiente
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                    Propina de este abono
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="100"
+                                    value={form.propina || ""}
+                                    onChange={(e) => actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })}
+                                    className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                  />
+                                  {cuenta.partes.length > 1 && propinaMonto > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => asignarPropinaCompletaA(parte.id)}
+                                      className="text-xs font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                                    >
+                                      Asignar propina completa aquí
+                                    </button>
+                                  )}
+                                </div>
+
+                                <SelectorMetodoPago
+                                  value={form.pago}
+                                  onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
+                                  totalFijo={form.montoPagarAhora + form.propina}
+                                />
+                                {form.pago.metodoPago !== "banco" && (
+                                  <CalculadoraVuelta
+                                    aPagar={
+                                      form.pago.metodoPago === "mixto"
+                                        ? form.pago.montoEfectivo
+                                        : montoEfectivoRequerido(form.pago, form.montoPagarAhora) + form.propina
+                                    }
+                                    recibido={form.montoRecibido}
+                                    onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                                  />
+                                )}
+                              </>
                             )}
-                          </span>
-                        </div>
-                        <SelectorMetodoPago
-                          value={pagosPartes[idx]}
-                          onChange={(nuevo) =>
-                            setPagosPartes((actual) => {
-                              const copia = [...actual];
-                              copia[idx] = nuevo;
-                              return copia;
-                            })
-                          }
-                          totalFijo={subtotalParte(idx)}
-                        />
-                        {pagosPartes[idx].metodoPago !== "banco" && (
-                          <CalculadoraVuelta
-                            aPagar={montoEfectivoRequerido(pagosPartes[idx], subtotalParte(idx)) + propinaMonto / numPartes}
-                            recibido={montosRecibidosPartes[idx] ?? 0}
-                            onChange={(valor) =>
-                              setMontosRecibidosPartes((actual) => {
-                                const copia = [...actual];
-                                copia[idx] = valor;
-                                return copia;
-                              })
-                            }
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                          </div>
+                        );
+                      })}
 
-                  {!todosAsignados && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      Asigna todos los productos a alguna parte antes de cobrar.
-                    </p>
-                  )}
-                  {algunaParteMixtaInvalida && (
-                    <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su subtotal.</p>
-                  )}
+                      {algunAbonoMixtoInvalido && (
+                        <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
+                      )}
 
-                  <button
-                    onClick={cerrarYCobrarDividido}
-                    disabled={cobrando || !todosAsignados || algunaParteMixtaInvalida}
-                    className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-                  >
-                    {cobrando ? "Cobrando..." : `Cobrar y cerrar orden (dividida en ${numPartes})`}
-                  </button>
+                      <button
+                        onClick={registrarPagos}
+                        disabled={cobrando || algunAbonoMixtoInvalido || totalAPagarAhora <= 0}
+                        className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                      >
+                        {cobrando ? "Cobrando..." : "Registrar pago(s)"}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 

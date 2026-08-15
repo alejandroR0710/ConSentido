@@ -18,7 +18,9 @@ import {
   EditarItemInput,
   EditarMesaInput,
   EditarProductoInput,
+  IniciarCobroInput,
   PosicionMesaInput,
+  RegistrarAbonoInput,
   RepartirPropinasInput,
 } from "./migao.schema";
 
@@ -329,6 +331,12 @@ export async function agregarItem(
   if (!orden) throw Errors.notFound("Orden no encontrada");
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se pueden agregar productos a una orden cerrada o cancelada");
+  }
+  // Ya se inició el cobro de esta cuenta (aunque solo se haya pagado una
+  // parte) — cambiar los productos ahora invalidaría los montos ya fijados
+  // por parte (ver migao_cuenta_partes.monto_debido) y lo ya cobrado.
+  if (await repo.getVentaAbiertaPorOrden(ordenId)) {
+    throw Errors.conflict("Esta cuenta ya tiene pagos registrados, no se pueden agregar más productos");
   }
 
   const client = await pool.connect();
@@ -992,6 +1000,280 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
 }
 
 /**
+ * Reparte `total` en las partes que pide `division`, validando y calculando
+ * cada `montoDebido` del lado del servidor (nunca se confía en lo que mande
+ * el cliente). Usada solo por iniciarCobro — una cuenta sin dividir es, acá,
+ * una división de 1 sola parte (modo 'igual', numPartes 1).
+ */
+function calcularPartes<T extends { id: unknown; cantidad: string; precio_unitario: string }>(
+  division: IniciarCobroInput["division"],
+  items: (T & { subtotal: number })[],
+  total: number,
+  totalBruto: number,
+): { modo: "producto" | "igual"; montoDebido: number; unidades?: { itemId: number; cantidad: number }[] }[] {
+  if (division.modo === "igual") {
+    const n = division.numPartes;
+    const base = Math.floor((total / n) * 100) / 100;
+    const montos = Array.from({ length: n }, () => base);
+    // La última parte absorbe el residuo del redondeo, así la suma de todas
+    // las partes siempre da EXACTO el total (nunca queda 1 centavo suelto).
+    montos[n - 1] = Math.round((total - base * (n - 1)) * 100) / 100;
+    return montos.map((montoDebido) => ({ modo: "igual" as const, montoDebido }));
+  }
+
+  // modo 'producto': misma validación de cerrarOrden dividido — la suma de
+  // cantidades asignadas a un mismo itemId, entre todas las partes, debe ser
+  // EXACTAMENTE su cantidad real (ni de más ni de menos).
+  const cantidadPorItem = new Map(items.map((i) => [Number(i.id), Number(i.cantidad)]));
+  const asignadoPorItem = new Map<number, number>();
+  for (const parte of division.partes) {
+    for (const u of parte.unidades) {
+      if (!cantidadPorItem.has(u.itemId)) {
+        throw Errors.badRequest(`El producto ${u.itemId} no pertenece a esta orden o está cancelado`);
+      }
+      asignadoPorItem.set(u.itemId, (asignadoPorItem.get(u.itemId) ?? 0) + u.cantidad);
+    }
+  }
+  for (const [itemId, cantidadReal] of cantidadPorItem) {
+    const asignado = asignadoPorItem.get(itemId) ?? 0;
+    if (Math.abs(asignado - cantidadReal) > 0.001) {
+      throw Errors.badRequest(
+        `El producto ${itemId} debe quedar completamente asignado (cantidad ${cantidadReal}, se asignó ${asignado})`,
+      );
+    }
+  }
+  // Si hay descuento (solo posible cuando queda 1 sola parte, ver
+  // iniciarCobro), se reparte proporcional — montoDebido nunca se calcula
+  // directo del precio de lista cuando el total ya viene descontado.
+  const escala = totalBruto > 0 ? total / totalBruto : 1;
+  return division.partes.map((parte) => ({
+    modo: "producto" as const,
+    montoDebido: Math.round(calcularMontoPorUnidades(items, parte.unidades) * escala * 100) / 100,
+    unidades: parte.unidades,
+  }));
+}
+
+/**
+ * Arranca el cobro de una orden con el motor nuevo de pagos parciales/cuenta
+ * dividida por igual — a diferencia de cerrarOrden, esto NO cobra nada
+ * todavía: solo fija cómo queda partida la cuenta y crea la venta+factura
+ * (mismo criterio de cerrarOrden: la factura ya tiene número desde el primer
+ * momento). Idempotente: si la orden ya tiene una venta iniciada, la
+ * devuelve tal cual e ignora `input` — la división ya quedó fija la primera
+ * vez, así reabrir una orden en 'pagando' nunca la reparte de nuevo.
+ */
+export async function iniciarCobro(ordenId: string, input: IniciarCobroInput, usuarioId: string) {
+  const yaExiste = await repo.getVentaAbiertaPorOrden(ordenId);
+  if (yaExiste) return repo.getCuentaPorOrden(ordenId);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const orden = await repo.getOrdenById(ordenId, client, true);
+    if (!orden) throw Errors.notFound("Orden no encontrada");
+    if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
+    if (orden.estado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
+
+    // Alguien pudo haber iniciado el cobro justo antes, entre el check de
+    // arriba (sin lock) y este punto (con lock de la orden) — se reconfirma
+    // para no crear una venta duplicada por una carrera de doble clic.
+    const carrera = await repo.getVentaAbiertaPorOrden(ordenId, client);
+    if (carrera) {
+      await client.query("COMMIT");
+      return repo.getCuentaPorOrden(ordenId);
+    }
+
+    const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
+    if (itemsRaw.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
+    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado");
+    if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
+    const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
+
+    // Igual que cerrarOrden: el descuento solo existe cuando la cuenta queda
+    // en 1 sola parte (no tendría sentido descontar una parte de terceros).
+    const partesCount = input.division.modo === "igual" ? input.division.numPartes : input.division.partes.length;
+    const descuentoPorcentaje = partesCount === 1 ? (input.descuentoPorcentaje ?? 0) : 0;
+    const total = totalBruto * (1 - descuentoPorcentaje / 100);
+    const descuentoMonto = totalBruto - total;
+
+    const partesInput = calcularPartes(input.division, items, total, totalBruto);
+
+    const venta = await repo.crearVenta(client, {
+      clienteId: orden.cliente_id,
+      usuarioId,
+      ordenId,
+      subtotal: totalBruto,
+      descuento: descuentoMonto,
+      descuentoPorcentaje,
+      total,
+    });
+
+    await repo.crearVentaItems(
+      client,
+      venta.id,
+      items.map((i) => ({
+        productoId: i.producto_id,
+        cantidad: Number(i.cantidad),
+        precioUnitario: Number(i.precio_unitario),
+      })),
+    );
+
+    await repo.getOrCrearFactura({ ventaId: venta.id, ordenId, subtotal: totalBruto, total }, client);
+    await repo.crearPartes(client, venta.id, partesInput);
+
+    await client.query("COMMIT");
+    return repo.getCuentaPorOrden(ordenId);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Estado completo de una cuenta en cobro — usado para reabrir una orden en
+ *  'pagando' y seguir registrando abonos donde se quedó. */
+export async function obtenerCuenta(ordenId: string) {
+  const cuenta = await repo.getCuentaPorOrden(ordenId);
+  if (!cuenta) throw Errors.notFound("Esta orden no tiene un cobro iniciado");
+  return cuenta;
+}
+
+/**
+ * Registra un abono (pago parcial o el resto final) de una parte de la
+ * cuenta. Si con este abono TODAS las partes de la venta quedan pagadas del
+ * todo, la orden cierra sola; si no, la orden pasa (o se mantiene) en
+ * 'pagando' hasta el próximo abono.
+ */
+export async function registrarAbono(parteId: string, input: RegistrarAbonoInput, usuarioId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const parteResult = await client.query(
+      `SELECT cp.*, v.orden_id, v.id AS venta_id
+         FROM migao_cuenta_partes cp
+         JOIN ventas v ON v.id = cp.venta_id
+        WHERE cp.id = $1 FOR UPDATE`,
+      [parteId],
+    );
+    if (parteResult.rowCount === 0) throw Errors.notFound("Parte de cuenta no encontrada");
+    const parte = parteResult.rows[0];
+
+    const orden = await repo.getOrdenById(parte.orden_id, client, true);
+    if (!orden) throw Errors.notFound("Orden no encontrada");
+    if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
+    if (orden.estado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
+
+    const pagadoResult = await client.query(`SELECT COALESCE(SUM(monto), 0) AS pagado FROM pagos WHERE parte_id = $1`, [
+      parteId,
+    ]);
+    const pendiente = Number(parte.monto_debido) - Number(pagadoResult.rows[0].pagado);
+    if (pendiente <= 0.001) throw Errors.conflict("Esta parte ya está completamente pagada");
+
+    // Igual que cerrarOrden mixto: en un abono mixto, lo que el cajero
+    // escribe es lo que el cliente entregó de verdad — si trae propina, esa
+    // plata también viene incluida ahí, no solo el abono a la cuenta.
+    const montoAbono =
+      input.metodoPago === "mixto" ? input.montoEfectivo + input.montoBanco - (input.propina?.monto ?? 0) : input.monto;
+    if (montoAbono <= 0) {
+      throw Errors.badRequest("El monto del abono debe ser mayor a 0 (revisa la propina incluida)");
+    }
+    if (montoAbono - pendiente > 0.01) {
+      throw Errors.badRequest(`El abono (${montoAbono}) no puede superar el pendiente de esta parte (${pendiente})`);
+    }
+
+    const lineas =
+      input.metodoPago === "mixto"
+        ? (() => {
+            const entregado = input.montoEfectivo + input.montoBanco;
+            const efectivo = entregado > 0 ? Math.round(montoAbono * (input.montoEfectivo / entregado)) : 0;
+            return descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivo, montoBanco: montoAbono - efectivo });
+          })()
+        : descomponerPago({ metodoPago: input.metodoPago, monto: montoAbono });
+
+    for (const linea of lineas) {
+      await repo.crearPago(client, {
+        ordenId: parte.orden_id,
+        ventaId: parte.venta_id,
+        metodoPago: linea.metodoPago,
+        monto: linea.monto,
+        referencia: `Abono parte ${parte.indice}`,
+        usuarioId,
+        parteId,
+      });
+      await cajaService.registrarIngreso(
+        {
+          moduloOrigenSlug: "migao",
+          monto: linea.monto,
+          metodoPago: linea.metodoPago,
+          referenciaEntidad: "ventas",
+          referenciaId: parte.venta_id,
+        },
+        usuarioId,
+        client,
+      );
+    }
+
+    if (input.propina && input.propina.monto > 0) {
+      const efectivoRecibido = lineas.filter((l) => l.metodoPago === "efectivo").reduce((a, l) => a + l.monto, 0);
+      const bancoRecibido = lineas.filter((l) => l.metodoPago === "banco").reduce((a, l) => a + l.monto, 0);
+      const totalRecibido = efectivoRecibido + bancoRecibido;
+      const propinaEfectivo =
+        totalRecibido > 0 ? Math.round((input.propina.monto * efectivoRecibido) / totalRecibido) : input.propina.monto;
+      const propinaBanco = input.propina.monto - propinaEfectivo;
+
+      if (propinaEfectivo > 0) {
+        await repo.crearPropina(client, {
+          ordenId: parte.orden_id,
+          ventaId: parte.venta_id,
+          meseroId: orden.mesero_id,
+          usuarioId,
+          monto: propinaEfectivo,
+          porcentaje: input.propina.porcentaje ?? null,
+          metodoPago: "efectivo",
+          parteId,
+        });
+      }
+      if (propinaBanco > 0) {
+        await repo.crearPropina(client, {
+          ordenId: parte.orden_id,
+          ventaId: parte.venta_id,
+          meseroId: orden.mesero_id,
+          usuarioId,
+          monto: propinaBanco,
+          porcentaje: input.propina.porcentaje ?? null,
+          metodoPago: "banco",
+          parteId,
+        });
+      }
+    }
+
+    const todasPartesResult = await client.query(
+      `SELECT cp.monto_debido, COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0) AS pagado
+         FROM migao_cuenta_partes cp WHERE cp.venta_id = $1`,
+      [parte.venta_id],
+    );
+    const todasPagadas = todasPartesResult.rows.every((r) => Number(r.monto_debido) - Number(r.pagado) <= 0.01);
+
+    if (todasPagadas) {
+      await repo.cerrarOrdenEstado(client, parte.orden_id);
+    } else if (orden.estado === "abierta") {
+      await client.query(`UPDATE ordenes SET estado = 'pagando' WHERE id = $1`, [parte.orden_id]);
+    }
+
+    await client.query("COMMIT");
+    return repo.getCuentaPorOrden(parte.orden_id);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Cancela la orden completa (ej. el cliente ya no quiere pedir): cada ítem que
  * todavía no estaba cancelado/servido pasa a "cancelado" (queda registrado en
  * el historial igual que una cancelación individual del mesero) y la orden
@@ -1007,6 +1289,15 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
     if (!orden) throw Errors.notFound("Orden no encontrada");
     if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada y cobrada");
     if (orden.estado === "cancelada") throw Errors.conflict("Esta orden ya fue cancelada");
+    // Ya se cobró plata real de esta cuenta (uno o más abonos) — cancelar la
+    // orden acá la dejaría "sin cuenta" sin devolver ese dinero. Hay que
+    // anular la venta desde Caja General (caja.service.ts::anularVenta), que
+    // sí revierte los movimientos de caja correspondientes.
+    if (await repo.existenPagosPorOrden(ordenId)) {
+      throw Errors.conflict(
+        "Esta cuenta ya tiene pagos registrados — para cancelarla, anula la venta desde Caja General",
+      );
+    }
 
     const items = await repo.getItemsPorOrden(ordenId, client);
     for (const item of items) {

@@ -149,6 +149,52 @@ export const cerrarOrdenSchema = z.union([
 ]);
 export type CerrarOrdenInput = z.infer<typeof cerrarOrdenSchema>;
 
+// Motor NUEVO y aparte de cerrarOrdenSchema de arriba: cobro con pagos
+// parciales y/o cuenta dividida por igual (no solo por producto). Una cuenta
+// sin dividir es, para este motor, una sola "parte" (numPartes/partes de
+// longitud 1) — mismo código para los dos casos, ver
+// migao.service.ts::iniciarCobro. El flujo simple de un solo clic
+// (cerrarOrdenSchema de arriba) sigue existiendo tal cual, sin tocar.
+const divisionSchema = z.union([
+  z.object({ modo: z.literal("igual"), numPartes: z.number().int().min(1).max(20) }),
+  z.object({
+    modo: z.literal("producto"),
+    partes: z.array(z.object({ unidades: unidadesSchema })).min(1),
+  }),
+]);
+export const iniciarCobroSchema = z.object({
+  division: divisionSchema,
+  descuentoPorcentaje: z.number().min(0).max(100).optional(),
+});
+export type IniciarCobroInput = z.infer<typeof iniciarCobroSchema>;
+
+// Propina opcional de ESTE abono puntual — a diferencia de propinaSchema de
+// arriba (una sola vez, sobre toda la cuenta), acá cada abono puede traer la
+// suya, tageada a la parte que lo registra (ver migao_propinas.parte_id).
+const propinaAbonoSchema = z
+  .object({
+    monto: z.number().positive(),
+    porcentaje: z.number().nullable().optional(),
+  })
+  .optional();
+
+export const registrarAbonoSchema = z.union([
+  z.object({
+    metodoPago: z.enum(["efectivo", "banco"]),
+    monto: z.number().positive(),
+    propina: propinaAbonoSchema,
+  }),
+  z
+    .object({
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+      propina: propinaAbonoSchema,
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
+export type RegistrarAbonoInput = z.infer<typeof registrarAbonoSchema>;
+
 // Repartir las propinas pendientes — un solo reparto cubre efectivo y banco
 // a la vez, cada `entrega` elige su propio método de pago (en qué se le
 // entrega a ESA persona, sin importar en qué método vino la propina

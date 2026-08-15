@@ -12,6 +12,9 @@ export interface OrdenResumen {
   cliente_nombre: string | null;
   mesero_nombre: string | null;
   total: string;
+  // Solo > 0 cuando estado === 'pagando' (motor de pagos parciales/cuenta
+  // dividida) — cuánto le falta a la cuenta para terminar de pagarse.
+  pendiente_cobro: string;
 }
 
 /** Mesa del plano visual — ubicación/tamaño en % (0-100) del lienzo de su
@@ -261,6 +264,60 @@ export interface PropinaInput {
   propinaMetodoPago?: "efectivo" | "banco";
 }
 
+// Motor NUEVO y aparte de PagoInput/PropinaInput de arriba: cómo queda
+// partida la cuenta al iniciar el cobro con pagos parciales y/o cuenta
+// dividida por igual — "no dividir" es, acá, numPartes/partes de longitud 1.
+export type DivisionInput =
+  | { modo: "igual"; numPartes: number }
+  | { modo: "producto"; partes: { unidades: { itemId: number; cantidad: number }[] }[] };
+
+/** Propina de ESTE abono puntual — a diferencia de PropinaInput de arriba
+ *  (una sola vez, sobre toda la cuenta), cada abono trae la suya. */
+export interface PropinaAbonoInput {
+  monto: number;
+  porcentaje?: number | null;
+}
+
+export type RegistrarAbonoInput =
+  | { metodoPago: "efectivo" | "banco"; monto: number; propina?: PropinaAbonoInput }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; propina?: PropinaAbonoInput };
+
+/** Una unidad de producto asignada a una parte (modo 'producto') — solo
+ *  informativo, para mostrar "Parte 2: 1x Americano". */
+export interface CuentaParteUnidad {
+  itemId: number;
+  cantidad: number;
+  productoNombre: string;
+}
+
+export interface CuentaParte {
+  id: string;
+  indice: number;
+  modo: "producto" | "igual";
+  montoDebido: number;
+  montoPagado: number;
+  pendiente: number;
+  unidades: CuentaParteUnidad[];
+}
+
+export interface CuentaAbono {
+  parteId: string;
+  metodoPago: string;
+  monto: number;
+  fecha: string;
+}
+
+/** Estado completo de una cuenta con el motor nuevo de cobro — se usa tanto
+ *  al iniciar el cobro como al reabrir una orden en 'pagando' para seguir
+ *  registrando abonos donde se quedó. */
+export interface CuentaDetalle {
+  venta: { id: string; orden_id: string; total: string };
+  ordenEstado: string;
+  partes: CuentaParte[];
+  pagos: CuentaAbono[];
+  propinas: CuentaAbono[];
+}
+
 /** Reparto (liquidación) de las propinas pendientes — un solo reparto puede
  *  cubrir efectivo y banco a la vez (montos separados); a quién se le paga en
  *  cada método lo decide cada entrega, no el reparto entero. `fecha_desde`/
@@ -453,6 +510,22 @@ export const migaoApi = {
       method: "POST",
       body: { dividir: true, partes, ...propina },
     }),
+  // Motor nuevo, aparte de cerrarOrden/cerrarOrdenDividida de arriba: pagos
+  // parciales y/o cuenta dividida por igual (no solo por producto). Una
+  // cuenta sin dividir es, acá, una división de 1 sola parte.
+  iniciarCobro: (ordenId: string, division: DivisionInput, descuentoPorcentaje?: number) =>
+    apiFetch<CuentaDetalle>(`/migao/ordenes/${ordenId}/cobro`, {
+      method: "POST",
+      body: { division, descuentoPorcentaje },
+    }),
+  // Reabre una orden en 'pagando' con su estado real (partes, pagado/pendiente
+  // de cada una, abonos ya hechos) — null si esta orden nunca inició este cobro.
+  obtenerCuenta: (ordenId: string) => apiFetch<CuentaDetalle>(`/migao/ordenes/${ordenId}/cobro`),
+  // Un abono puntual de UNA parte — puede ser el pago completo de esa parte
+  // o solo una porción (pago parcial). La propina de este abono, si trae, es
+  // independiente de la de otros abonos de la misma cuenta.
+  registrarAbono: (parteId: string, input: RegistrarAbonoInput) =>
+    apiFetch<CuentaDetalle>(`/migao/cuentas/partes/${parteId}/abonos`, { method: "POST", body: input }),
   cancelarOrden: (ordenId: string) =>
     apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),
   // El mesero cambia la mesa de una orden abierta (ej. los comensales se

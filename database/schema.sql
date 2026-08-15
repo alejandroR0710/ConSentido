@@ -785,6 +785,31 @@ CREATE TABLE orden_historial (
 );
 CREATE INDEX idx_orden_historial_orden ON orden_historial(orden_id, created_at);
 
+-- Cómo quedó partida una cuenta al iniciar el cobro (1 fila si no se divide
+-- entre varias personas) — ver migao.service.ts::iniciarCobro. `monto_debido`
+-- se calcula UNA vez al crear la parte y queda fijo; lo pagado se recalcula
+-- siempre en vivo sumando `pagos.monto WHERE parte_id = esta`, nunca se
+-- guarda un contador aparte.
+CREATE TABLE migao_cuenta_partes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venta_id     UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+  indice       INT NOT NULL,
+  modo         VARCHAR(20) NOT NULL CHECK (modo IN ('producto','igual')),
+  monto_debido NUMERIC(12,2) NOT NULL CHECK (monto_debido > 0),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (venta_id, indice)
+);
+
+-- Solo para modo='producto': qué unidades de qué ítems le tocan a esta
+-- parte — ya no se usa para calcular el monto (eso quedó fijo en
+-- monto_debido), solo para mostrar el detalle en pantalla/factura.
+CREATE TABLE migao_cuenta_parte_unidades (
+  parte_id      UUID NOT NULL REFERENCES migao_cuenta_partes(id) ON DELETE CASCADE,
+  orden_item_id BIGINT NOT NULL REFERENCES orden_items(id),
+  cantidad      NUMERIC(10,3) NOT NULL CHECK (cantidad > 0),
+  PRIMARY KEY (parte_id, orden_item_id)
+);
+
 CREATE TABLE pagos (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   orden_id    UUID REFERENCES ordenes(id),
@@ -794,6 +819,10 @@ CREATE TABLE pagos (
   metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco','administrativo')),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
   referencia  VARCHAR(100),
+  -- Cada abono (pago parcial o total) de una cuenta con pagos parciales/
+  -- divididos queda tageado a su parte — NULL en el cobro simple de un solo
+  -- paso (ver migao.service.ts::cerrarOrden, que no usa partes).
+  parte_id    UUID REFERENCES migao_cuenta_partes(id),
   usuario_id  UUID REFERENCES usuarios(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (orden_id IS NOT NULL OR venta_id IS NOT NULL)
@@ -863,6 +892,9 @@ CREATE TABLE migao_propinas (
   porcentaje     NUMERIC(5,2),
   metodo_pago    VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
   liquidacion_id UUID REFERENCES migao_propinas_liquidaciones(id),
+  -- De qué parte de la cuenta vino esta propina (cobro con pagos parciales/
+  -- divididos) — NULL en el cobro simple de un solo paso.
+  parte_id       UUID REFERENCES migao_cuenta_partes(id),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_migao_propinas_mesero ON migao_propinas(mesero_id);

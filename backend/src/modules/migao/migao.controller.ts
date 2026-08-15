@@ -15,7 +15,9 @@ import {
   editarItemSchema,
   editarMesaSchema,
   editarProductoSchema,
+  iniciarCobroSchema,
   posicionMesaSchema,
+  registrarAbonoSchema,
   reiniciarTodoSchema,
   repartirPropinasSchema,
   resetearOrdenesSchema,
@@ -192,6 +194,23 @@ export async function cerrarOrdenController(req: Request, res: Response) {
   const data = cerrarOrdenSchema.parse(req.body);
   const resultado = await service.cerrarOrden(req.params.id, data, req.auth!.usuarioId, req.auth!.rolId);
   return ok(res, resultado);
+}
+
+export async function iniciarCobroController(req: Request, res: Response) {
+  const data = iniciarCobroSchema.parse(req.body);
+  const cuenta = await service.iniciarCobro(req.params.id, data, req.auth!.usuarioId);
+  return ok(res, cuenta);
+}
+
+export async function obtenerCuentaController(req: Request, res: Response) {
+  const cuenta = await service.obtenerCuenta(req.params.id);
+  return ok(res, cuenta);
+}
+
+export async function registrarAbonoController(req: Request, res: Response) {
+  const data = registrarAbonoSchema.parse(req.body);
+  const cuenta = await service.registrarAbono(req.params.parteId, data, req.auth!.usuarioId);
+  return ok(res, cuenta);
 }
 
 export async function cancelarOrdenController(req: Request, res: Response) {

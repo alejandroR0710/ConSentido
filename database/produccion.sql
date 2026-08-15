@@ -721,6 +721,43 @@ WHERE NOT EXISTS (SELECT 1 FROM velas_insumos WHERE velas_insumos.codigo = v.cod
 
 
 -- ========================================================================
+-- SECCIÓN 10: PAGOS PARCIALES + DIVIDIR CUENTA POR IGUAL/PRODUCTO (Migao)
+-- ========================================================================
+-- Antes, cerrar una cuenta era un solo paso atómico (100% de una vez, o
+-- dividida pero pagada toda ya). Ahora una cuenta se puede repartir en
+-- "partes" (1 sola si no se divide) y cada parte se puede pagar en varios
+-- abonos a lo largo del tiempo — la orden queda en estado 'pagando' (ya
+-- existía en el CHECK de ordenes.estado, nunca se había usado) hasta que
+-- todas las partes quedan completamente pagadas.
+CREATE TABLE IF NOT EXISTS migao_cuenta_partes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venta_id     UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+  indice       INT NOT NULL,
+  modo         VARCHAR(20) NOT NULL CHECK (modo IN ('producto','igual')),
+  monto_debido NUMERIC(12,2) NOT NULL CHECK (monto_debido > 0),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (venta_id, indice)
+);
+
+CREATE TABLE IF NOT EXISTS migao_cuenta_parte_unidades (
+  parte_id      UUID NOT NULL REFERENCES migao_cuenta_partes(id) ON DELETE CASCADE,
+  orden_item_id BIGINT NOT NULL REFERENCES orden_items(id),
+  cantidad      NUMERIC(10,3) NOT NULL CHECK (cantidad > 0),
+  PRIMARY KEY (parte_id, orden_item_id)
+);
+
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS parte_id UUID REFERENCES migao_cuenta_partes(id);
+ALTER TABLE migao_propinas ADD COLUMN IF NOT EXISTS parte_id UUID REFERENCES migao_cuenta_partes(id);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+    GRANT SELECT, INSERT ON migao_cuenta_partes TO usuario;
+    GRANT SELECT, INSERT ON migao_cuenta_parte_unidades TO usuario;
+  END IF;
+END $$;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

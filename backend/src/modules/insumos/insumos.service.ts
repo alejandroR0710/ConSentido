@@ -37,6 +37,10 @@ export async function listarAlmacenes() {
   return repo.listAlmacenes();
 }
 
+export async function listarMovimientos(desde: string, hasta: string) {
+  return repo.listMovimientos(desde, hasta);
+}
+
 /**
  * Registra un movimiento de inventario y ajusta el stock en la misma transacción.
  * Esta es la única puerta de entrada para que CUALQUIER módulo (Talleres, Migao,

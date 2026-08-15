@@ -6,13 +6,13 @@ import { formatMoney } from "../../../shared/format/money";
 import { migaoApi, type PendientePropinaDia } from "../api";
 
 interface RepartirPropinasModalProps {
-  metodoPago: "efectivo" | "banco";
   onCerrar: () => void;
   onRepartido: () => Promise<void> | void;
 }
 
 interface FilaEntrega {
   nombrePersona: string;
+  metodoPago: "efectivo" | "banco";
   monto: number;
   fechaEntrega: string;
   motivo: string;
@@ -53,6 +53,8 @@ interface GrupoSemana {
   dias: PendientePropinaDia[];
 }
 
+/** Semanas y días en orden cronológico normal (más antiguo primero, hacia
+ *  adelante) — antes quedaba al revés (el día/semana más reciente arriba). */
 function agruparPorSemana(dias: PendientePropinaDia[]): GrupoSemana[] {
   const mapa = new Map<string, PendientePropinaDia[]>();
   for (const d of dias) {
@@ -61,24 +63,27 @@ function agruparPorSemana(dias: PendientePropinaDia[]): GrupoSemana[] {
     mapa.get(clave)!.push(d);
   }
   return Array.from(mapa.entries())
-    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .map(([lunes, dias]) => ({ lunes, dias: dias.sort((a, b) => (a.fecha < b.fecha ? 1 : -1)) }));
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([lunes, dias]) => ({ lunes, dias: dias.sort((a, b) => (a.fecha < b.fecha ? -1 : 1)) }));
 }
 
 /**
- * Reparto de propinas de un método: primero se eligen qué días concretos
- * entran (una semana completa o sueltos, vía checkboxes agrupados por
- * semana), después se desglosa ese total entre las personas del equipo
- * (nombre + monto + fecha + motivo opcional) — la suma de las entregas tiene
- * que dar exactamente el total de los días elegidos, así el historial por
- * persona siempre cuadra con la plata real repartida.
+ * Reparto de propinas: primero se eligen qué días concretos entran (una
+ * semana completa o sueltos, vía checkboxes agrupados por semana) — cada día
+ * trae su pendiente en efectivo y en banco. Después se desglosa ese total
+ * entre las personas del equipo, cada entrega con su propio método de pago
+ * (en qué se le entrega a ESA persona, sin importar en qué método vino la
+ * propina original) — la suma de las entregas en efectivo tiene que dar
+ * exactamente el pendiente en efectivo elegido, y lo mismo banco, así el
+ * historial por persona siempre cuadra con la plata real repartida en cada
+ * método.
  */
-export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: RepartirPropinasModalProps) {
+export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropinasModalProps) {
   const [pendientesDia, setPendientesDia] = useState<PendientePropinaDia[]>([]);
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
   const [entregas, setEntregas] = useState<FilaEntrega[]>([
-    { nombrePersona: "", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+    { nombrePersona: "", metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
   ]);
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
@@ -88,7 +93,7 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
     let cancelado = false;
     (async () => {
       try {
-        const dias = await migaoApi.obtenerPendientesPropinasPorDia(metodoPago);
+        const dias = await migaoApi.obtenerPendientesPropinasPorDia();
         if (cancelado) return;
         setPendientesDia(dias);
         setDiasSeleccionados(new Set(dias.map((d) => d.fecha)));
@@ -101,15 +106,23 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
     return () => {
       cancelado = true;
     };
-  }, [metodoPago]);
+  }, []);
 
   const gruposSemana = useMemo(() => agruparPorSemana(pendientesDia), [pendientesDia]);
 
-  const totalSeleccionado = pendientesDia
-    .filter((d) => diasSeleccionados.has(d.fecha))
-    .reduce((acc, d) => acc + d.monto, 0);
-  const sumaEntregas = entregas.reduce((acc, e) => acc + (Number.isFinite(e.monto) ? e.monto : 0), 0);
-  const restante = totalSeleccionado - sumaEntregas;
+  const diasElegidos = pendientesDia.filter((d) => diasSeleccionados.has(d.fecha));
+  const totalEfectivoSeleccionado = diasElegidos.reduce((acc, d) => acc + d.montoEfectivo, 0);
+  const totalBancoSeleccionado = diasElegidos.reduce((acc, d) => acc + d.montoBanco, 0);
+  const totalSeleccionado = totalEfectivoSeleccionado + totalBancoSeleccionado;
+
+  const sumaEntregasEfectivo = entregas
+    .filter((e) => e.metodoPago === "efectivo")
+    .reduce((acc, e) => acc + (Number.isFinite(e.monto) ? e.monto : 0), 0);
+  const sumaEntregasBanco = entregas
+    .filter((e) => e.metodoPago === "banco")
+    .reduce((acc, e) => acc + (Number.isFinite(e.monto) ? e.monto : 0), 0);
+  const restanteEfectivo = totalEfectivoSeleccionado - sumaEntregasEfectivo;
+  const restanteBanco = totalBancoSeleccionado - sumaEntregasBanco;
 
   function alternarDia(fecha: string) {
     setDiasSeleccionados((prev) => {
@@ -136,18 +149,26 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
   }
 
   function agregarEntrega() {
-    setEntregas((prev) => [...prev, { nombrePersona: "", monto: 0, fechaEntrega: hoyBogota(), motivo: "" }]);
+    setEntregas((prev) => [
+      ...prev,
+      { nombrePersona: "", metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+    ]);
   }
 
   function quitarEntrega(indice: number) {
     setEntregas((prev) => prev.filter((_, i) => i !== indice));
   }
 
-  /** Llena el monto de esta fila con lo que falte para cuadrar — atajo para
-   *  el caso más común (repartir todo entre 1-2 personas). */
+  /** Llena el monto de esta fila con lo que falte del MISMO método para
+   *  cuadrar — atajo para el caso más común (repartir todo entre 1-2 personas). */
   function usarRestante(indice: number) {
-    const otras = entregas.reduce((acc, e, i) => (i === indice ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)), 0);
-    const sugerido = Math.max(0, totalSeleccionado - otras);
+    const fila = entregas[indice];
+    const totalDelMetodo = fila.metodoPago === "efectivo" ? totalEfectivoSeleccionado : totalBancoSeleccionado;
+    const otras = entregas.reduce(
+      (acc, e, i) => (i === indice || e.metodoPago !== fila.metodoPago ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)),
+      0,
+    );
+    const sugerido = Math.max(0, totalDelMetodo - otras);
     actualizarEntrega(indice, "monto", sugerido);
   }
 
@@ -158,7 +179,8 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
     totalSeleccionado > 0 &&
     entregas.length > 0 &&
     entregasValidas &&
-    Math.abs(restante) < 1;
+    Math.abs(restanteEfectivo) < 1 &&
+    Math.abs(restanteBanco) < 1;
 
   async function confirmar() {
     if (!puedeRepartir) return;
@@ -166,11 +188,11 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
     setError(null);
     try {
       await migaoApi.repartirPropinas({
-        metodoPago,
         fechas: Array.from(diasSeleccionados),
         nota: nota.trim() || undefined,
         entregas: entregas.map((e) => ({
           nombrePersona: e.nombrePersona.trim(),
+          metodoPago: e.metodoPago,
           monto: e.monto,
           fechaEntrega: e.fechaEntrega || undefined,
           motivo: e.motivo.trim() || undefined,
@@ -189,12 +211,12 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
     "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 
   return (
-    <Modal titulo={`Repartir propinas en ${metodoPago}`} onCerrar={onCerrar} maxWidth="sm:max-w-2xl">
+    <Modal titulo="Repartir propinas" onCerrar={onCerrar} maxWidth="sm:max-w-2xl">
       {cargando ? (
         <p className="text-center text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Cargando días pendientes...</p>
       ) : pendientesDia.length === 0 ? (
         <p className="text-center text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-          No hay propinas pendientes de {metodoPago}.
+          No hay propinas pendientes por repartir.
         </p>
       ) : (
         <div className="flex flex-col gap-5">
@@ -206,7 +228,7 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
             <div className="flex flex-col gap-3">
               {gruposSemana.map((grupo) => {
                 const todosMarcados = grupo.dias.every((d) => diasSeleccionados.has(d.fecha));
-                const totalSemana = grupo.dias.reduce((acc, d) => acc + d.monto, 0);
+                const totalSemana = grupo.dias.reduce((acc, d) => acc + d.montoEfectivo + d.montoBanco, 0);
                 return (
                   <div
                     key={grupo.lunes}
@@ -238,7 +260,7 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
                             checked={diasSeleccionados.has(d.fecha)}
                             onChange={() => alternarDia(d.fecha)}
                           />
-                          {formatearFechaCorta(d.fecha)} · {formatMoney(d.monto)}
+                          {formatearFechaCorta(d.fecha)} · {formatMoney(d.montoEfectivo + d.montoBanco)}
                         </label>
                       ))}
                     </div>
@@ -247,20 +269,23 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
               })}
             </div>
             <p className="mt-2 text-sm text-brand-ink dark:text-brand-vanilla">
-              Total seleccionado: <span className="font-bold">{formatMoney(totalSeleccionado)}</span>
+              Total seleccionado: <span className="font-bold">{formatMoney(totalSeleccionado)}</span>{" "}
+              <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                (efectivo {formatMoney(totalEfectivoSeleccionado)} · banco {formatMoney(totalBancoSeleccionado)})
+              </span>
             </p>
           </div>
 
           {/* Paso 2: entregas por persona */}
           <div>
             <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-              2. ¿A quién se le entrega?
+              2. ¿A quién se le entrega, y en qué método?
             </h3>
             <div className="flex flex-col gap-2">
               {entregas.map((entrega, indice) => (
                 <div
                   key={indice}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.5fr_1fr_1fr_1.5fr_auto] sm:items-end dark:border-brand-green-700"
+                  className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-end dark:border-brand-green-700"
                 >
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Nombre</label>
@@ -270,6 +295,17 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
                       placeholder="Ej. Juan Pérez"
                       className={inputClase}
                     />
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-[11px] font-medium">Método</label>
+                    <select
+                      value={entrega.metodoPago}
+                      onChange={(e) => actualizarEntrega(indice, "metodoPago", e.target.value)}
+                      className={inputClase}
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="banco">Banco</option>
+                    </select>
                   </div>
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
@@ -303,7 +339,7 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
                     <button
                       type="button"
                       onClick={() => usarRestante(indice)}
-                      title="Llenar con lo que falte"
+                      title="Llenar con lo que falte de este método"
                       className="rounded-md border border-brand-green-600 px-2 py-1.5 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
                     >
                       =Resto
@@ -330,18 +366,35 @@ export function RepartirPropinasModal({ metodoPago, onCerrar, onRepartido }: Rep
               + Agregar persona
             </button>
 
-            <div
-              className={`mt-3 rounded-md px-3 py-2 text-sm font-semibold ${
-                Math.abs(restante) < 1
-                  ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-              }`}
-            >
-              {Math.abs(restante) < 1
-                ? "Todo el monto seleccionado quedó asignado."
-                : restante > 0
-                  ? `Falta asignar ${formatMoney(restante)}`
-                  : `Te pasaste por ${formatMoney(-restante)}`}
+            <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:gap-3">
+              <div
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
+                  Math.abs(restanteEfectivo) < 1
+                    ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                }`}
+              >
+                Efectivo:{" "}
+                {Math.abs(restanteEfectivo) < 1
+                  ? "cuadrado"
+                  : restanteEfectivo > 0
+                    ? `falta ${formatMoney(restanteEfectivo)}`
+                    : `te pasaste por ${formatMoney(-restanteEfectivo)}`}
+              </div>
+              <div
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
+                  Math.abs(restanteBanco) < 1
+                    ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                }`}
+              >
+                Banco:{" "}
+                {Math.abs(restanteBanco) < 1
+                  ? "cuadrado"
+                  : restanteBanco > 0
+                    ? `falta ${formatMoney(restanteBanco)}`
+                    : `te pasaste por ${formatMoney(-restanteBanco)}`}
+              </div>
             </div>
           </div>
 

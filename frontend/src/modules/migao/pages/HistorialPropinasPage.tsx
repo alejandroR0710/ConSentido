@@ -108,7 +108,7 @@ export function HistorialPropinasPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [repartiendo, setRepartiendo] = useState<"efectivo" | "banco" | null>(null);
+  const [repartiendo, setRepartiendo] = useState(false);
 
   // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
   // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
@@ -164,31 +164,22 @@ export function HistorialPropinasPage() {
         <div className="text-xs uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
           Pendiente por repartir
         </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-6">
-          <div className="flex items-center justify-between gap-3 sm:justify-start">
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex flex-col gap-1 sm:flex-row sm:gap-6">
             <span className="text-sm text-brand-ink dark:text-brand-vanilla">
               Efectivo <span className="font-bold">{formatMoney(pendienteEfectivo)}</span>
             </span>
-            <button
-              onClick={() => setRepartiendo("efectivo")}
-              disabled={pendienteEfectivo <= 0}
-              className="rounded-md bg-brand-green-700 px-3 py-1 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-40"
-            >
-              Repartir
-            </button>
-          </div>
-          <div className="flex items-center justify-between gap-3 sm:justify-start">
             <span className="text-sm text-brand-ink dark:text-brand-vanilla">
               Banco <span className="font-bold">{formatMoney(pendienteBanco)}</span>
             </span>
-            <button
-              onClick={() => setRepartiendo("banco")}
-              disabled={pendienteBanco <= 0}
-              className="rounded-md bg-brand-green-700 px-3 py-1 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-40"
-            >
-              Repartir
-            </button>
           </div>
+          <button
+            onClick={() => setRepartiendo(true)}
+            disabled={pendienteEfectivo <= 0 && pendienteBanco <= 0}
+            className="rounded-md bg-brand-green-700 px-3 py-1 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-40"
+          >
+            Repartir
+          </button>
         </div>
         <div className="mt-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
           Total histórico (todo el tiempo): {formatMoney(totalHistorico)}
@@ -365,11 +356,7 @@ export function HistorialPropinasPage() {
       </div>
 
       {repartiendo && (
-        <RepartirPropinasModal
-          metodoPago={repartiendo}
-          onCerrar={() => setRepartiendo(null)}
-          onRepartido={cargar}
-        />
+        <RepartirPropinasModal onCerrar={() => setRepartiendo(false)} onRepartido={cargar} />
       )}
     </div>
   );

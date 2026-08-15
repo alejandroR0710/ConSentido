@@ -32,6 +32,13 @@ export async function listarAlmacenesController(_req: Request, res: Response) {
   return ok(res, almacenes);
 }
 
+export async function listarMovimientosController(req: Request, res: Response) {
+  const desde = (req.query.desde as string) ?? new Date().toISOString().slice(0, 10);
+  const hasta = (req.query.hasta as string) ?? desde;
+  const movimientos = await service.listarMovimientos(desde, hasta);
+  return ok(res, movimientos);
+}
+
 export async function listarInsumosAdminController(_req: Request, res: Response) {
   const insumos = await service.listarInsumosAdmin();
   return ok(res, insumos);

@@ -261,13 +261,15 @@ export interface PropinaInput {
   propinaMetodoPago?: "efectivo" | "banco";
 }
 
-/** Reparto (liquidación) de las propinas pendientes de UN método — efectivo
- *  y banco se reparten por separado. `fecha_desde`/`fecha_hasta` son el rango
- *  de los días elegidos para ese reparto (null en liquidaciones viejas, de
- *  antes de poder elegir días concretos). */
+/** Reparto (liquidación) de las propinas pendientes — un solo reparto puede
+ *  cubrir efectivo y banco a la vez (montos separados); a quién se le paga en
+ *  cada método lo decide cada entrega, no el reparto entero. `fecha_desde`/
+ *  `fecha_hasta` son el rango de los días elegidos para ese reparto (null en
+ *  liquidaciones viejas, de antes de poder elegir días concretos). */
 export interface LiquidacionPropinas {
   id: string;
-  metodo_pago: "efectivo" | "banco";
+  monto_efectivo: string;
+  monto_banco: string;
   monto: string;
   nota: string | null;
   fecha_desde: string | null;
@@ -275,19 +277,23 @@ export interface LiquidacionPropinas {
   created_at: string;
 }
 
-/** Pendiente de un método en UN día concreto (hora Colombia) — el panel de
- *  reparto lo usa para dejar elegir qué días entran (una semana completa o
- *  sueltos), en vez de forzar a repartir TODO lo pendiente de una vez. */
+/** Pendiente en UN día concreto (hora Colombia), efectivo y banco
+ *  desglosados — el panel de reparto lo usa para dejar elegir qué días
+ *  entran (una semana completa o sueltos), en vez de forzar a repartir TODO
+ *  lo pendiente de una vez. */
 export interface PendientePropinaDia {
   fecha: string;
-  monto: number;
+  montoEfectivo: number;
+  montoBanco: number;
 }
 
-/** Una persona a la que se le entrega parte del monto repartido — la suma de
- *  todas las entregas de un reparto debe dar exactamente el monto pendiente
- *  que se seleccionó. */
+/** Una persona a la que se le entrega parte del monto repartido, con el
+ *  método en que se le paga a ELLA (no tiene que coincidir con el método en
+ *  que vino la propina original) — la suma de las entregas en efectivo debe
+ *  dar exactamente el pendiente en efectivo seleccionado, y lo mismo banco. */
 export interface EntregaPropinaInput {
   nombrePersona: string;
+  metodoPago: "efectivo" | "banco";
   monto: number;
   fechaEntrega?: string;
   motivo?: string;
@@ -409,24 +415,20 @@ export const migaoApi = {
     apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
   // Historial aparte de propinas — exclusivo de Root/Super Root.
   listarPropinas: () => apiFetch<PropinaEntrada[]>("/migao/propinas"),
-  // Pendiente de un método agrupado por día — para elegir qué días concretos
-  // (una semana completa o sueltos) entran en el reparto.
-  obtenerPendientesPropinasPorDia: (metodoPago: "efectivo" | "banco") =>
-    apiFetch<PendientePropinaDia[]>(`/migao/propinas/pendientes-por-dia?metodoPago=${metodoPago}`),
-  // Reparte (liquida) las propinas pendientes de un método — efectivo y
-  // banco por separado, cada uno con su propia periodicidad. `fechas` deja
-  // elegir qué días concretos entran (sin mandarlo, reparte TODO lo
-  // pendiente). `entregas` desglosa el monto entre las personas del equipo —
-  // la suma de sus montos debe dar exactamente el total pendiente elegido.
-  repartirPropinas: (input: {
-    metodoPago: "efectivo" | "banco";
-    fechas?: string[];
-    nota?: string;
-    entregas: EntregaPropinaInput[];
-  }) => apiFetch<LiquidacionPropinas & { entregas: EntregaPropina[] }>("/migao/propinas/repartir", {
-    method: "POST",
-    body: input,
-  }),
+  // Pendiente por día (efectivo y banco desglosados) — para elegir qué días
+  // concretos (una semana completa o sueltos) entran en el reparto.
+  obtenerPendientesPropinasPorDia: () => apiFetch<PendientePropinaDia[]>("/migao/propinas/pendientes-por-dia"),
+  // Reparte (liquida) las propinas pendientes — un solo reparto cubre
+  // efectivo y banco a la vez. `fechas` deja elegir qué días concretos
+  // entran (sin mandarlo, reparte TODO lo pendiente). `entregas` desglosa el
+  // monto entre las personas del equipo, cada una con su propio método de
+  // pago — la suma de las entregas en efectivo debe dar exactamente el
+  // pendiente en efectivo elegido, y lo mismo banco.
+  repartirPropinas: (input: { fechas?: string[]; nota?: string; entregas: EntregaPropinaInput[] }) =>
+    apiFetch<LiquidacionPropinas & { entregas: EntregaPropina[] }>("/migao/propinas/repartir", {
+      method: "POST",
+      body: input,
+    }),
   // Historial de a quién se le entregó cuánto, en todas las liquidaciones.
   listarEntregasPropinas: () => apiFetch<EntregaPropina[]>("/migao/propinas/entregas"),
   obtenerResumenDiarioIngresos: () =>

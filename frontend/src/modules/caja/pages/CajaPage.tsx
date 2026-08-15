@@ -460,6 +460,7 @@ export function CajaPage() {
             camposEncabezado: [
               { etiqueta: "Turno abierto", valor: formatearHora(resumen.turno.abiertoEn) },
             ],
+            movimientos: resumen.movimientos,
             ingresos: agruparPorEtiqueta(resumen.movimientos, "ingreso").map(([etiqueta, monto]) => ({
               etiqueta,
               monto,

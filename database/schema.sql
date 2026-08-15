@@ -799,34 +799,46 @@ CREATE TABLE pagos (
   CHECK (orden_id IS NOT NULL OR venta_id IS NOT NULL)
 );
 
--- Reparto de propinas acumuladas al personal — por método de pago (efectivo/
--- banco por separado, cada uno con su propia periodicidad). Nunca borra
--- migao_propinas: las marca como liquidadas para que dejen de contar en el
--- "pendiente por repartir" — el historial de cada propina individual queda
--- intacto para siempre, solo se reinicia el acumulado pendiente.
+-- Reparto de propinas acumuladas al personal — un solo reparto puede cubrir
+-- efectivo y banco a la vez (montos separados), porque a quién se le paga en
+-- cada método lo decide cada entrega, no el reparto entero (ver
+-- migao_propinas_entregas.metodo_pago). Nunca borra migao_propinas: las
+-- marca como liquidadas para que dejen de contar en el "pendiente por
+-- repartir" — el historial de cada propina individual queda intacto para
+-- siempre, solo se reinicia el acumulado pendiente.
 CREATE TABLE migao_propinas_liquidaciones (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
-  monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
-  nota        VARCHAR(200),
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  monto_efectivo NUMERIC(12,2) NOT NULL DEFAULT 0,
+  monto_banco    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  -- No es GENERATED a propósito: la columna ya existía como valor normal
+  -- antes de este cambio (con datos reales en producción), y ALTER no puede
+  -- convertir una columna existente a generada — así que el service la
+  -- sigue calculando él mismo (monto_efectivo + monto_banco) al insertar,
+  -- igual en instalación nueva que en una ya existente.
+  monto          NUMERIC(12,2) NOT NULL,
+  nota           VARCHAR(200),
   -- Rango (min/max) de los días de propinas que se incluyeron en este reparto
   -- — NULL en liquidaciones viejas, de antes de poder elegir días concretos
   -- (esas repartían TODO lo pendiente sin filtro de fecha).
-  fecha_desde DATE,
-  fecha_hasta DATE,
-  usuario_id  UUID REFERENCES usuarios(id),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  fecha_desde    DATE,
+  fecha_hasta    DATE,
+  usuario_id     UUID REFERENCES usuarios(id),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (monto_efectivo > 0 OR monto_banco > 0)
 );
 
 -- Cómo se repartió el monto de una liquidación entre las personas del
--- equipo: una fila por persona/entrega, con su propia fecha (puede diferir
--- de created_at, ej. se registra unos días después) y motivo/mensaje libre.
--- La suma de sus montos debe ser igual al monto de la liquidación a la que
--- pertenecen (se valida en el backend al crearlas, no con un CHECK de BD).
+-- equipo: una fila por persona/entrega, con su propio método de pago (en qué
+-- se le entregó a ESA persona, independiente de en qué método vino la
+-- propina original), fecha (puede diferir de created_at, ej. se registra
+-- unos días después) y motivo/mensaje libre. La suma de los montos en
+-- efectivo debe dar exactamente monto_efectivo de la liquidación, y lo mismo
+-- para banco (se valida en el backend al crearlas, no con un CHECK de BD).
 CREATE TABLE migao_propinas_entregas (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   liquidacion_id  UUID NOT NULL REFERENCES migao_propinas_liquidaciones(id) ON DELETE CASCADE,
   nombre_persona  VARCHAR(120) NOT NULL,
+  metodo_pago     VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
   monto           NUMERIC(12,2) NOT NULL CHECK (monto > 0),
   fecha_entrega   DATE NOT NULL DEFAULT CURRENT_DATE,
   motivo          VARCHAR(300),

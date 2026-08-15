@@ -136,45 +136,51 @@ export async function listarPropinas() {
   return repo.listPropinas();
 }
 
-/** Pendiente de repartir de un método, agrupado por día — el panel de
+/** Pendiente de repartir por día, efectivo y banco desglosados — el panel de
  *  reparto lo usa para dejar elegir qué días concretos (una semana completa
  *  o sueltos) entran en el reparto. */
-export async function listarPendientesPropinasPorDia(metodoPago: "efectivo" | "banco") {
-  return repo.listPendientesPropinasPorDia(metodoPago);
+export async function listarPendientesPropinasPorDia() {
+  return repo.listPendientesPropinasPorDia();
 }
 
-/** Reparte (liquida) las propinas pendientes de UN método de pago — efectivo
- *  y banco se reparten por separado, cada uno con su propia periodicidad.
- *  Si `fechas` viene, solo cuenta lo pendiente de esos días (hora Colombia);
- *  si no, es TODO lo pendiente (comportamiento original). Nunca borra
- *  migao_propinas: las marca como liquidadas, así el "pendiente por
- *  repartir" de ese método/días baja sin perder el historial de cada propina
- *  individual. El monto liquidado se desglosa en `entregas` (quién recibió
- *  cuánto, con su propia fecha y motivo opcional) — la suma de las entregas
- *  tiene que dar EXACTAMENTE el monto pendiente, para que el historial por
- *  persona siempre cuadre con la plata real repartida. */
+/** Reparte (liquida) las propinas pendientes — un solo reparto cubre
+ *  efectivo y banco a la vez, cada `entrega` elige su propio método de pago
+ *  (en qué se le entrega a ESA persona, sin importar en qué método vino la
+ *  propina original). Si `fechas` viene, solo cuenta lo pendiente de esos
+ *  días (hora Colombia); si no, es TODO lo pendiente (comportamiento
+ *  original). Nunca borra migao_propinas: las marca como liquidadas, así el
+ *  "pendiente por repartir" de esos días baja sin perder el historial de
+ *  cada propina individual. La suma de las entregas en efectivo tiene que
+ *  dar EXACTAMENTE el pendiente en efectivo, y lo mismo para banco — cada
+ *  método sigue cuadrando aparte, aunque el reparto sea uno solo. */
 export async function repartirPropinas(usuarioId: string, input: RepartirPropinasInput) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const pendiente = await repo.sumPropinasPendientes(client, input.metodoPago, input.fechas);
-    if (pendiente <= 0) {
+    const pendiente = await repo.sumPropinasPendientes(client, input.fechas);
+    if (pendiente.efectivo <= 0 && pendiente.banco <= 0) {
       throw Errors.conflict(
-        `No hay propinas pendientes de ${input.metodoPago}${input.fechas?.length ? " en los días seleccionados" : ""} por repartir`,
+        `No hay propinas pendientes${input.fechas?.length ? " en los días seleccionados" : ""} por repartir`,
       );
     }
 
-    const sumaEntregas = input.entregas.reduce((acc, e) => acc + e.monto, 0);
-    if (Math.abs(sumaEntregas - pendiente) > 0.01) {
+    const sumaEfectivo = input.entregas.filter((e) => e.metodoPago === "efectivo").reduce((acc, e) => acc + e.monto, 0);
+    const sumaBanco = input.entregas.filter((e) => e.metodoPago === "banco").reduce((acc, e) => acc + e.monto, 0);
+    if (Math.abs(sumaEfectivo - pendiente.efectivo) > 0.01) {
       throw Errors.badRequest(
-        `La suma de las entregas (${sumaEntregas}) debe ser igual al total pendiente seleccionado (${pendiente})`,
+        `Las entregas en efectivo (${sumaEfectivo}) deben sumar igual al pendiente en efectivo (${pendiente.efectivo})`,
+      );
+    }
+    if (Math.abs(sumaBanco - pendiente.banco) > 0.01) {
+      throw Errors.badRequest(
+        `Las entregas en banco (${sumaBanco}) deben sumar igual al pendiente en banco (${pendiente.banco})`,
       );
     }
 
     const fechasOrdenadas = input.fechas?.length ? [...input.fechas].sort() : null;
     const liquidacion = await repo.crearLiquidacionPropinas(client, {
-      metodoPago: input.metodoPago,
-      monto: pendiente,
+      montoEfectivo: pendiente.efectivo,
+      montoBanco: pendiente.banco,
       nota: input.nota,
       usuarioId,
       fechaDesde: fechasOrdenadas?.[0] ?? null,
@@ -182,7 +188,6 @@ export async function repartirPropinas(usuarioId: string, input: RepartirPropina
     });
 
     await repo.marcarPropinasLiquidadas(client, {
-      metodoPago: input.metodoPago,
       liquidacionId: liquidacion.id,
       fechas: input.fechas,
     });
@@ -193,6 +198,7 @@ export async function repartirPropinas(usuarioId: string, input: RepartirPropina
         await repo.crearEntregaPropina(client, {
           liquidacionId: liquidacion.id,
           nombrePersona: entrega.nombrePersona,
+          metodoPago: entrega.metodoPago,
           monto: entrega.monto,
           fechaEntrega: entrega.fechaEntrega,
           motivo: entrega.motivo,

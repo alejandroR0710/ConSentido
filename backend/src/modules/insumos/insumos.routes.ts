@@ -9,6 +9,7 @@ import {
   listarAlmacenesController,
   listarInsumosAdminController,
   listarInsumosController,
+  listarMovimientosController,
   obtenerInsumoController,
   registrarMovimientoController,
   subirImagenInsumoController,
@@ -21,6 +22,9 @@ insumosRouter.use(authMiddleware);
 
 insumosRouter.get("/", requirePermission("insumos.insumos.ver"), asyncHandler(listarInsumosController));
 insumosRouter.get("/almacenes", requirePermission("insumos.insumos.ver"), asyncHandler(listarAlmacenesController));
+// Historial de movimientos (entrada/salida/transferencia/ajuste) — antes de
+// "/:id" para que no lo capture como id, mismo criterio que "/admin".
+insumosRouter.get("/movimientos", requirePermission("insumos.insumos.ver"), asyncHandler(listarMovimientosController));
 // Listado completo (incluye inactivos), antes de "/:id" para que no lo capture como id.
 insumosRouter.get(
   "/admin",

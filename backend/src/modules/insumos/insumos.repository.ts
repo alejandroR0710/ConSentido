@@ -171,6 +171,31 @@ export async function insertMovimiento(
   );
 }
 
+/** Historial de movimientos de insumos (entrada/salida/transferencia/ajuste)
+ *  para la sección de Insumos del dashboard — no existía forma de verlos,
+ *  solo de registrarlos. */
+export async function listMovimientos(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT mi.id, mi.tipo, mi.cantidad, mi.costo_unitario, mi.motivo, mi.created_at,
+            i.nombre AS insumo_nombre, i.unidad_medida,
+            a.nombre AS almacen_nombre,
+            ad.nombre AS almacen_destino_nombre,
+            p.nombre AS proveedor_nombre,
+            u.nombre AS usuario_nombre
+       FROM movimientos_insumo mi
+       JOIN insumos i ON i.id = mi.insumo_id
+       JOIN almacenes a ON a.id = mi.almacen_id
+       LEFT JOIN almacenes ad ON ad.id = mi.almacen_destino_id
+       LEFT JOIN proveedores p ON p.id = mi.proveedor_id
+       LEFT JOIN usuarios u ON u.id = mi.usuario_id
+      WHERE mi.created_at::date BETWEEN $1 AND $2
+      ORDER BY mi.created_at DESC
+      LIMIT 300`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
 export async function getStockMinimo(client: PoolClient, insumoId: string): Promise<number> {
   const result = await client.query(`SELECT stock_minimo FROM insumos WHERE id = $1`, [insumoId]);
   return Number(result.rows[0]?.stock_minimo ?? 0);

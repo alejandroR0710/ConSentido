@@ -46,6 +46,21 @@ export interface RegistrarMovimientoInput {
   almacenDestinoId?: number;
 }
 
+export interface MovimientoInsumo {
+  id: number;
+  tipo: "entrada" | "salida" | "transferencia" | "ajuste";
+  cantidad: string;
+  costo_unitario: string | null;
+  motivo: string | null;
+  created_at: string;
+  insumo_nombre: string;
+  unidad_medida: string;
+  almacen_nombre: string;
+  almacen_destino_nombre: string | null;
+  proveedor_nombre: string | null;
+  usuario_nombre: string | null;
+}
+
 export const insumosApi = {
   listar: () => apiFetch<Insumo[]>("/insumos"),
   listarAdmin: () => apiFetch<Insumo[]>("/insumos/admin"),
@@ -58,4 +73,6 @@ export const insumosApi = {
       method: "POST",
       body: data,
     }),
+  listarMovimientos: (desde: string, hasta: string) =>
+    apiFetch<MovimientoInsumo[]>(`/insumos/movimientos?desde=${desde}&hasta=${hasta}`),
 };

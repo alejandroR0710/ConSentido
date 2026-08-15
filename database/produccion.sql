@@ -261,6 +261,40 @@ END $$;
 
 
 -- ========================================================================
+-- SECCIÓN 2E: REPARTO DE PROPINAS UNIFICADO (efectivo + banco a la vez)
+-- ========================================================================
+-- Antes, cada reparto era de UN método completo (efectivo O banco). Ahora un
+-- solo reparto puede cubrir los dos montos pendientes a la vez, y cada
+-- entrega/persona elige su propio método de pago (en qué se le entrega a
+-- ESA persona, sin importar en qué método vino la propina original).
+ALTER TABLE migao_propinas_liquidaciones ADD COLUMN IF NOT EXISTS monto_efectivo NUMERIC(12,2);
+ALTER TABLE migao_propinas_liquidaciones ADD COLUMN IF NOT EXISTS monto_banco NUMERIC(12,2);
+-- Migra los repartos viejos (un solo método) a las columnas nuevas.
+UPDATE migao_propinas_liquidaciones SET monto_efectivo = monto WHERE metodo_pago = 'efectivo' AND monto_efectivo IS NULL;
+UPDATE migao_propinas_liquidaciones SET monto_banco = monto WHERE metodo_pago = 'banco' AND monto_banco IS NULL;
+UPDATE migao_propinas_liquidaciones SET monto_efectivo = COALESCE(monto_efectivo, 0), monto_banco = COALESCE(monto_banco, 0);
+ALTER TABLE migao_propinas_liquidaciones ALTER COLUMN monto_efectivo SET NOT NULL;
+ALTER TABLE migao_propinas_liquidaciones ALTER COLUMN monto_efectivo SET DEFAULT 0;
+ALTER TABLE migao_propinas_liquidaciones ALTER COLUMN monto_banco SET NOT NULL;
+ALTER TABLE migao_propinas_liquidaciones ALTER COLUMN monto_banco SET DEFAULT 0;
+-- metodo_pago queda en la tabla como columna vieja/informativa (liquidaciones
+-- de antes de este cambio), pero ya no es obligatoria — un reparto nuevo no
+-- la usa (queda NULL), la fuente de verdad pasa a ser monto_efectivo/monto_banco.
+ALTER TABLE migao_propinas_liquidaciones ALTER COLUMN metodo_pago DROP NOT NULL;
+
+ALTER TABLE migao_propinas_entregas ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(20) CHECK (metodo_pago IN ('efectivo','banco'));
+-- Migra las entregas viejas: heredan el método de su liquidación.
+UPDATE migao_propinas_entregas e
+   SET metodo_pago = l.metodo_pago
+  FROM migao_propinas_liquidaciones l
+ WHERE e.liquidacion_id = l.id AND e.metodo_pago IS NULL AND l.metodo_pago IS NOT NULL;
+-- Cualquier caso residual sin método heredable (no debería quedar ninguno,
+-- pero por si acaso) cae en efectivo antes de exigir NOT NULL.
+UPDATE migao_propinas_entregas SET metodo_pago = 'efectivo' WHERE metodo_pago IS NULL;
+ALTER TABLE migao_propinas_entregas ALTER COLUMN metodo_pago SET NOT NULL;
+
+
+-- ========================================================================
 -- SECCIÓN 3: PERMISOS DE CON SENTIDO (productos/clientes/ventas)
 -- ========================================================================
 -- Antes de esto, Con Sentido no tenía permisos propios: cualquier usuario

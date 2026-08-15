@@ -94,9 +94,8 @@ export async function listarPropinasController(_req: Request, res: Response) {
 
 // Pendiente de repartir de un método, agrupado por día — para elegir qué
 // días concretos entran en el reparto (ver PropinasPage).
-export async function listarPendientesPropinasPorDiaController(req: Request, res: Response) {
-  const metodoPago = req.query.metodoPago as "efectivo" | "banco";
-  const pendientes = await service.listarPendientesPropinasPorDia(metodoPago);
+export async function listarPendientesPropinasPorDiaController(_req: Request, res: Response) {
+  const pendientes = await service.listarPendientesPropinasPorDia();
   return ok(res, pendientes);
 }
 

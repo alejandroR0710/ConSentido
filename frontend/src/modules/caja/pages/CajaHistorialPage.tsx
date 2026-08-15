@@ -825,6 +825,7 @@ export function CajaHistorialPage() {
           {...resumenAReciboProps({
             fecha: new Date().toISOString(),
             camposEncabezado: [{ etiqueta: "Día", valor: diaSeleccionado.fecha }],
+            movimientos: movimientosDelDia,
             ingresos: agruparPorEtiqueta(movimientosDelDia, "ingreso").map(([etiqueta, monto]) => ({
               etiqueta,
               monto,

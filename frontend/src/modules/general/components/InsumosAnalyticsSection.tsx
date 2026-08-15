@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
+import { insumosApi, type MovimientoInsumo } from "../../insumos/api";
 import { analyticsApi, type AnalyticsInsumos } from "../api";
 
 type Rango = "hoy" | "semana" | "mes";
@@ -103,12 +104,83 @@ const RANGOS: { valor: Rango; etiqueta: string }[] = [
   { valor: "mes", etiqueta: "Mes" },
 ];
 
+const ETIQUETA_TIPO_MOVIMIENTO: Record<MovimientoInsumo["tipo"], string> = {
+  entrada: "Entrada",
+  salida: "Salida",
+  transferencia: "Transferencia",
+  ajuste: "Ajuste",
+};
+
+function formatearFechaHora(fechaIso: string) {
+  return new Date(fechaIso).toLocaleString("es", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Historial de entradas/salidas/transferencias/ajustes de insumos — antes
+ *  no había forma de verlo en ningún lado, solo de registrarlo. */
+function MovimientosTable({ movimientos, cargando }: { movimientos: MovimientoInsumo[]; cargando: boolean }) {
+  return (
+    <div>
+      <h4 className="mb-3 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+        Movimientos de insumos
+      </h4>
+      {cargando ? (
+        <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>
+      ) : movimientos.length === 0 ? (
+        <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Sin movimientos en este rango.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+              <tr>
+                <th className="px-3 py-2">Fecha</th>
+                <th className="px-3 py-2">Insumo</th>
+                <th className="px-3 py-2">Tipo</th>
+                <th className="px-3 py-2">Almacén</th>
+                <th className="px-3 py-2">Motivo</th>
+                <th className="px-3 py-2">Usuario</th>
+                <th className="px-3 py-2 text-right">Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movimientos.map((m) => (
+                <tr key={m.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
+                  <td className="px-3 py-2">{formatearFechaHora(m.created_at)}</td>
+                  <td className="px-3 py-2">{m.insumo_nombre}</td>
+                  <td className="px-3 py-2">{ETIQUETA_TIPO_MOVIMIENTO[m.tipo]}</td>
+                  <td className="px-3 py-2">
+                    {m.almacen_nombre}
+                    {m.almacen_destino_nombre ? ` → ${m.almacen_destino_nombre}` : ""}
+                  </td>
+                  <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
+                    {m.motivo ?? m.proveedor_nombre ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">{m.usuario_nombre ?? "—"}</td>
+                  <td
+                    className={`px-3 py-2 text-right font-medium ${
+                      m.tipo === "salida" ? "text-red-600" : "text-brand-green-600 dark:text-brand-vanilla"
+                    }`}
+                  >
+                    {m.tipo === "salida" ? "-" : "+"}
+                    {m.cantidad} {m.unidad_medida}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function InsumosAnalyticsSection() {
   const [datosHoy, setDatosHoy] = useState<AnalyticsInsumos | null>(null);
   const [datosSemana, setDatosSemana] = useState<AnalyticsInsumos | null>(null);
   const [datosMes, setDatosMes] = useState<AnalyticsInsumos | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rango, setRango] = useState<Rango>("semana");
+  const [movimientos, setMovimientos] = useState<MovimientoInsumo[]>([]);
+  const [cargandoMovimientos, setCargandoMovimientos] = useState(true);
 
   async function cargar() {
     setError(null);
@@ -129,13 +201,37 @@ export function InsumosAnalyticsSection() {
     }
   }
 
+  async function cargarMovimientos() {
+    setCargandoMovimientos(true);
+    try {
+      const { desde, hasta } = rangoFechas(rango);
+      setMovimientos(await insumosApi.listarMovimientos(desde, hasta));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron cargar los movimientos");
+    } finally {
+      setCargandoMovimientos(false);
+    }
+  }
+
   useEffect(() => {
     cargar();
     const intervalo = setInterval(cargar, POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
 
-  useRegistrarRefresco(cargar);
+  useEffect(() => {
+    cargarMovimientos();
+    const intervalo = setInterval(cargarMovimientos, POLL_MS);
+    return () => clearInterval(intervalo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rango]);
+
+  // Un solo registro: el botón de actualizar del header solo se queda con la
+  // última función registrada, así que hay que combinar las dos cargas acá
+  // en vez de llamar el hook dos veces (la segunda pisaría a la primera).
+  useRegistrarRefresco(async () => {
+    await Promise.all([cargar(), cargarMovimientos()]);
+  });
 
   const datosPorRango: Record<Rango, AnalyticsInsumos | null> = {
     hoy: datosHoy,
@@ -173,6 +269,8 @@ export function InsumosAnalyticsSection() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <RangoBlock titulo={tituloPorRango[rango]} datos={datosPorRango[rango]} />
+
+      <MovimientosTable movimientos={movimientos} cargando={cargandoMovimientos} />
     </div>
   );
 }

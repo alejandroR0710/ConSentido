@@ -18,6 +18,15 @@ export interface ReciboEtiquetaMonto {
   monto: number;
 }
 
+export interface ReciboDetalleMovimiento {
+  hora: string;
+  concepto: string;
+  metodoPago: string;
+  tipo: "ingreso" | "egreso";
+  monto: number;
+  numeroFactura?: string | null;
+}
+
 export interface ReciboImprimibleProps {
   // Solo la copia que de verdad se imprime lleva "recibo-imprimible" (ver
   // ModalImprimir.tsx) — la vista previa dentro del modal no lo lleva, para
@@ -41,7 +50,9 @@ export interface ReciboImprimibleProps {
   pagos?: ReciboPago[];
   total?: number;
   nota?: string | null;
-  // resumen de día/turno: desglose por área/categoría + balance
+  // resumen de día/turno: listado detallado movimiento por movimiento +
+  // desglose por área/categoría + balance
+  movimientosDetalle?: ReciboDetalleMovimiento[];
   resumenIngresos?: ReciboEtiquetaMonto[];
   resumenEgresos?: ReciboEtiquetaMonto[];
   anchoMm: 58 | 80;
@@ -86,6 +97,7 @@ export function ReciboImprimible({
   pagos,
   total,
   nota,
+  movimientosDetalle,
   resumenIngresos,
   resumenEgresos,
   anchoMm,
@@ -180,6 +192,39 @@ export function ReciboImprimible({
 
       {esResumen ? (
         <div className="my-2 flex flex-col gap-3 text-[16px]">
+          {movimientosDetalle && movimientosDetalle.length > 0 && (
+            <div>
+              <div className="mb-1 font-bold">Detalle de movimientos</div>
+              <table className="w-full text-[15px]">
+                <thead>
+                  <tr className="border-b border-dashed border-black">
+                    <th className="py-0.5 text-left font-semibold">Hora</th>
+                    <th className="py-0.5 text-left font-semibold">Concepto</th>
+                    <th className="py-0.5 text-right font-semibold">Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movimientosDetalle.map((m, idx) => (
+                    <tr key={idx}>
+                      <td className="py-0.5 pr-1 align-top">{m.hora}</td>
+                      <td className="py-0.5 pr-1 align-top">
+                        {m.concepto}
+                        <div className="text-[13px] font-normal capitalize">
+                          {m.metodoPago}
+                          {m.numeroFactura ? ` · ${m.numeroFactura}` : ""}
+                        </div>
+                      </td>
+                      <td className="py-0.5 text-right align-top">
+                        {m.tipo === "egreso" ? "-" : ""}
+                        {formatMoney(m.monto)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div>
             <div className="mb-1 font-bold">Ingresos</div>
             {(resumenIngresos ?? []).length === 0 ? (

@@ -2,6 +2,7 @@ import { PoolClient } from "pg";
 import { pool } from "../../shared/db/pool";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { Errors } from "../../shared/utils/app-error";
+import * as amasijosService from "./amasijos.service";
 import * as repo from "./inventario.repository";
 import {
   CrearInventarioProductoInput,
@@ -63,6 +64,11 @@ export async function eliminarProducto(id: string, rolId: number, forzar = false
  * lo escribe aplicarConsumoPorProducto. 'entrada' llega en paquetes (así los
  * entrega el proveedor) y se convierte a unidades; 'ajuste' ya viene en
  * unidades directas (puede ser negativo, para corregir un conteo).
+ *
+ * Si la entrada es de una "base" con receta configurada (ej. "Base Valluno"),
+ * se resuelve como preparación: descuenta los amasijos según la receta y da
+ * entrada a la base — da igual si se registra acá o desde el módulo de
+ * Amasijos, es el mismo código (ver amasijos.service.ts::prepararBaseSiAplica).
  */
 export async function registrarMovimiento(input: RegistrarMovimientoInventarioInput, usuarioId: string) {
   const producto = await repo.getProductoById(input.productoId);
@@ -70,6 +76,11 @@ export async function registrarMovimiento(input: RegistrarMovimientoInventarioIn
 
   const deltaUnidades =
     input.tipo === "entrada" ? input.paquetes * Number(producto.unidades_por_paquete) : input.unidades;
+
+  if (input.tipo === "entrada") {
+    const resultado = await amasijosService.prepararBaseSiAplica(input.productoId, deltaUnidades, input.motivo, usuarioId);
+    if (resultado) return resultado;
+  }
 
   const actualizado = await repo.ajustarStock(pool, input.productoId, deltaUnidades);
   const movimiento = await repo.insertMovimiento(pool, {
@@ -79,7 +90,7 @@ export async function registrarMovimiento(input: RegistrarMovimientoInventarioIn
     motivo: input.motivo,
     usuarioId,
   });
-  return { producto: actualizado, movimiento };
+  return { producto: actualizado, movimiento, alertasInventario: [] as string[] };
 }
 
 export async function listarMovimientos(productoId: string) {

@@ -607,15 +607,19 @@ export const migaoApi = {
     apiFetch<{ eliminado: boolean }>(`/migao/inventario/productos/${id}${forzar ? "?forzar=true" : ""}`, {
       method: "DELETE",
     }),
+  // Si la entrada es de una base con receta configurada (ej. "Base Valluno"),
+  // el backend la resuelve como preparación: descuenta los amasijos según la
+  // receta y devuelve sus avisos acá — mismo comportamiento que "Preparar"
+  // desde el módulo de Amasijos, sin importar desde dónde se registre.
   registrarMovimientoInventario: (
     input:
       | { tipo: "entrada"; productoId: string; paquetes: number; motivo?: string }
       | { tipo: "ajuste"; productoId: string; unidades: number; motivo: string },
   ) =>
-    apiFetch<{ producto: InventarioProducto; movimiento: InventarioMovimiento }>("/migao/inventario/movimientos", {
-      method: "POST",
-      body: input,
-    }),
+    apiFetch<{ producto: InventarioProducto; movimiento: InventarioMovimiento; alertasInventario: string[] }>(
+      "/migao/inventario/movimientos",
+      { method: "POST", body: input },
+    ),
   listarMovimientosInventario: (productoId: string) =>
     apiFetch<InventarioMovimiento[]>(`/migao/inventario/productos/${productoId}/movimientos`),
 

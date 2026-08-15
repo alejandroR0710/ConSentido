@@ -31,6 +31,7 @@ export function AmasijosPage() {
   const [recetas, setRecetas] = useState<RecetaLinea[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [avisos, setAvisos] = useState<string[]>([]);
 
   // Compra de amasijos/bases (entrada al inventario general)
   const [modalEntradaAbierto, setModalEntradaAbierto] = useState(false);
@@ -100,14 +101,17 @@ export function AmasijosPage() {
     try {
       // Estos productos siempre tienen 1 unidad por "paquete" (se compran por
       // unidad/bolsa suelta) — reusa el mismo endpoint que ya usa el
-      // Inventario general de Migao, nada nuevo que mantener.
-      await migaoApi.registrarMovimientoInventario({
+      // Inventario general de Migao, nada nuevo que mantener. Si el producto
+      // es una base con receta, el backend la resuelve como preparación y
+      // puede devolver avisos (ej. amasijo sin stock suficiente).
+      const resultado = await migaoApi.registrarMovimientoInventario({
         tipo: "entrada",
         productoId: entradaProductoId,
         paquetes: entradaCantidad,
         motivo: entradaMotivo.trim() || undefined,
       });
       setModalEntradaAbierto(false);
+      setAvisos(resultado.alertasInventario ?? []);
       await cargar();
     } catch (err) {
       setErrorEntrada(err instanceof ApiError ? err.message : "No se pudo registrar la compra");
@@ -131,8 +135,9 @@ export function AmasijosPage() {
     setGuardandoPreparar(true);
     setErrorPreparar(null);
     try {
-      await migaoApi.prepararBase({ baseProductoId: prepararBaseId, cantidad: prepararCantidad });
+      const resultado = await migaoApi.prepararBase({ baseProductoId: prepararBaseId, cantidad: prepararCantidad });
       setModalPrepararAbierto(false);
+      setAvisos(resultado.alertas ?? []);
       await cargar();
     } catch (err) {
       setErrorPreparar(err instanceof ApiError ? err.message : "No se pudo registrar la preparación");
@@ -197,6 +202,16 @@ export function AmasijosPage() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {avisos.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+          {avisos.map((a, i) => (
+            <p key={i}>{a}</p>
+          ))}
+          <button onClick={() => setAvisos([])} className="mt-1 text-xs underline">
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>

@@ -107,20 +107,32 @@ export async function obtenerRecomendaciones(): Promise<RecomendacionBase[]> {
 }
 
 /**
- * Prepara `cantidad` bases: por cada línea de la receta, descuenta del
- * amasijo lo que haga falta y le da entrada a la base — usa el mismo
- * ajustarStock/insertMovimiento del inventario general, nunca bloquea (si
- * algún amasijo queda en negativo, solo se avisa).
+ * Si `productoId` es una base con receta configurada (tiene filas en
+ * migao_base_recetas), registrar su "entrada" se resuelve como preparación:
+ * descuenta cada amasijo según la receta y le da entrada a la base, todo en
+ * una sola transacción — nunca bloquea, si algún amasijo queda en negativo
+ * solo se avisa. Si el producto NO tiene receta (es un amasijo suelto, una
+ * torta, un queso...), devuelve null y el llamador sigue con una entrada de
+ * stock normal, sin tocar nada más.
+ *
+ * Único punto de esta lógica: lo usa tanto "Preparar bases" del módulo de
+ * Amasijos como registrar una entrada desde el Inventario general de Migao
+ * — da igual desde dónde se registre, el resultado es el mismo (ver
+ * inventario.service.ts::registrarMovimiento).
  */
-export async function prepararBase(baseProductoId: string, cantidad: number, usuarioId: string) {
+export async function prepararBaseSiAplica(
+  baseProductoId: string,
+  cantidad: number,
+  motivo: string | undefined,
+  usuarioId: string,
+) {
   const recetaResult = await pool.query(
     `SELECT amasijo_producto_id, cantidad_amasijo FROM migao_base_recetas WHERE base_producto_id = $1`,
     [baseProductoId],
   );
-  if (recetaResult.rowCount === 0) {
-    throw Errors.badRequest("Esta base todavía no tiene receta — agrégale al menos un amasijo antes de prepararla");
-  }
+  if (recetaResult.rowCount === 0) return null;
 
+  const motivoFinal = motivo?.trim() || `Preparación de ${cantidad} base(s)`;
   const client = await pool.connect();
   const alertas: string[] = [];
   try {
@@ -133,7 +145,7 @@ export async function prepararBase(baseProductoId: string, cantidad: number, usu
         productoId: linea.amasijo_producto_id,
         tipo: "consumo",
         cantidadUnidades: -cantidadNecesaria,
-        motivo: `Preparación de ${cantidad} base(s)`,
+        motivo: motivoFinal,
         referenciaEntidad: "preparacion_base",
         referenciaId: baseProductoId,
         usuarioId,
@@ -143,24 +155,33 @@ export async function prepararBase(baseProductoId: string, cantidad: number, usu
       }
     }
 
-    await inventarioRepo.ajustarStock(client, baseProductoId, cantidad);
-    await inventarioRepo.insertMovimiento(client, {
+    const producto = await inventarioRepo.ajustarStock(client, baseProductoId, cantidad);
+    const movimiento = await inventarioRepo.insertMovimiento(client, {
       productoId: baseProductoId,
       tipo: "entrada",
       cantidadUnidades: cantidad,
-      motivo: `Preparación de ${cantidad} base(s)`,
+      motivo: motivoFinal,
       referenciaEntidad: "preparacion_base",
       usuarioId,
     });
 
     await client.query("COMMIT");
-    return { baseProductoId, cantidad, alertas };
+    return { producto, movimiento, alertasInventario: alertas };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+/** Usado por el botón "Preparar" del módulo de Amasijos. */
+export async function prepararBase(baseProductoId: string, cantidad: number, usuarioId: string) {
+  const resultado = await prepararBaseSiAplica(baseProductoId, cantidad, undefined, usuarioId);
+  if (!resultado) {
+    throw Errors.badRequest("Esta base todavía no tiene receta — agrégale al menos un amasijo antes de prepararla");
+  }
+  return { baseProductoId, cantidad, alertas: resultado.alertasInventario };
 }
 
 export async function obtenerRecetas() {

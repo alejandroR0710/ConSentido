@@ -25,6 +25,11 @@ export async function prepararBaseController(req: Request, res: Response) {
   return created(res, resultado);
 }
 
+export async function prepararRecomendadoController(req: Request, res: Response) {
+  const resultado = await amasijosService.prepararRecomendado(req.auth!.usuarioId);
+  return created(res, resultado);
+}
+
 export async function obtenerRecetasController(_req: Request, res: Response) {
   return ok(res, await amasijosService.obtenerRecetas());
 }

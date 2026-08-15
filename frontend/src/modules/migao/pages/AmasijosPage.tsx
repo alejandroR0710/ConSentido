@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type AmasijoInventario, type RecetaLinea, type RecomendacionBase } from "../api";
+import { migaoApi, type AmasijoInventario, type PreparacionLote, type RecetaLinea, type RecomendacionBase } from "../api";
 
 const POLL_MS = 15000;
 
@@ -41,12 +41,21 @@ export function AmasijosPage() {
   const [guardandoEntrada, setGuardandoEntrada] = useState(false);
   const [errorEntrada, setErrorEntrada] = useState<string | null>(null);
 
-  // Preparación de bases (consume amasijos según receta, da entrada a la base)
+  // Preparación manual de UNA base puntual (consume amasijos según receta,
+  // da entrada a la base) — distinto del lote recomendado de abajo.
   const [modalPrepararAbierto, setModalPrepararAbierto] = useState(false);
   const [prepararBaseId, setPrepararBaseId] = useState("");
   const [prepararCantidad, setPrepararCantidad] = useState(0);
   const [guardandoPreparar, setGuardandoPreparar] = useState(false);
   const [errorPreparar, setErrorPreparar] = useState<string | null>(null);
+
+  // Preparar TODO lo recomendado de una sola vez — un solo botón/modal en
+  // vez de un botón por base, así nunca se prepara una base a mano y deja
+  // la recomendación de las otras 3 desactualizada (comparten amasijos).
+  const [modalLoteAbierto, setModalLoteAbierto] = useState(false);
+  const [guardandoLote, setGuardandoLote] = useState(false);
+  const [errorLote, setErrorLote] = useState<string | null>(null);
+  const [resultadoLote, setResultadoLote] = useState<PreparacionLote[] | null>(null);
 
   // Editor de recetas
   const [modalRecetaAbierto, setModalRecetaAbierto] = useState(false);
@@ -120,9 +129,9 @@ export function AmasijosPage() {
     }
   }
 
-  function abrirModalPreparar(baseProductoId?: string, cantidadSugerida?: number) {
+  function abrirModalPreparar(baseProductoId?: string) {
     setPrepararBaseId(baseProductoId ?? "");
-    setPrepararCantidad(cantidadSugerida ?? 0);
+    setPrepararCantidad(0);
     setErrorPreparar(null);
     setModalPrepararAbierto(true);
   }
@@ -143,6 +152,32 @@ export function AmasijosPage() {
       setErrorPreparar(err instanceof ApiError ? err.message : "No se pudo registrar la preparación");
     } finally {
       setGuardandoPreparar(false);
+    }
+  }
+
+  function abrirModalLote() {
+    setResultadoLote(null);
+    setErrorLote(null);
+    setModalLoteAbierto(true);
+  }
+
+  /** Confirma el lote completo: recalcula y aplica en el backend, dentro de
+   *  una sola transacción bloqueada — el número que se ve acá es una vista
+   *  previa, lo que de verdad se prepara puede variar un poco si el stock
+   *  cambió justo entre abrir el modal y confirmar (ej. una venta de por
+   *  medio), nunca al revés de lo que el backend decida en ese instante. */
+  async function confirmarPrepararLote() {
+    setGuardandoLote(true);
+    setErrorLote(null);
+    try {
+      const resultado = await migaoApi.prepararRecomendado();
+      setResultadoLote(resultado);
+      setAvisos(resultado.flatMap((r) => r.alertasInventario));
+      await cargar();
+    } catch (err) {
+      setErrorLote(err instanceof ApiError ? err.message : "No se pudo preparar el lote recomendado");
+    } finally {
+      setGuardandoLote(false);
     }
   }
 
@@ -219,9 +254,24 @@ export function AmasijosPage() {
         <>
           {/* Panel de Recomendaciones */}
           <div className="rounded-lg border border-brand-vanilla-dark bg-white p-6 dark:border-brand-green-700 dark:bg-brand-green-900/40">
-            <h2 className="mb-4 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
-              Recomendación de Preparación
-            </h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                Recomendación de Preparación
+              </h2>
+              {recomendaciones.some((r) => r.cantidadRecomendada > 0) && (
+                <button
+                  onClick={abrirModalLote}
+                  className="rounded-md bg-brand-green-700 px-3 py-2 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600"
+                >
+                  Preparar todo lo recomendado
+                </button>
+              )}
+            </div>
+            <p className="-mt-2 mb-4 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Las 4 recetas comparten los mismos amasijos, así que estos números ya vienen repartidos entre ellas —
+              prepáralos todos juntos con el botón de arriba, no una base a la vez (preparar una sola desactualiza el
+              cupo que les queda a las demás).
+            </p>
             {recomendaciones.length === 0 ? (
               <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
                 Ninguna base tiene receta todavía — agrégale ingredientes a una base más abajo.
@@ -254,15 +304,6 @@ export function AmasijosPage() {
                           </p>
                         ))}
                       </div>
-                    )}
-
-                    {rec.cantidadRecomendada > 0 && (
-                      <button
-                        onClick={() => abrirModalPreparar(rec.baseProductoId, rec.cantidadRecomendada)}
-                        className="mt-3 w-full rounded-md bg-brand-green-700 px-2 py-1.5 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600"
-                      >
-                        Preparar {rec.cantidadRecomendada}
-                      </button>
                     )}
                   </div>
                 ))}
@@ -446,6 +487,59 @@ export function AmasijosPage() {
             >
               {guardandoPreparar ? "Guardando..." : "Preparar"}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {modalLoteAbierto && (
+        <Modal titulo="Preparar todo lo recomendado" onCerrar={() => setModalLoteAbierto(false)}>
+          <div className="flex flex-col gap-3">
+            {resultadoLote ? (
+              <>
+                <p className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">
+                  ✓ Listo, se preparó:
+                </p>
+                {resultadoLote.map((r) => (
+                  <div key={r.baseProductoId} className="flex items-center justify-between text-sm">
+                    <span className="text-brand-ink dark:text-brand-vanilla">{r.baseNombre}</span>
+                    <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                      {r.cantidadPreparada}
+                    </span>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setModalLoteAbierto(false)}
+                  className="mt-2 w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+                  Se va a preparar de una sola vez, descontando de los amasijos compartidos y respetando el stock
+                  mínimo de cada uno:
+                </p>
+                {recomendaciones
+                  .filter((r) => r.cantidadRecomendada > 0)
+                  .map((r) => (
+                    <div key={r.baseProductoId} className="flex items-center justify-between text-sm">
+                      <span className="text-brand-ink dark:text-brand-vanilla">{r.baseNombre}</span>
+                      <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                        {r.cantidadRecomendada}
+                      </span>
+                    </div>
+                  ))}
+                {errorLote && <p className="text-sm text-red-600">{errorLote}</p>}
+                <button
+                  onClick={confirmarPrepararLote}
+                  disabled={guardandoLote}
+                  className="mt-2 w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                >
+                  {guardandoLote ? "Preparando..." : "Confirmar y preparar todo"}
+                </button>
+              </>
+            )}
           </div>
         </Modal>
       )}

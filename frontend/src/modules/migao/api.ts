@@ -452,6 +452,16 @@ export interface RecomendacionBase {
   }>;
 }
 
+/** Resultado de preparar TODO el lote recomendado de una vez — una fila por
+ *  cada base que sí tenía algo recomendado (cantidadRecomendada === 0 no
+ *  aparece acá). */
+export interface PreparacionLote {
+  baseProductoId: string;
+  baseNombre: string;
+  cantidadPreparada: number;
+  alertasInventario: string[];
+}
+
 // Receta de una base: qué amasijos (y cuánto de cada uno) hacen falta para
 // prepararla — se edita desde la pantalla de Amasijos.
 export interface RecetaLinea {
@@ -739,6 +749,11 @@ export const migaoApi = {
       method: "POST",
       body: input,
     }),
+  // Prepara TODAS las bases recomendadas de una sola vez, en un solo lote
+  // atómico — evita el problema de preparar una base a la vez (consumiría
+  // amasijos que las demás recetas también necesitan, dejando la
+  // recomendación de las otras 3 desactualizada a mitad de camino).
+  prepararRecomendado: () => apiFetch<PreparacionLote[]>("/migao/bases/preparar-recomendado", { method: "POST" }),
   obtenerRecetas: () => apiFetch<RecetaLinea[]>("/migao/recetas"),
   crearRecetaLinea: (input: { baseProductoId: string; amasijoProductoId: string; cantidadAmasijo: number }) =>
     apiFetch<{ id: string }>("/migao/recetas", { method: "POST", body: input }),

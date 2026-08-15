@@ -68,6 +68,7 @@ import {
   obtenerBasesController,
   obtenerRecomendacionesController,
   prepararBaseController,
+  prepararRecomendadoController,
   obtenerRecetasController,
   crearRecetaLineaController,
   actualizarRecetaLineaController,
@@ -405,6 +406,15 @@ migaoRouter.post(
   "/bases/preparar",
   requirePermission("migao.amasijos.administrar"),
   asyncHandler(prepararBaseController),
+);
+
+// Prepara TODAS las bases recomendadas de una sola vez, en un solo lote
+// atómico — evita que preparar una base a mano desactualice la
+// recomendación de las demás (comparten el mismo cupo de amasijos).
+migaoRouter.post(
+  "/bases/preparar-recomendado",
+  requirePermission("migao.amasijos.administrar"),
+  asyncHandler(prepararRecomendadoController),
 );
 
 // Recetas de bases (qué amasijos y cuánto arma cada una)

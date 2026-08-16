@@ -201,6 +201,14 @@ export function CajaPage() {
               <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
                 {formatearMoneda(resumen.ingresosEfectivo - resumen.egresosEfectivo)}
               </div>
+              <div className="mt-2 border-t border-dashed border-amber-300 pt-2 dark:border-amber-700">
+                <div className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Con propina del día
+                </div>
+                <div className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                  {formatearMoneda(resumen.ingresosEfectivo - resumen.egresosEfectivo + propinasHoy.montoEfectivo)}
+                </div>
+              </div>
             </div>
             <div className="rounded-lg border border-brand-vanilla-dark p-4 text-center dark:border-brand-green-700">
               <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -208,6 +216,14 @@ export function CajaPage() {
               </div>
               <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
                 {formatearMoneda(resumen.saldos.banco)}
+              </div>
+              <div className="mt-2 border-t border-dashed border-amber-300 pt-2 dark:border-amber-700">
+                <div className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Con propina del día
+                </div>
+                <div className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                  {formatearMoneda(resumen.saldos.banco + propinasHoy.montoBanco)}
+                </div>
               </div>
             </div>
             <div className="rounded-lg border-2 border-brand-green-600 p-4 text-center dark:border-brand-green-500">

@@ -326,7 +326,11 @@ export function ReciboImprimible({
             )}
             <div className="flex justify-between text-lg font-bold">
               <span>TOTAL</span>
-              <span>{formatMoney(total ?? 0)}</span>
+              {/* La propina es plata aparte del mesero (nunca entra a `total`,
+                  que es lo que de verdad ingresó a Caja General) — pero en el
+                  papel impreso el cliente espera ver cuánto entregó en total,
+                  cuenta + propina incluida. */}
+              <span>{formatMoney((total ?? 0) + (propina?.monto ?? 0))}</span>
             </div>
           </>
         )}

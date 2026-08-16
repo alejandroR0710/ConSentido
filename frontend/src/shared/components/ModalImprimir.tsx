@@ -100,6 +100,14 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
        */}
       {createPortal(
         <div className="hidden print:block">
+          {/* Alto "auto": la impresora térmica es un rollo continuo, no una
+              hoja de tamaño fijo — sin esto el navegador paginaba a una
+              altura estándar (ej. carta) y, si el recibo era más largo,
+              partía el contenido en una "página 2" que repetía encabezado
+              y título de la tabla (comportamiento normal del navegador con
+              <thead> al paginar). Ancho dinámico porque el cajero puede
+              cambiarlo (58mm/80mm) sin recargar. */}
+          <style>{`@page { size: ${anchoMm}mm auto; margin: 0; }`}</style>
           <ReciboImprimible
             {...recibo}
             anchoMm={anchoMm}

@@ -217,28 +217,54 @@ export function CajaPage() {
               <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
                 {formatearMoneda(resumen.saldos.general)}
               </div>
+              {/* Aparte, en otro color: cuánto sería el total si se cuenta
+                  también la propina del día (esa plata nunca cuenta para el
+                  cuadre de arriba, es del mesero/personal, ver cuadro de abajo). */}
+              <div className="mt-2 border-t border-dashed border-amber-300 pt-2 dark:border-amber-700">
+                <div className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Con propinas del día
+                </div>
+                <div className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                  {formatearMoneda(resumen.saldos.general + propinasHoy.montoEfectivo + propinasHoy.montoBanco)}
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Aparte del cuadre de arriba (esta plata nunca cuenta para Caja
               General) — cuánto entró HOY en propina, efectivo y banco. */}
           <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/20">
-            <div className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">
-              Propinas de hoy (aparte del cuadre)
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              💵 Propinas de hoy
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1">
-              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
-                Efectivo <span className="font-bold">{formatearMoneda(propinasHoy.montoEfectivo)}</span>
-              </span>
-              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
-                Banco <span className="font-bold">{formatearMoneda(propinasHoy.montoBanco)}</span>
-              </span>
-              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
-                Total{" "}
-                <span className="font-bold">
+            <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+              Aparte del cuadre — dinero del mesero/personal, no cuenta para Caja General.
+            </div>
+            <div className="mt-3 grid grid-cols-3 divide-x divide-amber-300 dark:divide-amber-700">
+              <div className="text-center">
+                <div className="text-[11px] uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80">
+                  Efectivo
+                </div>
+                <div className="text-xl font-bold text-amber-700 dark:text-amber-400">
+                  {formatearMoneda(propinasHoy.montoEfectivo)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-[11px] uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80">
+                  Banco
+                </div>
+                <div className="text-xl font-bold text-amber-700 dark:text-amber-400">
+                  {formatearMoneda(propinasHoy.montoBanco)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-[11px] uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80">
+                  Total
+                </div>
+                <div className="text-xl font-bold text-amber-700 dark:text-amber-400">
                   {formatearMoneda(propinasHoy.montoEfectivo + propinasHoy.montoBanco)}
-                </span>
-              </span>
+                </div>
+              </div>
             </div>
           </div>
 

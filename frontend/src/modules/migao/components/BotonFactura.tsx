@@ -1,17 +1,22 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
+import { cajaApi } from "../../caja/api";
+import { facturaCajaAReciboProps } from "../../caja/factura";
 import { conSentidoApi } from "../../con_sentido/api";
 import { migaoApi } from "../api";
 import { facturaAReciboProps } from "../factura";
 
-// "orden"/"venta" son de Migao (una orden cerrada genera una venta); "venta_con_sentido"
-// es el flujo de venta directa de Con Sentido — cada uno pega contra su propio
-// endpoint de factura, pero ambos devuelven el mismo formato normalizado.
+// "orden"/"venta" son de Migao (una orden cerrada genera una venta);
+// "venta_con_sentido" es el flujo de venta directa de Con Sentido;
+// "venta_caja" es un ingreso manual registrado directo desde Caja General
+// (ver caja.service.ts::registrarIngresoManual) — cada uno pega contra su
+// propio endpoint de factura, pero todos terminan en el mismo modal de impresión.
 type OrigenFactura =
   | { tipo: "orden"; id: string }
   | { tipo: "venta"; id: string }
-  | { tipo: "venta_con_sentido"; id: string };
+  | { tipo: "venta_con_sentido"; id: string }
+  | { tipo: "venta_caja"; id: string };
 
 interface BotonFacturaProps {
   origen: OrigenFactura;
@@ -33,6 +38,10 @@ export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonF
     setCargando(true);
     setError(null);
     try {
+      if (origen.tipo === "venta_caja") {
+        setRecibo(facturaCajaAReciboProps(await cajaApi.obtenerFacturaVenta(origen.id)));
+        return;
+      }
       const factura =
         origen.tipo === "orden"
           ? await migaoApi.obtenerFactura(origen.id)

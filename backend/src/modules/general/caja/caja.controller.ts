@@ -48,6 +48,11 @@ export async function registrarIngresoController(req: Request, res: Response) {
   return created(res, movimientos);
 }
 
+export async function obtenerFacturaVentaManualController(req: Request, res: Response) {
+  const factura = await service.obtenerFacturaVentaManual(req.params.id);
+  return ok(res, factura);
+}
+
 export async function registrarEgresoController(req: Request, res: Response) {
   const data = registrarEgresoSchema.parse(req.body);
   const movimientos = await service.registrarEgreso(data, req.auth!.usuarioId);

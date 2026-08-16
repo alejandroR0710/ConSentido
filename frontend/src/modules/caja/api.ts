@@ -9,6 +9,14 @@ export type PagoInput =
   | { metodoPago: "efectivo" | "banco"; monto: number }
   | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
 
+// Ítem libre (modo "Agregar productos" del ingreso manual) — nombre en vez
+// de producto_id, no hay catálogo detrás (ver caja_ingreso_items en schema.sql).
+export interface ItemIngresoInput {
+  nombre: string;
+  cantidad: number;
+  precioUnitario: number;
+}
+
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente
 // el total no cambia, solo cómo se reparte entre los dos métodos.
 // `moduloOrigenSlug` es independiente del método: corrige de qué área viene
@@ -176,6 +184,29 @@ export interface EdicionHistorialCaja {
   createdAt: string;
 }
 
+// Todo ingreso manual registrado desde Caja General genera su propia venta +
+// factura con folio consecutivo (ver caja.service.ts::registrarIngresoManual)
+// — a diferencia de un ingreso que ya viene de otro módulo (Migao, Con
+// Sentido), que sigue solo como movimientos_caja sin pasar por acá.
+export interface RegistrarIngresoResultado {
+  movimientos: MovimientoCaja[];
+  venta: { id: string };
+  factura: { numero: string };
+}
+
+export interface FacturaVentaManual {
+  numeroFactura: string;
+  fecha: string;
+  moduloOrigenSlug: string | null;
+  usuarioNombre: string | null;
+  items: { nombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+  subtotal: number;
+  descuentoPorcentaje: number;
+  descuentoMonto: number;
+  total: number;
+  pagos: { metodoPago: string; monto: number; referencia: string | null }[];
+}
+
 export const cajaApi = {
   obtenerTurnoActual: () => apiFetch<TurnoCaja | null>("/caja/turno-actual"),
   abrirTurno: (montoInicialEfectivo?: number, montoInicialBanco?: number) =>
@@ -189,9 +220,18 @@ export const cajaApi = {
       body: { montoFinalDeclaradoEfectivo },
     }),
   obtenerResumenTurno: (turnoId: string) => apiFetch<ResumenTurno>(`/caja/turnos/${turnoId}/resumen`),
+  // Todo ingreso registrado desde acá (sin referenciaEntidad: eso es exclusivo
+  // de otros módulos llamando internamente) genera su propia venta+factura —
+  // ver RegistrarIngresoResultado.
   registrarIngreso: (
-    input: { moduloOrigenSlug: ModuloOrigenSlug; motivo?: string; descuentoPorcentaje?: number } & PagoInput,
-  ) => apiFetch<MovimientoCaja[]>("/caja/ingresos", { method: "POST", body: input }),
+    input: {
+      moduloOrigenSlug: ModuloOrigenSlug;
+      motivo?: string;
+      descuentoPorcentaje?: number;
+      items?: ItemIngresoInput[];
+    } & PagoInput,
+  ) => apiFetch<RegistrarIngresoResultado>("/caja/ingresos", { method: "POST", body: input }),
+  obtenerFacturaVenta: (ventaId: string) => apiFetch<FacturaVentaManual>(`/caja/ventas/${ventaId}/factura`),
   registrarEgreso: (input: { categoriaGastoId: number; motivo: string; proveedorId?: string } & PagoInput) =>
     apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
   // Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día, y no

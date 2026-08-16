@@ -758,6 +758,32 @@ END $$;
 
 
 -- ========================================================================
+-- SECCIÓN 11: INGRESO CON PRODUCTOS SUELTOS EN CAJA GENERAL (genera factura)
+-- ========================================================================
+-- "Registrar ingreso" ahora puede armarse con líneas libres (nombre+cantidad+
+-- precio, modo "Agregar productos") en vez de un solo monto — igual que ya
+-- hacía Cotizaciones. A diferencia de un ingreso manual de antes (un simple
+-- comprobante en movimientos_caja), TODO ingreso registrado desde acá genera
+-- su propia venta + factura con folio consecutivo (F-000123, mismo criterio
+-- que Migao/Con Sentido), imprimible desde el historial.
+CREATE TABLE IF NOT EXISTS caja_ingreso_items (
+  id              BIGSERIAL PRIMARY KEY,
+  venta_id        UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+  nombre          VARCHAR(150) NOT NULL,
+  cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_unitario NUMERIC(12,2) NOT NULL,
+  subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED
+);
+CREATE INDEX IF NOT EXISTS idx_caja_ingreso_items_venta ON caja_ingreso_items(venta_id);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+    GRANT SELECT, INSERT ON caja_ingreso_items TO usuario;
+  END IF;
+END $$;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

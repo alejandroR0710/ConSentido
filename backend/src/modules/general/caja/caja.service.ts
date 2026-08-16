@@ -85,14 +85,27 @@ async function turnoAbiertoOrThrow(executor: Pool | PoolClient) {
  * Registra un ingreso en la caja abierta. Acepta un `executor` (PoolClient) opcional
  * para que otros módulos (ej. Migao al cerrar una orden) lo incluyan en su misma
  * transacción: si el cierre de la orden falla, el ingreso también se revierte.
+ *
+ * Un ingreso SIN `referenciaEntidad` es manual, registrado directo desde
+ * Caja General (el botón "Registrar ingreso") — a diferencia de los que ya
+ * vienen con una venta hecha en otro módulo (Migao, Con Sentido...), este
+ * genera su PROPIA venta + factura con folio consecutivo (ver
+ * registrarIngresoManual), en vez de quedar como un simple comprobante suelto.
  */
-/** "mixto" se descompone en 1-2 movimientos ya con método puro (ver
- *  descomponerPago) — nunca se guarda "mixto" como tal en la base. */
 export async function registrarIngreso(
   input: RegistrarIngresoInput,
   usuarioId: string,
   executor: Pool | PoolClient = pool,
 ) {
+  if (!input.referenciaEntidad) {
+    return registrarIngresoManual(input, usuarioId);
+  }
+  return insertarMovimientosIngreso(input, usuarioId, executor);
+}
+
+/** "mixto" se descompone en 1-2 movimientos ya con método puro (ver
+ *  descomponerPago) — nunca se guarda "mixto" como tal en la base. */
+async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioId: string, executor: Pool | PoolClient) {
   const turno = await turnoAbiertoOrThrow(executor);
   const partes = descomponerPago(input);
   const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
@@ -119,6 +132,117 @@ export async function registrarIngreso(
     );
   }
   return movimientos;
+}
+
+/**
+ * Ingreso manual sin venta de otro módulo detrás — genera su propia venta +
+ * factura con folio consecutivo (mismo criterio que Migao/Con Sentido: la
+ * factura se crea apenas se registra, no solo al pedirla para imprimir).
+ * `referenciaEntidad` se marca 'caja_ventas' (no 'ventas', que ya usa Migao)
+ * para poder distinguir esta venta —sin orden_id, sin venta_items reales—
+ * de una venta real de Migao al decidir a qué endpoint de factura pegarle.
+ * Todo en una sola transacción: venta, ítems (si los hay), factura, pagos y
+ * los movimientos de Caja.
+ */
+async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const turno = await turnoAbiertoOrThrow(client);
+
+    const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
+    const partes = descomponerPago(input);
+    const totalNeto = partes.reduce((acc, p) => acc + p.monto, 0);
+    const totalBruto = descuentoPorcentaje > 0 ? totalNeto / (1 - descuentoPorcentaje / 100) : totalNeto;
+    const descuentoMonto = totalBruto - totalNeto;
+
+    const items =
+      input.items && input.items.length > 0
+        ? input.items
+        : [{ nombre: input.motivo?.trim() || "Ingreso registrado", cantidad: 1, precioUnitario: totalBruto }];
+
+    const venta = await repo.crearVentaManual(client, {
+      moduloOrigenSlug: input.moduloOrigenSlug,
+      usuarioId,
+      subtotal: totalBruto,
+      descuento: descuentoMonto,
+      descuentoPorcentaje,
+      total: totalNeto,
+    });
+    await repo.crearIngresoItems(client, venta.id, items);
+    const factura = await repo.getOrCrearFacturaVenta({ ventaId: venta.id, subtotal: totalBruto, total: totalNeto }, client);
+
+    const movimientos = [];
+    for (const parte of partes) {
+      const montoSinDescuento = descuentoPorcentaje > 0 ? parte.monto / (1 - descuentoPorcentaje / 100) : undefined;
+      await repo.crearPagoParaVenta(client, {
+        ordenId: null,
+        ventaId: venta.id,
+        metodoPago: parte.metodoPago,
+        monto: parte.monto,
+        referencia: input.motivo ?? null,
+        usuarioId,
+      });
+      movimientos.push(
+        await repo.insertIngreso(client, {
+          turnoId: turno.id,
+          moduloOrigenSlug: input.moduloOrigenSlug,
+          monto: parte.monto,
+          metodoPago: parte.metodoPago,
+          motivo: input.motivo,
+          referenciaEntidad: "caja_ventas",
+          referenciaId: venta.id,
+          usuarioId,
+          montoSinDescuento,
+          descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+        }),
+      );
+    }
+
+    await client.query("COMMIT");
+    return { movimientos, venta, factura };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Reimprimir la factura de un ingreso manual de Caja General (ver
+ *  registrarIngresoManual) — reconstruye lo imprimible a partir de lo que
+ *  quedó guardado, nunca recalcula. */
+export async function obtenerFacturaVentaManual(ventaId: string) {
+  const detalle = await repo.getVentaManualParaFactura(ventaId);
+  if (!detalle) throw Errors.notFound("Venta no encontrada");
+  const { venta, items, pagos } = detalle;
+  const factura = await repo.getOrCrearFacturaVenta({
+    ventaId: venta.id,
+    subtotal: Number(venta.subtotal),
+    total: Number(venta.total),
+  });
+
+  return {
+    numeroFactura: factura.numero as string,
+    fecha: venta.created_at,
+    moduloOrigenSlug: venta.modulo_origen_slug as string | null,
+    usuarioNombre: venta.usuario_nombre as string | null,
+    items: items.map((i) => ({
+      nombre: i.nombre as string,
+      cantidad: Number(i.cantidad),
+      precioUnitario: Number(i.precio_unitario),
+      subtotal: Number(i.subtotal),
+    })),
+    subtotal: Number(venta.subtotal),
+    descuentoPorcentaje: Number(venta.descuento_porcentaje),
+    descuentoMonto: Number(venta.descuento),
+    total: Number(venta.total),
+    pagos: pagos.map((p) => ({
+      metodoPago: p.metodo_pago as string,
+      monto: Number(p.monto),
+      referencia: p.referencia as string | null,
+    })),
+  };
 }
 
 export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: string) {
@@ -551,7 +675,11 @@ export async function anularVenta(movimientoId: number, input: AnularVentaInput,
   if (movimiento.tipo !== "ingreso" || !movimiento.referenciaEntidad || !movimiento.referenciaId) {
     throw Errors.conflict("Este movimiento no corresponde a una venta.");
   }
-  if (!["ventas", "con_sentido_ventas"].includes(movimiento.referenciaEntidad)) {
+  // 'caja_ventas': ingreso manual con factura registrado directo desde Caja
+  // General (ver caja.service.ts::registrarIngresoManual) — usa la misma
+  // tabla `ventas`/anularVentaGenerica que 'ventas' (Migao), solo con un
+  // referencia_entidad distinto para no mezclarlas al buscar la factura.
+  if (!["ventas", "caja_ventas", "con_sentido_ventas"].includes(movimiento.referenciaEntidad)) {
     throw Errors.conflict("Este tipo de movimiento no se puede anular desde aquí.");
   }
 
@@ -564,15 +692,15 @@ export async function anularVenta(movimientoId: number, input: AnularVentaInput,
     const movimientos = await repo.listMovimientosPorReferencia(movimiento.referenciaEntidad, movimiento.referenciaId);
     if (movimientos.length === 0) throw Errors.notFound("Movimiento no encontrado");
 
-    const ventaAnulada =
-      movimiento.referenciaEntidad === "ventas"
-        ? await repo.anularVentaGenerica(client, movimiento.referenciaId)
-        : await repo.anularVentaConSentido(client, movimiento.referenciaId);
+    const esVentaGenerica = movimiento.referenciaEntidad === "ventas" || movimiento.referenciaEntidad === "caja_ventas";
+    const ventaAnulada = esVentaGenerica
+      ? await repo.anularVentaGenerica(client, movimiento.referenciaId)
+      : await repo.anularVentaConSentido(client, movimiento.referenciaId);
     if (!ventaAnulada) {
       throw Errors.conflict("Esta venta ya está anulada o ya no existe.");
     }
 
-    if (movimiento.referenciaEntidad === "ventas") {
+    if (esVentaGenerica) {
       const pagos = await repo.listPagosPorVenta(client, movimiento.referenciaId);
       for (const pago of pagos) {
         await repo.borrarPago(client, pago.id);

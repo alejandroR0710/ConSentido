@@ -289,7 +289,8 @@ export function CajaPage() {
                             const puedeVerFactura =
                               m.tipo === "ingreso" &&
                               !!m.referencia_id &&
-                              ((m.referencia_entidad === "ventas" && m.modulo_origen_slug === "migao") ||
+                              (m.referencia_entidad === "caja_ventas" ||
+                                (m.referencia_entidad === "ventas" && m.modulo_origen_slug === "migao") ||
                                 (m.referencia_entidad === "con_sentido_ventas" && m.modulo_origen_slug === "con_sentido")) &&
                               !facturaYaMostradaDeVenta.has(m.referencia_id);
                             if (puedeVerFactura) facturaYaMostradaDeVenta.add(m.referencia_id!);
@@ -340,9 +341,11 @@ export function CajaPage() {
                                   {puedeVerFactura ? (
                                     <BotonFactura
                                       origen={
-                                        m.modulo_origen_slug === "con_sentido"
-                                          ? { tipo: "venta_con_sentido", id: m.referencia_id! }
-                                          : { tipo: "venta", id: m.referencia_id! }
+                                        m.referencia_entidad === "caja_ventas"
+                                          ? { tipo: "venta_caja", id: m.referencia_id! }
+                                          : m.modulo_origen_slug === "con_sentido"
+                                            ? { tipo: "venta_con_sentido", id: m.referencia_id! }
+                                            : { tipo: "venta", id: m.referencia_id! }
                                       }
                                       className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                     />

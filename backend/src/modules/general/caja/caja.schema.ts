@@ -21,6 +21,15 @@ export type CerrarTurnoInput = z.infer<typeof cerrarTurnoSchema>;
 // una comodidad de UI que se descompone en 1-2 movimientos ya puros al guardar.
 const MENSAJE_MIXTO_VACIO = "El total del pago mixto debe ser mayor a 0";
 
+// Ítems libres opcionales (modo "Agregar productos" del ingreso manual desde
+// Caja General) — cuando vienen, la factura que se genera los muestra
+// desglosados; si no vienen, la factura lleva una sola línea con el motivo.
+const itemIngresoSchema = z.object({
+  nombre: z.string().trim().min(1).max(150),
+  cantidad: z.number().positive(),
+  precioUnitario: z.number().nonnegative(),
+});
+
 const camposIngreso = {
   moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
   motivo: z.string().max(200).optional(),
@@ -29,6 +38,7 @@ const camposIngreso = {
   // Descuento (%) opcional sobre el monto bruto: lo que realmente se registra
   // (y se suma al turno) ya es el monto neto — ver caja.service.ts::registrarIngreso.
   descuentoPorcentaje: z.number().min(0).max(100).optional(),
+  items: z.array(itemIngresoSchema).optional(),
 };
 export const registrarIngresoSchema = z.union([
   z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

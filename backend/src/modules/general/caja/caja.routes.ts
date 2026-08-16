@@ -19,6 +19,7 @@ import {
   listarCategoriasGastoController,
   listarEdicionesDelDiaController,
   listarProveedoresController,
+  obtenerFacturaVentaManualController,
   obtenerHistorialCajaController,
   obtenerMovimientosDelDiaController,
   obtenerResumenTurnoController,
@@ -48,6 +49,14 @@ cajaRouter.post(
   "/ingresos",
   requirePermission("general.caja.registrar_ingreso"),
   asyncHandler(registrarIngresoController),
+);
+// Factura del ingreso manual con folio consecutivo (ver
+// caja.service.ts::registrarIngresoManual) — get-or-create, reimprimir
+// después siempre trae el mismo número.
+cajaRouter.get(
+  "/ventas/:id/factura",
+  requirePermission("general.caja.ver"),
+  asyncHandler(obtenerFacturaVentaManualController),
 );
 cajaRouter.post(
   "/egresos",

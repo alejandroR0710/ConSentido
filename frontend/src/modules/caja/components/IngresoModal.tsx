@@ -2,10 +2,12 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { Modal } from "../../../shared/components/Modal";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
-import { cajaApi, type ModuloOrigenSlug } from "../api";
+import { cajaApi, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
+import { facturaCajaAReciboProps } from "../factura";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface IngresoModalProps {
@@ -43,6 +45,13 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Todo ingreso genera su propia factura (ver caja.service.ts::registrarIngresoManual)
+  // — al terminar se pregunta si se quiere imprimir, en vez de cerrar de una.
+  const [resultado, setResultado] = useState<RegistrarIngresoResultado | null>(null);
+  const [recibo, setRecibo] = useState<ReturnType<typeof facturaCajaAReciboProps> | null>(null);
+  const [cargandoFactura, setCargandoFactura] = useState(false);
+  const [errorFactura, setErrorFactura] = useState<string | null>(null);
+
   const lineasValidas = lineas.filter((l) => l.nombre.trim().length > 0 && l.cantidad > 0);
   const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0);
   const montoBruto = modoMonto === "productos" ? totalLineas : monto;
@@ -65,19 +74,70 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
     setRegistrando(true);
     setError(null);
     try {
-      await cajaApi.registrarIngreso({
+      const items =
+        modoMonto === "productos"
+          ? lineasValidas.map((l) => ({ nombre: l.nombre.trim(), cantidad: l.cantidad, precioUnitario: l.precioUnitario }))
+          : undefined;
+      const creado = await cajaApi.registrarIngreso({
         moduloOrigenSlug: modulo,
         motivo: motivo.trim() || undefined,
         descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+        items,
         ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto: montoNeto }),
       });
       await onRegistrado();
-      onCerrar();
+      setResultado(creado);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo registrar el ingreso");
     } finally {
       setRegistrando(false);
     }
+  }
+
+  async function imprimirFactura() {
+    if (!resultado) return;
+    setCargandoFactura(true);
+    setErrorFactura(null);
+    try {
+      setRecibo(facturaCajaAReciboProps(await cajaApi.obtenerFacturaVenta(resultado.venta.id)));
+    } catch (err) {
+      setErrorFactura(err instanceof ApiError ? err.message : "No se pudo generar la factura");
+    } finally {
+      setCargandoFactura(false);
+    }
+  }
+
+  if (resultado) {
+    return (
+      <>
+        <Modal titulo="Ingreso registrado" onCerrar={onCerrar}>
+          <p className="mb-1 text-sm text-brand-ink dark:text-brand-vanilla">
+            Se registró correctamente — factura{" "}
+            <span className="font-mono font-semibold text-brand-green-700 dark:text-brand-vanilla">
+              {resultado.factura.numero}
+            </span>
+          </p>
+          <p className="mb-4 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">¿Deseas imprimirla?</p>
+          {errorFactura && <p className="mb-3 text-sm text-red-600">{errorFactura}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={onCerrar}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-2.5 text-sm font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+            >
+              No, gracias
+            </button>
+            <button
+              onClick={imprimirFactura}
+              disabled={cargandoFactura}
+              className="flex-1 rounded-md bg-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+            >
+              {cargandoFactura ? "..." : "Sí, imprimir"}
+            </button>
+          </div>
+        </Modal>
+        {recibo && <ModalImprimir {...recibo} onCerrar={onCerrar} />}
+      </>
+    );
   }
 
   return (

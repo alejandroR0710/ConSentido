@@ -687,6 +687,21 @@ CREATE TABLE venta_items (
 );
 CREATE INDEX idx_venta_items_venta ON venta_items(venta_id);
 
+-- Ítems de un ingreso registrado a mano desde Caja General (botón "Registrar
+-- ingreso", modo "Agregar productos") — igual que venta_items pero con
+-- nombre libre en vez de producto_id: acá no hay catálogo detrás (puede ser
+-- cualquier módulo/motivo), así que no hay a qué producto real enganchar la
+-- línea (ver caja.service.ts::registrarIngreso).
+CREATE TABLE caja_ingreso_items (
+  id              BIGSERIAL PRIMARY KEY,
+  venta_id        UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+  nombre          VARCHAR(150) NOT NULL,
+  cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_unitario NUMERIC(12,2) NOT NULL,
+  subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED
+);
+CREATE INDEX idx_caja_ingreso_items_venta ON caja_ingreso_items(venta_id);
+
 -- ============================================================================
 -- 6. MIGAO (POS / Cafetería)
 -- ============================================================================

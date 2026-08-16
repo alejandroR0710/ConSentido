@@ -1,5 +1,5 @@
 import type { ReciboDetalleMovimiento, ReciboEtiquetaMonto, ReciboImprimibleProps } from "../../shared/components/ReciboImprimible";
-import type { MovimientoCaja } from "./api";
+import type { FacturaVentaManual, MovimientoCaja } from "./api";
 import { LABEL_POR_MODULO_SLUG } from "./moduloOrigen";
 
 /** Mismo criterio de nombre en los dos recibos que muestran un movimiento
@@ -32,6 +32,38 @@ export function movimientoAReciboProps(m: MovimientoCaja): Omit<ReciboImprimible
     camposEncabezado,
     items: [{ nombre: concepto, cantidad: 1, precioUnitario: monto, subtotal: monto }],
     total: monto,
+  };
+}
+
+/** Factura de un ingreso manual registrado desde Caja General (modo "Monto
+ *  único" o "Agregar productos") — a diferencia de movimientoAReciboProps,
+ *  esta SÍ requiere una llamada a la API (cajaApi.obtenerFacturaVenta), trae
+ *  folio consecutivo (F-000123) y el detalle real de ítems si los hubo. */
+export function facturaCajaAReciboProps(factura: FacturaVentaManual): Omit<ReciboImprimibleProps, "anchoMm"> {
+  const camposEncabezado: { etiqueta: string; valor: string }[] = [
+    {
+      etiqueta: "Origen",
+      valor: factura.moduloOrigenSlug ? (LABEL_POR_MODULO_SLUG[factura.moduloOrigenSlug] ?? factura.moduloOrigenSlug) : "—",
+    },
+  ];
+  if (factura.usuarioNombre) camposEncabezado.push({ etiqueta: "Registrado por", valor: factura.usuarioNombre });
+
+  return {
+    tipo: "factura",
+    folio: factura.numeroFactura,
+    fecha: factura.fecha,
+    camposEncabezado,
+    items: factura.items.map((item) => ({
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      precioUnitario: item.precioUnitario,
+      subtotal: item.subtotal,
+    })),
+    subtotal: factura.subtotal,
+    descuentoPorcentaje: factura.descuentoPorcentaje,
+    descuentoMonto: factura.descuentoMonto,
+    pagos: factura.pagos.map((pago) => ({ metodoPago: pago.metodoPago, monto: pago.monto })),
+    total: factura.total,
   };
 }
 

@@ -119,8 +119,12 @@ export function ReciboImprimible({
           ? "COMPROBANTE DE EGRESO"
           : "COMPROBANTE DE INGRESO"
         : "FACTURA DE VENTA";
+  // Cotización: relleno sólido (no solo borde+texto de color) — un color
+  // claro sobre blanco se convierte en un punteado casi invisible en la
+  // impresora térmica (mismo problema que el peso de fuente, ver comentario
+  // más abajo); un bloque negro sólido con texto blanco SIEMPRE imprime oscuro.
   const franjaClase = esCotizacion
-    ? "border-amber-600 text-amber-700"
+    ? "border-black bg-black text-white"
     : esEgreso
       ? "border-red-600 text-red-700"
       : "border-black text-black";

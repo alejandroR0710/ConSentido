@@ -326,6 +326,96 @@ export async function crearPagoParaVenta(
   );
 }
 
+/**
+ * Venta "genérica" creada directo desde Caja General (sin orden/pedido
+ * detrás) — la usa el ingreso manual con factura (ver
+ * caja.service.ts::registrarIngreso). `moduloOrigenSlug` decide en qué
+ * módulo cuenta, el mismo que ya elige el cajero al registrar cualquier
+ * ingreso.
+ */
+export async function crearVentaManual(
+  client: PoolClient,
+  params: {
+    moduloOrigenSlug: string;
+    usuarioId: string;
+    subtotal: number;
+    descuento: number;
+    descuentoPorcentaje: number;
+    total: number;
+  },
+) {
+  const result = await client.query(
+    `INSERT INTO ventas (modulo_id, usuario_id, subtotal, descuento, descuento_porcentaje, total)
+     VALUES ((SELECT id FROM modulos WHERE slug = $1), $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [params.moduloOrigenSlug, params.usuarioId, params.subtotal, params.descuento, params.descuentoPorcentaje, params.total],
+  );
+  return result.rows[0];
+}
+
+/** Ítems libres (nombre en vez de producto_id — ver caja_ingreso_items en
+ *  schema.sql) del ingreso manual, modo "Agregar productos". */
+export async function crearIngresoItems(
+  client: PoolClient,
+  ventaId: string,
+  items: { nombre: string; cantidad: number; precioUnitario: number }[],
+) {
+  for (const item of items) {
+    await client.query(
+      `INSERT INTO caja_ingreso_items (venta_id, nombre, cantidad, precio_unitario) VALUES ($1, $2, $3, $4)`,
+      [ventaId, item.nombre, item.cantidad, item.precioUnitario],
+    );
+  }
+}
+
+/** Get-or-create idempotente — mismo criterio que
+ *  migao.repository.ts::getOrCrearFactura: la primera vez que se pide se le
+ *  asigna el siguiente número de facturas_numero_seq (nunca se reutiliza);
+ *  reimprimir después siempre devuelve la misma fila. */
+export async function getOrCrearFacturaVenta(
+  params: { ventaId: string; subtotal: number; total: number },
+  executor: Executor = pool,
+) {
+  const insert = await executor.query(
+    `INSERT INTO facturas (venta_id, numero, tipo, subtotal, total)
+     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $2, $3)
+     ON CONFLICT (venta_id) WHERE venta_id IS NOT NULL DO NOTHING
+     RETURNING *`,
+    [params.ventaId, params.subtotal, params.total],
+  );
+  if (insert.rowCount) return insert.rows[0];
+
+  const existente = await executor.query(`SELECT * FROM facturas WHERE venta_id = $1`, [params.ventaId]);
+  return existente.rows[0];
+}
+
+/** Detalle completo para (re)imprimir la factura de un ingreso manual de
+ *  Caja General — a diferencia de Migao/Con Sentido, los ítems (si los hay)
+ *  viven en caja_ingreso_items, no en venta_items (no hay catálogo detrás,
+ *  el nombre de cada línea es libre). */
+export async function getVentaManualParaFactura(ventaId: string) {
+  const ventaResult = await pool.query(
+    `SELECT v.*, m.slug AS modulo_origen_slug, u.nombre AS usuario_nombre
+       FROM ventas v
+       LEFT JOIN modulos m ON m.id = v.modulo_id
+       LEFT JOIN usuarios u ON u.id = v.usuario_id
+      WHERE v.id = $1`,
+    [ventaId],
+  );
+  if (!ventaResult.rowCount) return null;
+  const venta = ventaResult.rows[0];
+
+  const [items, pagos] = await Promise.all([
+    pool.query(
+      `SELECT nombre, cantidad, precio_unitario, subtotal FROM caja_ingreso_items WHERE venta_id = $1 ORDER BY id`,
+      [ventaId],
+    ),
+    pool.query(`SELECT metodo_pago, monto, referencia FROM pagos WHERE venta_id = $1 ORDER BY created_at`, [ventaId]),
+  ]);
+
+  return { venta, items: items.rows, pagos: pagos.rows };
+}
+
 /** Borra permanentemente los egresos del turno indicado (solo ese turno, no
  *  todo el historial). Se usa al reiniciar Caja: a diferencia del resto del
  *  reset (que nunca borra nada), Super Root pidió explícitamente que los
@@ -339,9 +429,15 @@ export async function borrarEgresosDelTurno(turnoId: string) {
 // que Migao/Con Sentido generan la factura apenas se cobra (no solo al
 // imprimirla), esto casi siempre trae el número; sirve para ubicar rápido de
 // qué venta se trata si llega un reclamo, sin tener que abrir cada una.
+// 'caja_ventas': ingreso manual armado directo en Caja General (ver
+// caja.service.ts::registrarIngreso) — usa la misma tabla `ventas` que
+// Migao pero un referencia_entidad DISTINTO a propósito, para no confundir
+// esta venta (sin orden_id, sin venta_items reales) con una venta de Migao
+// al decidir a qué endpoint de factura pegarle (ver frontend BotonFactura).
 const JOIN_FACTURA_POR_MOVIMIENTO = `
        LEFT JOIN facturas f ON
          (mc.referencia_entidad = 'ventas' AND f.venta_id::text = mc.referencia_id) OR
+         (mc.referencia_entidad = 'caja_ventas' AND f.venta_id::text = mc.referencia_id) OR
          (mc.referencia_entidad = 'con_sentido_ventas' AND f.con_sentido_venta_id::text = mc.referencia_id)
 `;
 

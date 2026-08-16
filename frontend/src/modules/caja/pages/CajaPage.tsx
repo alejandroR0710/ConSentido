@@ -250,10 +250,10 @@ export function CajaPage() {
           {/* Aparte del cuadre de arriba (esta plata nunca cuenta para Caja
               General) — cuánto entró HOY en propina, efectivo y banco. */}
           <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/20">
-            <div className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+            <div className="text-center text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
               💵 Propinas de hoy
             </div>
-            <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+            <div className="text-center text-[11px] text-amber-700/80 dark:text-amber-400/80">
               Aparte del cuadre — dinero del mesero/personal, no cuenta para Caja General.
             </div>
             <div className="mt-3 grid grid-cols-3 divide-x divide-amber-300 dark:divide-amber-700">

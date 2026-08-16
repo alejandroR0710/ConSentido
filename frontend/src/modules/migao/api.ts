@@ -502,6 +502,9 @@ export const migaoApi = {
   // Pendiente por día (efectivo y banco desglosados) — para elegir qué días
   // concretos (una semana completa o sueltos) entran en el reparto.
   obtenerPendientesPropinasPorDia: () => apiFetch<PendientePropinaDia[]>("/migao/propinas/pendientes-por-dia"),
+  // Propinas de HOY (efectivo/banco) — cuadro aparte en el resumen de Caja
+  // General, sin importar si ya se repartieron o no.
+  obtenerPropinasHoy: () => apiFetch<{ montoEfectivo: number; montoBanco: number }>("/migao/propinas/hoy"),
   // Reparte (liquida) las propinas pendientes — un solo reparto cubre
   // efectivo y banco a la vez. `fechas` deja elegir qué días concretos
   // entran (sin mandarlo, reparte TODO lo pendiente). `entregas` desglosa el

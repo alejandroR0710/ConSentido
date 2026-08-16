@@ -10,6 +10,7 @@ import { EditarMetodoPagoModal } from "../../../shared/components/EditarMetodoPa
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type MovimientoCaja, type ResumenTurno } from "../api";
 import { BotonFactura } from "../../migao/components/BotonFactura";
+import { migaoApi } from "../../migao/api";
 import { AdministracionModal } from "../components/AdministracionModal";
 import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
@@ -39,6 +40,9 @@ export function CajaPage() {
 
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [sinTurno, setSinTurno] = useState(false);
+  // Aparte del cuadre de Caja General (nunca cuenta ahí, es plata del
+  // mesero/personal) — cuadro informativo con lo que entró hoy en propina.
+  const [propinasHoy, setPropinasHoy] = useState({ montoEfectivo: 0, montoBanco: 0 });
   const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,16 +84,28 @@ export function CajaPage() {
     }
   }
 
+  async function cargarPropinasHoy() {
+    try {
+      setPropinasHoy(await migaoApi.obtenerPropinasHoy());
+    } catch {
+      /* cuadro informativo — si falla, simplemente se queda en $0 */
+    }
+  }
+
   useEffect(() => {
     cargarCategorias();
     cargarResumenDeTurnoActual();
+    cargarPropinasHoy();
     const intervalo = setInterval(() => {
       if (turnoIdRef.current) cargarResumenDeTurnoActual();
+      cargarPropinasHoy();
     }, POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
 
-  useRegistrarRefresco(() => Promise.all([cargarCategorias(), cargarResumenDeTurnoActual()]));
+  useRegistrarRefresco(() =>
+    Promise.all([cargarCategorias(), cargarResumenDeTurnoActual(), cargarPropinasHoy()]),
+  );
 
   async function abrirTurno(e: FormEvent) {
     e.preventDefault();
@@ -201,6 +217,28 @@ export function CajaPage() {
               <div className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
                 {formatearMoneda(resumen.saldos.general)}
               </div>
+            </div>
+          </div>
+
+          {/* Aparte del cuadre de arriba (esta plata nunca cuenta para Caja
+              General) — cuánto entró HOY en propina, efectivo y banco. */}
+          <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/20">
+            <div className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              Propinas de hoy (aparte del cuadre)
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
+                Efectivo <span className="font-bold">{formatearMoneda(propinasHoy.montoEfectivo)}</span>
+              </span>
+              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
+                Banco <span className="font-bold">{formatearMoneda(propinasHoy.montoBanco)}</span>
+              </span>
+              <span className="text-sm text-brand-ink dark:text-brand-vanilla">
+                Total{" "}
+                <span className="font-bold">
+                  {formatearMoneda(propinasHoy.montoEfectivo + propinasHoy.montoBanco)}
+                </span>
+              </span>
             </div>
           </div>
 

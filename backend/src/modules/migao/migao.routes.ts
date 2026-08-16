@@ -56,6 +56,7 @@ import {
   obtenerDetalleOrdenController,
   obtenerFacturaOrdenController,
   obtenerFacturaVentaController,
+  obtenerPropinasDeHoyController,
   obtenerResumenDiarioIngresosController,
   pagarItemsController,
   registrarAbonoController,
@@ -172,6 +173,14 @@ migaoRouter.get(
   "/propinas/pendientes-por-dia",
   requirePermission("migao.propinas.ver"),
   asyncHandler(listarPendientesPropinasPorDiaController),
+);
+// Propinas de HOY (efectivo/banco) — cuadro aparte en el resumen de Caja
+// General. A diferencia de lo de arriba, con permiso de Caja (no exclusivo
+// de Root/Super Root): el Cajero también necesita verlo ahí.
+migaoRouter.get(
+  "/propinas/hoy",
+  requirePermission("general.caja.ver"),
+  asyncHandler(obtenerPropinasDeHoyController),
 );
 // Repartir (liquidar) las propinas pendientes de un método — mismo permiso
 // que ver el historial, ya que esta pantalla ya es exclusiva de Root/Super Root.

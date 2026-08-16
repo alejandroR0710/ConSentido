@@ -146,6 +146,12 @@ export async function listarPendientesPropinasPorDia() {
   return repo.listPendientesPropinasPorDia();
 }
 
+/** Propinas de HOY, efectivo y banco — usado en el resumen de Caja General
+ *  (cuadro aparte, esta plata nunca cuenta para el cuadre de Caja). */
+export async function obtenerPropinasDeHoy() {
+  return repo.sumPropinasDeHoy();
+}
+
 /** Reparte (liquida) las propinas pendientes — un solo reparto cubre
  *  efectivo y banco a la vez, cada `entrega` elige su propio método de pago
  *  (en qué se le entrega a ESA persona, sin importar en qué método vino la

@@ -999,6 +999,24 @@ export async function listPendientesPropinasPorDia() {
   }));
 }
 
+/** Propinas de HOY (hora Colombia), efectivo y banco desglosados — a
+ *  diferencia de listPendientesPropinasPorDia, cuenta TODAS las de hoy sin
+ *  importar si ya se repartieron o no (es "cuánto entró hoy en propina",
+ *  no "cuánto falta repartir"). Usado en el resumen de Caja General. */
+export async function sumPropinasDeHoy() {
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'efectivo'), 0) AS monto_efectivo,
+            COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'banco'), 0) AS monto_banco
+       FROM migao_propinas
+      WHERE to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')
+          = to_char(now() AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')`,
+  );
+  return {
+    montoEfectivo: Number(result.rows[0].monto_efectivo),
+    montoBanco: Number(result.rows[0].monto_banco),
+  };
+}
+
 /** Cuánto hay pendiente de repartir, efectivo y banco por separado,
  *  opcionalmente acotado a un subconjunto de días (hora Colombia) — sin
  *  `fechas`, es TODO lo pendiente (comportamiento original, se recalcula

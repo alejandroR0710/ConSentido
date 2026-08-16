@@ -102,6 +102,12 @@ export async function listarPendientesPropinasPorDiaController(_req: Request, re
   return ok(res, pendientes);
 }
 
+// Propinas de HOY (efectivo/banco) — cuadro aparte en el resumen de Caja General.
+export async function obtenerPropinasDeHoyController(_req: Request, res: Response) {
+  const propinas = await service.obtenerPropinasDeHoy();
+  return ok(res, propinas);
+}
+
 // Reparte (liquida) las propinas pendientes de un método — efectivo y banco
 // por separado, ver migao.service.ts::repartirPropinas.
 export async function repartirPropinasController(req: Request, res: Response) {

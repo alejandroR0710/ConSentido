@@ -20,4 +20,15 @@
   @page {
     margin: 0;
   }
+  /* El resumen de caja tiene una tabla larga ("Detalle de movimientos") que
+   * puede no caber en una sola página — algunos motores de impresión
+   * (ej. "Guardar como PDF") ignoran el alto "auto" de @page (ver el <style>
+   * dinámico en ModalImprimir.tsx) y paginan a un alto fijo igual. Por
+   * default el navegador repite el <thead> en cada página nueva de una
+   * tabla cortada — display:table-row-group se lo desactiva, así el
+   * encabezado "Hora/Concepto/Monto" nunca vuelve a aparecer a mitad del
+   * recibo. */
+  #recibo-imprimible thead {
+    display: table-row-group;
+  }
 }

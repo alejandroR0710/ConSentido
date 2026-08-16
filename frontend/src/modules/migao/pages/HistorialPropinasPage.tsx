@@ -220,6 +220,12 @@ export function HistorialPropinasPage() {
               ) : (
                 grupos.flatMap((grupo) => {
                   const totalDelDia = grupo.entradas.reduce((acc, p) => acc + Number(p.monto), 0);
+                  const efectivoDelDia = grupo.entradas
+                    .filter((p) => p.metodo_pago === "efectivo")
+                    .reduce((acc, p) => acc + Number(p.monto), 0);
+                  const bancoDelDia = grupo.entradas
+                    .filter((p) => p.metodo_pago === "banco")
+                    .reduce((acc, p) => acc + Number(p.monto), 0);
                   const filaEncabezado = (
                     <tr
                       key={`dia-${grupo.fecha}`}
@@ -230,8 +236,10 @@ export function HistorialPropinasPage() {
                           <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                             {formatearFechaLarga(grupo.fecha)}
                           </span>
-                          <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                            Total {formatMoney(totalDelDia)}
+                          <span className="flex flex-wrap gap-x-4 text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            <span>Efectivo {formatMoney(efectivoDelDia)}</span>
+                            <span>Banco {formatMoney(bancoDelDia)}</span>
+                            <span>Total {formatMoney(totalDelDia)}</span>
                           </span>
                         </div>
                       </td>
@@ -317,6 +325,12 @@ export function HistorialPropinasPage() {
               ) : (
                 gruposEntregas.flatMap((grupo) => {
                   const totalDelDia = grupo.entregas.reduce((acc, e) => acc + Number(e.monto), 0);
+                  const efectivoDelDia = grupo.entregas
+                    .filter((e) => e.metodo_pago === "efectivo")
+                    .reduce((acc, e) => acc + Number(e.monto), 0);
+                  const bancoDelDia = grupo.entregas
+                    .filter((e) => e.metodo_pago === "banco")
+                    .reduce((acc, e) => acc + Number(e.monto), 0);
                   const filaEncabezado = (
                     <tr
                       key={`dia-entrega-${grupo.fecha}`}
@@ -327,8 +341,10 @@ export function HistorialPropinasPage() {
                           <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                             {formatearFechaLarga(grupo.fecha)}
                           </span>
-                          <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                            Total {formatMoney(totalDelDia)}
+                          <span className="flex flex-wrap gap-x-4 text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            <span>Efectivo {formatMoney(efectivoDelDia)}</span>
+                            <span>Banco {formatMoney(bancoDelDia)}</span>
+                            <span>Total {formatMoney(totalDelDia)}</span>
                           </span>
                         </div>
                       </td>

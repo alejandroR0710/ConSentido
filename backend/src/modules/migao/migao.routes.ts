@@ -57,6 +57,7 @@ import {
   obtenerFacturaOrdenController,
   obtenerFacturaVentaController,
   obtenerResumenDiarioIngresosController,
+  pagarItemsController,
   registrarAbonoController,
   reiniciarTodoController,
   repartirPropinasController,
@@ -267,6 +268,14 @@ migaoRouter.post(
   "/cuentas/partes/:parteId/abonos",
   requirePermission("migao.ordenes.cerrar"),
   asyncHandler(registrarAbonoController),
+);
+// Cobrar solo ALGUNOS productos de una cuenta que sigue abierta — genera su
+// propia factura independiente, la mesa sigue aceptando productos nuevos.
+// No se combina con el motor de partes de arriba (ver migao.service.ts::pagarItems).
+migaoRouter.post(
+  "/ordenes/:id/pagar-items",
+  requirePermission("migao.ordenes.cerrar"),
+  asyncHandler(pagarItemsController),
 );
 // Cancelar la orden completa (ej. el cliente ya no quiere pedir) también es del Cajero.
 migaoRouter.post(

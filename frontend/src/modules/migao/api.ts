@@ -103,6 +103,10 @@ export interface OrdenItem {
   observaciones: string | null;
   subtotal: number;
   es_para_llevar: boolean;
+  // null = todavía no se ha cobrado; con valor, qué venta ya lo pagó (ver
+  // migaoApi.pagarItems) — permite cobrar productos sueltos de una cuenta
+  // que sigue abierta, sin bloquear seguir agregando productos nuevos.
+  venta_id: string | null;
 }
 
 export interface HistorialEntry {
@@ -262,6 +266,19 @@ export interface PropinaInput {
   propina?: number;
   propinaPorcentaje?: number | null;
   propinaMetodoPago?: "efectivo" | "banco";
+}
+
+// Cobrar productos sueltos de una cuenta que sigue abierta — motor NUEVO y
+// aparte de PagoInput/cerrarOrden e iniciarCobro/dividir cuenta: no fija de
+// antemano cómo queda partida la cuenta, cada llamada cobra lo que el
+// cajero seleccione ahí mismo y genera su propia venta+factura.
+export type PagarItemsInput = ({ metodoPago: "efectivo" | "banco" } | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number }) &
+  PropinaInput & { itemIds: number[] };
+
+export interface PagarItemsResultado {
+  venta: { id: string };
+  total: number;
+  ordenCerrada: boolean;
 }
 
 // Motor NUEVO y aparte de PagoInput/PropinaInput de arriba: cómo queda
@@ -536,6 +553,12 @@ export const migaoApi = {
   // independiente de la de otros abonos de la misma cuenta.
   registrarAbono: (parteId: string, input: RegistrarAbonoInput) =>
     apiFetch<CuentaDetalle>(`/migao/cuentas/partes/${parteId}/abonos`, { method: "POST", body: input }),
+  // Cobra solo ALGUNOS productos de una cuenta que sigue abierta — genera su
+  // propia venta+factura independiente (ver PagarItemsResultado), la mesa
+  // sigue aceptando productos nuevos. No se combina con iniciarCobro/dividir
+  // cuenta para la misma orden (motor de partes de arriba).
+  pagarItems: (ordenId: string, input: PagarItemsInput) =>
+    apiFetch<PagarItemsResultado>(`/migao/ordenes/${ordenId}/pagar-items`, { method: "POST", body: input }),
   cancelarOrden: (ordenId: string) =>
     apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),
   // El mesero cambia la mesa de una orden abierta (ej. los comensales se

@@ -784,6 +784,17 @@ END $$;
 
 
 -- ========================================================================
+-- SECCIÓN 12: PAGAR PRODUCTOS SUELTOS DE UNA CUENTA ABIERTA (Migao)
+-- ========================================================================
+-- Cobra solo algunos productos de una mesa que sigue abierta (el mesero
+-- puede seguir agregando productos nuevos mientras tanto) — cada cobro
+-- parcial de productos genera su propia venta + factura independiente. NULL
+-- = todavía no se ha cobrado; con valor, marca cuál venta ya lo pagó (ver
+-- migao.service.ts::pagarItems).
+ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS venta_id UUID REFERENCES ventas(id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

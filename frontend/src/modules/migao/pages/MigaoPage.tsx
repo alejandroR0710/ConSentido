@@ -107,6 +107,19 @@ export function MigaoPage() {
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
 
+  // Motor NUEVO y aparte de todo lo de arriba: cobrar solo ALGUNOS productos
+  // de la cuenta mientras sigue abierta (se puede seguir agregando) — cada
+  // cobro genera su propia venta+factura independiente, sin fijar de
+  // antemano cómo queda partida la cuenta (a diferencia de dividirCuenta/
+  // pagoParcial). No se puede combinar con ese otro motor para la misma orden.
+  const [itemsSeleccionados, setItemsSeleccionados] = useState<Set<number>>(new Set());
+  const [modalPagarItemsAbierto, setModalPagarItemsAbierto] = useState(false);
+  const [pagoItems, setPagoItems] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
+  const [propinaItemsMonto, setPropinaItemsMonto] = useState(0);
+  const [montoRecibidoItems, setMontoRecibidoItems] = useState(0);
+  const [cobrandoItems, setCobrandoItems] = useState(false);
+  const [errorItems, setErrorItems] = useState<string | null>(null);
+
   // Ref (no state) para que el intervalo de polling, creado una sola vez al montar,
   // siempre lea cuál es la orden seleccionada actual sin necesidad de recrearse.
   const ordenSeleccionadaIdRef = useRef<string | null>(null);
@@ -200,16 +213,23 @@ export function MigaoPage() {
     setPropinaMetodoPago("efectivo");
     setEsAdministrativo(false);
     reiniciarDivision();
+    setItemsSeleccionados(new Set());
     try {
       const detalleData = await migaoApi.obtenerDetalle(ordenId);
       setDetalle(detalleData);
-      // La orden ya tenía un cobro en marcha (motor nuevo) — se reabre donde
-      // se quedó, en vez de ofrecer el formulario de cobro desde cero.
+      // La orden ya tenía un cobro en marcha con el motor de partes (dividir
+      // cuenta/pago parcial) — se reabre donde se quedó. 'pagando' también
+      // puede venir de pagarItems (productos sueltos) en vez de este motor;
+      // ahí simplemente no hay "cuenta" que cargar, se ignora el 404.
       if (detalleData.orden.estado === "pagando") {
-        setPagoParcial(true);
-        const cuentaCargada = await migaoApi.obtenerCuenta(ordenId);
-        setCuenta(cuentaCargada);
-        if (cuentaCargada.partes.length > 1) setDividirCuenta(true);
+        try {
+          const cuentaCargada = await migaoApi.obtenerCuenta(ordenId);
+          setPagoParcial(true);
+          setCuenta(cuentaCargada);
+          if (cuentaCargada.partes.length > 1) setDividirCuenta(true);
+        } catch {
+          // 'pagando' por productos sueltos (pagarItems) — nada que reabrir acá.
+        }
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el detalle de la orden");
@@ -232,6 +252,59 @@ export function MigaoPage() {
       setDetalle(await migaoApi.obtenerDetalle(ordenSeleccionadaId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar el detalle de la orden");
+    }
+  }
+
+  const totalSeleccionados = detalle
+    ? detalle.items.filter((i) => itemsSeleccionados.has(i.id)).reduce((acc, i) => acc + i.subtotal, 0)
+    : 0;
+
+  function abrirModalPagarItems() {
+    setPagoItems({ metodoPago: "efectivo" });
+    setPropinaItemsMonto(0);
+    setMontoRecibidoItems(0);
+    setErrorItems(null);
+    setModalPagarItemsAbierto(true);
+  }
+
+  async function confirmarPagarItems() {
+    if (!ordenSeleccionadaId || itemsSeleccionados.size === 0) return;
+    if (
+      pagoItems.metodoPago === "mixto" &&
+      Math.abs(pagoItems.montoEfectivo + pagoItems.montoBanco - (totalSeleccionados + propinaItemsMonto)) > 0.01
+    ) {
+      setErrorItems(
+        `Entre efectivo y banco deben sumar el total${propinaItemsMonto > 0 ? " con propina incluida" : ""} (${formatMoney(totalSeleccionados + propinaItemsMonto)})`,
+      );
+      return;
+    }
+    setCobrandoItems(true);
+    setErrorItems(null);
+    try {
+      const resultado = await migaoApi.pagarItems(ordenSeleccionadaId, {
+        itemIds: Array.from(itemsSeleccionados),
+        ...pagoItems,
+        ...(propinaItemsMonto > 0 ? { propina: propinaItemsMonto } : {}),
+      });
+      setModalPagarItemsAbierto(false);
+      setItemsSeleccionados(new Set());
+      setMensaje(
+        resultado.ordenCerrada
+          ? `Productos cobrados. Total: ${formatMoney(resultado.total)} — la cuenta quedó cerrada.`
+          : `Productos cobrados. Total: ${formatMoney(resultado.total)} — la mesa sigue abierta.`,
+      );
+      setPreguntaFacturaOrdenId(ordenSeleccionadaId);
+      if (resultado.ordenCerrada) {
+        setDetalle(null);
+        setOrdenSeleccionadaId(null);
+      } else {
+        await refrescarDetalle();
+      }
+      await cargarOrdenes();
+    } catch (err) {
+      setErrorItems(err instanceof ApiError ? err.message : "No se pudo cobrar los productos seleccionados");
+    } finally {
+      setCobrandoItems(false);
     }
   }
 
@@ -661,38 +734,78 @@ export function MigaoPage() {
           ) : (
             <>
               <div className="flex flex-col gap-2">
-                {detalle.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`flex items-center justify-between rounded-lg border p-3 ${
-                      item.es_para_llevar
-                        ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
-                        : "border-brand-vanilla-dark dark:border-brand-green-700"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
-                        {item.es_para_llevar && "🥡 "}
-                        {formatCantidad(item.cantidad)}× {item.producto_nombre}
-                      </div>
-                      <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                        {formatMoney(item.precio_unitario)} c/u
-                      </div>
-                      {item.observaciones && (
-                        <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                          ⚠ {item.observaciones}
-                        </div>
+                {detalle.items.map((item) => {
+                  const cobrable = item.estado !== "cancelado" && !item.venta_id;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center justify-between gap-2 rounded-lg border p-3 ${
+                        item.es_para_llevar
+                          ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
+                          : "border-brand-vanilla-dark dark:border-brand-green-700"
+                      }`}
+                    >
+                      {cobrable && (
+                        <input
+                          type="checkbox"
+                          checked={itemsSeleccionados.has(item.id)}
+                          onChange={() =>
+                            setItemsSeleccionados((actual) => {
+                              const copia = new Set(actual);
+                              if (copia.has(item.id)) copia.delete(item.id);
+                              else copia.add(item.id);
+                              return copia;
+                            })
+                          }
+                          className="h-4 w-4 shrink-0"
+                          aria-label={`Seleccionar ${item.producto_nombre} para cobrar`}
+                        />
                       )}
+                      <div className="flex-1">
+                        <div className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
+                          {item.es_para_llevar && "🥡 "}
+                          {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                        </div>
+                        <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                          {formatMoney(item.precio_unitario)} c/u
+                        </div>
+                        {item.observaciones && (
+                          <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            ⚠ {item.observaciones}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {item.venta_id ? (
+                          <span className="rounded-full bg-brand-green-600 px-2 py-0.5 text-xs font-bold text-white">
+                            ✓ Pagado
+                          </span>
+                        ) : (
+                          <EstadoBadge estado={item.estado} />
+                        )}
+                        <span className="text-base font-semibold text-brand-ink dark:text-brand-vanilla">
+                          {formatMoney(item.subtotal)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <EstadoBadge estado={item.estado} />
-                      <span className="text-base font-semibold text-brand-ink dark:text-brand-vanilla">
-                        {formatMoney(item.subtotal)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+
+              {itemsSeleccionados.size > 0 && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-brand-green-600 bg-brand-green-50 px-3 py-2 dark:bg-brand-green-700/20">
+                  <span className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">
+                    {itemsSeleccionados.size} producto{itemsSeleccionados.size === 1 ? "" : "s"} seleccionado
+                    {itemsSeleccionados.size === 1 ? "" : "s"} — {formatMoney(totalSeleccionados)}
+                  </span>
+                  <button
+                    onClick={abrirModalPagarItems}
+                    className="rounded-md bg-brand-green-700 px-3 py-1.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+                  >
+                    Cobrar seleccionados
+                  </button>
+                </div>
+              )}
 
               {cuenta ? (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
@@ -1187,6 +1300,55 @@ export function MigaoPage() {
             await cargarOrdenes();
           }}
         />
+      )}
+
+      {modalPagarItemsAbierto && (
+        <Modal titulo="Cobrar productos seleccionados" onCerrar={() => setModalPagarItemsAbierto(false)}>
+          <div className="mb-3 flex items-center justify-between text-lg font-bold text-brand-green-700 dark:text-brand-vanilla">
+            <span>Total ({itemsSeleccionados.size} producto{itemsSeleccionados.size === 1 ? "" : "s"})</span>
+            <span>{formatMoney(totalSeleccionados)}</span>
+          </div>
+
+          <label className="mb-1 block text-xs font-medium">Propina (opcional)</label>
+          <input
+            type="number"
+            min={0}
+            step="100"
+            value={propinaItemsMonto || ""}
+            onChange={(e) => setPropinaItemsMonto(Math.max(0, Number(e.target.value)))}
+            placeholder="0"
+            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+
+          <label className="mb-1 block text-xs font-medium">Método de pago</label>
+          <div className="mb-3">
+            <SelectorMetodoPago value={pagoItems} onChange={setPagoItems} totalFijo={totalSeleccionados + propinaItemsMonto} />
+          </div>
+
+          {pagoItems.metodoPago !== "banco" && (
+            <div className="mb-3">
+              <CalculadoraVuelta
+                aPagar={
+                  pagoItems.metodoPago === "mixto"
+                    ? pagoItems.montoEfectivo
+                    : totalSeleccionados + propinaItemsMonto
+                }
+                recibido={montoRecibidoItems}
+                onChange={setMontoRecibidoItems}
+              />
+            </div>
+          )}
+
+          {errorItems && <p className="mb-3 text-sm text-red-600">{errorItems}</p>}
+
+          <button
+            onClick={confirmarPagarItems}
+            disabled={cobrandoItems}
+            className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {cobrandoItems ? "Cobrando..." : "Cobrar y generar factura"}
+          </button>
+        </Modal>
       )}
 
       {modalAbierto === "para-llevar" && ordenSeleccionadaId && (

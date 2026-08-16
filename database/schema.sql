@@ -776,6 +776,11 @@ CREATE TABLE orden_items (
   -- Nota libre del mesero al agregar el producto (ej. "sin azúcar"). Solo se le
   -- muestra a Cocina cuando empieza a preparar la orden, no antes.
   observaciones   VARCHAR(300),
+  -- NULL = todavía no se ha cobrado; si tiene valor, marca CUÁL venta ya lo
+  -- pagó — permite cobrar productos sueltos de una cuenta que sigue abierta
+  -- (el mesero puede seguir agregando productos nuevos mientras tanto), cada
+  -- cobro parcial con su propia factura (ver migao.service.ts::pagarItems).
+  venta_id        UUID REFERENCES ventas(id),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_orden_items_orden ON orden_items(orden_id);

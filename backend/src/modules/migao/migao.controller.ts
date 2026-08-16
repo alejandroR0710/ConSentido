@@ -16,6 +16,7 @@ import {
   editarMesaSchema,
   editarProductoSchema,
   iniciarCobroSchema,
+  pagarItemsSchema,
   posicionMesaSchema,
   registrarAbonoSchema,
   reiniciarTodoSchema,
@@ -193,6 +194,12 @@ export async function obtenerDetalleOrdenController(req: Request, res: Response)
 export async function cerrarOrdenController(req: Request, res: Response) {
   const data = cerrarOrdenSchema.parse(req.body);
   const resultado = await service.cerrarOrden(req.params.id, data, req.auth!.usuarioId, req.auth!.rolId);
+  return ok(res, resultado);
+}
+
+export async function pagarItemsController(req: Request, res: Response) {
+  const data = pagarItemsSchema.parse(req.body);
+  const resultado = await service.pagarItems(req.params.id, data, req.auth!.usuarioId);
   return ok(res, resultado);
 }
 

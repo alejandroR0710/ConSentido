@@ -19,6 +19,7 @@ import {
   EditarMesaInput,
   EditarProductoInput,
   IniciarCobroInput,
+  PagarItemsInput,
   PosicionMesaInput,
   RegistrarAbonoInput,
   RepartirPropinasInput,
@@ -332,10 +333,12 @@ export async function agregarItem(
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se pueden agregar productos a una orden cerrada o cancelada");
   }
-  // Ya se inició el cobro de esta cuenta (aunque solo se haya pagado una
-  // parte) — cambiar los productos ahora invalidaría los montos ya fijados
-  // por parte (ver migao_cuenta_partes.monto_debido) y lo ya cobrado.
-  if (await repo.getVentaAbiertaPorOrden(ordenId)) {
+  // Ya se inició el cobro CON EL MOTOR DE PARTES (dividir cuenta/pago
+  // parcial) — cambiar los productos ahora invalidaría los montos ya
+  // fijados por parte (ver migao_cuenta_partes.monto_debido). No bloquea si
+  // solo hay cobros de "productos sueltos" (pagarItems): esos SÍ permiten
+  // seguir agregando productos nuevos a la misma mesa mientras tanto.
+  if (await repo.existeCobroDivididoAbierto(ordenId)) {
     throw Errors.conflict("Esta cuenta ya tiene pagos registrados, no se pueden agregar más productos");
   }
 
@@ -731,10 +734,11 @@ export async function obtenerDetalleOrden(ordenId: string) {
 
   const items = await repo.getItemsPorOrden(ordenId);
   const itemsConSubtotal = calcularItemsConSubtotal(items);
-  // Los ítems cancelados se siguen mostrando (para que quede el registro de qué
-  // se canceló), pero no deben sumar al total a cobrar.
+  // Los ítems cancelados o ya pagados sueltos (ver pagarItems) se siguen
+  // mostrando (para que quede el registro de qué había), pero no deben
+  // sumar al total todavía por cobrar.
   const total = itemsConSubtotal
-    .filter((i) => i.estado !== "cancelado")
+    .filter((i) => i.estado !== "cancelado" && !i.venta_id)
     .reduce((acc, i) => acc + i.subtotal, 0);
   const historial = await repo.getHistorialPorOrden(ordenId);
 
@@ -761,8 +765,10 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
     if (itemsRaw.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
 
-    // Los ítems cancelados no se cobran ni quedan registrados como vendidos.
-    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado");
+    // Los ítems cancelados no se cobran; los ya pagados sueltos (ver
+    // pagarItems) tampoco — esta cuenta cobra lo que quede pendiente, sea
+    // todo o solo el resto de lo que ya se fue pagando de a poco.
+    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado" && !i.venta_id);
     if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
     const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
 
@@ -1000,6 +1006,177 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
 }
 
 /**
+ * Cobra solo ALGUNOS productos de una cuenta que sigue abierta — genera su
+ * propia venta + factura independiente de esos productos (con su propio
+ * número de factura), los marca pagados (orden_items.venta_id) y la mesa
+ * sigue aceptando productos nuevos mientras queden ítems sin cobrar. Si con
+ * este pago ya no queda nada pendiente, la orden se cierra sola — mismo
+ * criterio que el motor de partes, pero item por item en vez de partes
+ * fijadas de antemano.
+ *
+ * No se puede combinar con "dividir cuenta"/"pago parcial" (motor de
+ * partes) para la misma orden — ver agregarItem, que sí bloquea ese otro
+ * motor si ya se usó, y viceversa esta función revisa lo mismo.
+ */
+export async function pagarItems(ordenId: string, input: PagarItemsInput, usuarioId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const orden = await repo.getOrdenById(ordenId, client, true);
+    if (!orden) throw Errors.notFound("Orden no encontrada");
+    if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
+    if (orden.estado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
+    if (await repo.existeCobroDivididoAbierto(ordenId)) {
+      throw Errors.conflict("Esta cuenta ya se está cobrando con cuenta dividida/pago parcial — no se puede combinar");
+    }
+
+    const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
+    const seleccionados = itemsRaw.filter((i) => input.itemIds.includes(Number(i.id)));
+    if (seleccionados.length !== input.itemIds.length) {
+      throw Errors.badRequest("Algún producto seleccionado no pertenece a esta orden");
+    }
+    if (seleccionados.some((i) => i.estado === "cancelado")) {
+      throw Errors.badRequest("No se puede cobrar un producto cancelado");
+    }
+    if (seleccionados.some((i) => i.venta_id)) {
+      throw Errors.conflict("Alguno de estos productos ya fue pagado");
+    }
+
+    const items = calcularItemsConSubtotal(seleccionados);
+    const total = items.reduce((acc, i) => acc + i.subtotal, 0);
+
+    if (input.metodoPago === "mixto") {
+      const totalConPropina = total + (input.propina && input.propina > 0 ? input.propina : 0);
+      if (Math.abs(input.montoEfectivo + input.montoBanco - totalConPropina) > 0.01) {
+        throw Errors.badRequest(
+          `La suma de efectivo + banco debe ser igual al total${input.propina ? " con propina incluida" : ""} (${totalConPropina})`,
+        );
+      }
+    }
+
+    const venta = await repo.crearVenta(client, {
+      clienteId: orden.cliente_id,
+      usuarioId,
+      ordenId,
+      subtotal: total,
+      descuento: 0,
+      descuentoPorcentaje: 0,
+      total,
+    });
+    await repo.crearVentaItems(
+      client,
+      venta.id,
+      items.map((i) => ({
+        productoId: i.producto_id,
+        cantidad: Number(i.cantidad),
+        precioUnitario: Number(i.precio_unitario),
+      })),
+    );
+    await repo.getOrCrearFactura({ ventaId: venta.id, ordenId, subtotal: total, total }, client);
+    await repo.marcarItemsPagados(
+      client,
+      items.map((i) => Number(i.id)),
+      venta.id,
+    );
+
+    // Cuánto de LA CUENTA (sin la propina) entró de verdad en efectivo vs.
+    // banco — mismo criterio que calcularTotalesPorMetodo en cerrarOrden: en
+    // mixto, lo que el cajero escribe es lo que el cliente entregó de
+    // verdad (incluye la propina si hay), por eso se reparte `total`
+    // proporcional a esos dos montos en vez de usarlos tal cual.
+    const { efectivo: efectivoRecibido, banco: bancoRecibido } =
+      input.metodoPago === "mixto"
+        ? (() => {
+            const entregado = input.montoEfectivo + input.montoBanco;
+            if (entregado <= 0) return { efectivo: 0, banco: 0 };
+            const efectivo = Math.round(total * (input.montoEfectivo / entregado));
+            return { efectivo, banco: total - efectivo };
+          })()
+        : input.metodoPago === "efectivo"
+          ? { efectivo: total, banco: 0 }
+          : { efectivo: 0, banco: total };
+
+    // Propina: se reparte en esa misma proporción efectivo/banco.
+    if (input.propina && input.propina > 0) {
+      const totalRecibido = efectivoRecibido + bancoRecibido;
+      const propinaEfectivo =
+        totalRecibido > 0 ? Math.round((input.propina * efectivoRecibido) / totalRecibido) : input.propina;
+      const propinaBanco = input.propina - propinaEfectivo;
+
+      if (propinaEfectivo > 0) {
+        await repo.crearPropina(client, {
+          ordenId,
+          ventaId: venta.id,
+          meseroId: orden.mesero_id,
+          usuarioId,
+          monto: propinaEfectivo,
+          porcentaje: input.propinaPorcentaje ?? null,
+          metodoPago: "efectivo",
+        });
+      }
+      if (propinaBanco > 0) {
+        await repo.crearPropina(client, {
+          ordenId,
+          ventaId: venta.id,
+          meseroId: orden.mesero_id,
+          usuarioId,
+          monto: propinaBanco,
+          porcentaje: input.propinaPorcentaje ?? null,
+          metodoPago: "banco",
+        });
+      }
+    }
+
+    const lineas =
+      input.metodoPago === "mixto"
+        ? descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivoRecibido, montoBanco: bancoRecibido })
+        : descomponerPago({ metodoPago: input.metodoPago, monto: total });
+
+    for (const linea of lineas) {
+      await repo.crearPago(client, {
+        ordenId,
+        ventaId: venta.id,
+        metodoPago: linea.metodoPago,
+        monto: linea.monto,
+        usuarioId,
+      });
+      await cajaService.registrarIngreso(
+        {
+          moduloOrigenSlug: "migao",
+          monto: linea.monto,
+          metodoPago: linea.metodoPago,
+          referenciaEntidad: "ventas",
+          referenciaId: venta.id,
+        },
+        usuarioId,
+        client,
+      );
+    }
+
+    // Si ya no queda nada pendiente por cobrar (todo lo no cancelado ya
+    // tiene venta_id), la orden se cierra sola; si no, sigue abierta para
+    // que se le puedan seguir agregando productos (o pasa a 'pagando' si
+    // venía 'abierta', mismo badge que el motor de partes).
+    const todosLosItems = await repo.getItemsPorOrden(ordenId, client);
+    const quedaPendiente = todosLosItems.some((i) => i.estado !== "cancelado" && !i.venta_id);
+    if (!quedaPendiente) {
+      await repo.cerrarOrdenEstado(client, ordenId);
+    } else if (orden.estado === "abierta") {
+      await client.query(`UPDATE ordenes SET estado = 'pagando' WHERE id = $1`, [ordenId]);
+    }
+
+    await client.query("COMMIT");
+    return { venta, total, ordenCerrada: !quedaPendiente };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Reparte `total` en las partes que pide `division`, validando y calculando
  * cada `montoDebido` del lado del servidor (nunca se confía en lo que mande
  * el cliente). Usada solo por iniciarCobro — una cuenta sin dividir es, acá,
@@ -1086,7 +1263,8 @@ export async function iniciarCobro(ordenId: string, input: IniciarCobroInput, us
 
     const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
     if (itemsRaw.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
-    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado");
+    // Los ya pagados sueltos (ver pagarItems) no vuelven a entrar acá.
+    const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado" && !i.venta_id);
     if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
     const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
 
@@ -1344,18 +1522,21 @@ export async function reiniciarTodo() {
  * vez que se pide se le asigna un número de factura (get-or-create, ver
  * migao.repository.ts::getOrCrearFactura); reimprimir después trae el mismo número.
  */
-export async function obtenerFacturaOrden(ordenId: string) {
-  const [orden, venta] = await Promise.all([repo.getOrdenParaFactura(ordenId), repo.getVentaPorOrdenId(ordenId)]);
-  if (!orden) throw Errors.notFound("Orden no encontrada");
-  if (!venta) throw Errors.notFound("Esta orden todavía no tiene una venta cobrada que facturar");
-
+/** Construye lo imprimible a partir de una venta y su orden YA resueltas —
+ *  compartido por obtenerFacturaOrden (venta más reciente de la orden) y
+ *  obtenerFacturaVenta (una venta puntual, ej. una de varias facturas
+ *  parciales de pagarItems) para que cada una arme la factura de la venta
+ *  exacta que le pidieron, sin volver a re-resolver por ordenId (una orden
+ *  puede tener varias ventas: pagos de productos sueltos + el cierre final). */
+async function construirFacturaDeVenta(venta: Record<string, unknown>, orden: Record<string, unknown>) {
+  const ventaId = venta.id as string;
   const [items, pagos, propina, factura] = await Promise.all([
-    repo.getVentaItems(venta.id),
-    repo.getPagosPorVenta(venta.id),
-    repo.getPropinaPorVenta(venta.id),
+    repo.getVentaItems(ventaId),
+    repo.getPagosPorVenta(ventaId),
+    repo.getPropinaPorVenta(ventaId),
     repo.getOrCrearFactura({
-      ventaId: venta.id,
-      ordenId,
+      ventaId,
+      ordenId: orden.id as string,
       subtotal: Number(venta.subtotal),
       total: Number(venta.total),
     }),
@@ -1363,7 +1544,7 @@ export async function obtenerFacturaOrden(ordenId: string) {
 
   return {
     numeroFactura: factura.numero as string,
-    fecha: orden.closed_at ?? venta.created_at,
+    fecha: (orden.closed_at as string | null) ?? (venta.created_at as string),
     mesaNumero: orden.mesa_numero as string | null,
     mesaPiso: orden.mesa_piso as number | null,
     meseroNombre: orden.mesero_nombre as string | null,
@@ -1393,12 +1574,34 @@ export async function obtenerFacturaOrden(ordenId: string) {
   };
 }
 
-/** Reimprimir la factura desde Caja General: ahí los movimientos guardan el
- *  venta_id (no el orden_id), así que primero se resuelve cuál orden es. */
+/**
+ * Reconstruye la factura imprimible de una orden ya cobrada a partir de lo
+ * que quedó guardado al cerrarla (ventas/venta_items/pagos/migao_propinas) —
+ * nunca recalcula ni vuelve a tocar esa transacción, solo la lee. La primera
+ * vez que se pide se le asigna un número de factura (get-or-create, ver
+ * migao.repository.ts::getOrCrearFactura); reimprimir después trae el mismo número.
+ * Si la orden tuvo varias ventas (pagos de productos sueltos, ver
+ * pagarItems), esta trae la MÁS RECIENTE — para una factura parcial anterior
+ * puntual hay que pedirla por su propio venta_id (obtenerFacturaVenta).
+ */
+export async function obtenerFacturaOrden(ordenId: string) {
+  const [orden, venta] = await Promise.all([repo.getOrdenParaFactura(ordenId), repo.getVentaPorOrdenId(ordenId)]);
+  if (!orden) throw Errors.notFound("Orden no encontrada");
+  if (!venta) throw Errors.notFound("Esta orden todavía no tiene una venta cobrada que facturar");
+  return construirFacturaDeVenta(venta, orden);
+}
+
+/** Reimprimir la factura de UNA venta puntual (ej. una de varias facturas
+ *  parciales de pagarItems, o desde Caja General donde los movimientos
+ *  guardan el venta_id, no el orden_id) — a diferencia de
+ *  obtenerFacturaOrden, nunca ambigua entre varias ventas de la misma orden. */
 export async function obtenerFacturaVenta(ventaId: string) {
   const ordenId = await repo.getOrdenIdPorVentaId(ventaId);
   if (!ordenId) throw Errors.notFound("Esta venta no corresponde a una orden de Migao");
-  return obtenerFacturaOrden(ordenId);
+  const [orden, venta] = await Promise.all([repo.getOrdenParaFactura(ordenId), repo.getVentaPorId(ventaId)]);
+  if (!orden) throw Errors.notFound("Orden no encontrada");
+  if (!venta) throw Errors.notFound("Venta no encontrada");
+  return construirFacturaDeVenta(venta, orden);
 }
 
 /**

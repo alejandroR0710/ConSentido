@@ -94,13 +94,26 @@ export async function listOrdenesAbiertas() {
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
-            -- Solo distinto de 0 en 'pagando' (motor de pagos parciales/cuenta
-            -- dividida) — recalculado en vivo, nunca guardado aparte.
-            (SELECT COALESCE(SUM(cp.monto_debido - COALESCE(
-                       (SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0)), 0)
-               FROM migao_cuenta_partes cp
-               JOIN ventas v ON v.id = cp.venta_id
-              WHERE v.orden_id = o.id) AS pendiente_cobro
+            -- Solo se MUESTRA cuando estado='pagando' (ver frontend) — se
+            -- calcula igual sin importar el estado, recalculado en vivo,
+            -- nunca guardado aparte. Dos motores posibles, nunca a la vez
+            -- para la misma orden: si ya tiene partes (dividir cuenta/pago
+            -- parcial), ese pendiente manda; si no, se suma lo que falte de
+            -- "productos sueltos" (pagarItems) — items sin cancelar y sin
+            -- venta_id (todavía no cobrados).
+            (CASE
+               WHEN EXISTS (
+                 SELECT 1 FROM migao_cuenta_partes cp JOIN ventas v ON v.id = cp.venta_id WHERE v.orden_id = o.id
+               )
+               THEN (SELECT COALESCE(SUM(cp.monto_debido - COALESCE(
+                              (SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0)), 0)
+                       FROM migao_cuenta_partes cp
+                       JOIN ventas v ON v.id = cp.venta_id
+                      WHERE v.orden_id = o.id)
+               ELSE (SELECT COALESCE(SUM(oi2.cantidad * oi2.precio_unitario), 0)
+                       FROM orden_items oi2
+                      WHERE oi2.orden_id = o.id AND oi2.estado != 'cancelado' AND oi2.venta_id IS NULL)
+             END) AS pendiente_cobro
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -816,13 +829,18 @@ export async function crearPartes(
 
 /** Venta ya iniciada (por iniciarCobro) para esta orden, sin importar si ya
  *  se terminó de pagar — usado para el idempotente de iniciarCobro y para
- *  reabrir una orden en 'pagando' y seguir cobrándole abonos. */
+ *  reabrir una orden en 'pagando' y seguir cobrándole abonos. Una orden
+ *  puede tener VARIAS ventas con el tiempo (cada cobro de "productos
+ *  sueltos" de pagarItems crea la suya) — el EXISTS filtra específicamente
+ *  la del motor de partes (dividir cuenta/pago parcial), nunca ambigua
+ *  porque solo puede haber una por orden (iniciarCobro es idempotente). */
 export async function getVentaAbiertaPorOrden(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
     `SELECT v.*, o.estado AS orden_estado
        FROM ventas v
        JOIN ordenes o ON o.id = v.orden_id
-      WHERE v.orden_id = $1`,
+      WHERE v.orden_id = $1
+        AND EXISTS (SELECT 1 FROM migao_cuenta_partes cp WHERE cp.venta_id = v.id)`,
     [ordenId],
   );
   return result.rowCount ? result.rows[0] : null;
@@ -837,6 +855,26 @@ export async function existenPagosPorOrden(ordenId: string) {
     [ordenId],
   );
   return result.rowCount! > 0;
+}
+
+/** Si esta orden ya tiene un cobro iniciado con el motor de partes
+ *  (iniciarCobro/dividir cuenta) — a diferencia de existenPagosPorOrden, NO
+ *  cuenta los cobros de "productos sueltos" (pagarItems), que sí pueden
+ *  convivir con seguir agregando productos a la misma orden (ver
+ *  migao.service.ts::agregarItem). */
+export async function existeCobroDivididoAbierto(ordenId: string) {
+  const result = await pool.query(
+    `SELECT 1 FROM migao_cuenta_partes cp JOIN ventas v ON v.id = cp.venta_id WHERE v.orden_id = $1 LIMIT 1`,
+    [ordenId],
+  );
+  return result.rowCount! > 0;
+}
+
+/** Marca qué ítems ya quedaron pagados por un cobro de "productos sueltos"
+ *  (ver migao.service.ts::pagarItems) — de ahí en adelante ya no cuentan
+ *  para el total pendiente de la orden, sin importar que la mesa siga abierta. */
+export async function marcarItemsPagados(client: PoolClient, itemIds: number[], ventaId: string) {
+  await client.query(`UPDATE orden_items SET venta_id = $2 WHERE id = ANY($1::bigint[])`, [itemIds, ventaId]);
 }
 
 /**
@@ -1159,8 +1197,23 @@ export async function reiniciarTodoCompleto() {
 // cerrarOrden, solo lee lo que ya quedó guardado ahí.
 // ============================================================================
 
+/** La venta MÁS RECIENTE de esta orden — desde pagarItems (cobrar productos
+ *  sueltos) una orden puede acumular varias ventas a lo largo del tiempo,
+ *  cada una con su propia factura; el botón "Factura" del historial
+ *  muestra esta por defecto (normalmente la que cerró la cuenta, con lo
+ *  último que quedó pendiente). Para ver una factura parcial anterior
+ *  puntual hay que abrirla desde el momento en que se cobró (ver
+ *  migao.service.ts::pagarItems / obtenerFacturaVenta con su venta_id). */
 export async function getVentaPorOrdenId(ordenId: string) {
-  const result = await pool.query(`SELECT * FROM ventas WHERE orden_id = $1`, [ordenId]);
+  const result = await pool.query(
+    `SELECT * FROM ventas WHERE orden_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [ordenId],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+export async function getVentaPorId(ventaId: string) {
+  const result = await pool.query(`SELECT * FROM ventas WHERE id = $1`, [ventaId]);
   return result.rowCount ? result.rows[0] : null;
 }
 

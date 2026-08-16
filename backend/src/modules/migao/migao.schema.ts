@@ -195,6 +195,29 @@ export const registrarAbonoSchema = z.union([
 ]);
 export type RegistrarAbonoInput = z.infer<typeof registrarAbonoSchema>;
 
+// Cobra solo ALGUNOS productos de una cuenta que sigue abierta (el mesero
+// puede seguir agregando productos nuevos mientras tanto) — genera su propia
+// venta+factura independiente, aparte de cerrarOrden/iniciarCobro de arriba.
+// Mismo shape que el cobro simple (método + propina opcional), sin
+// descuento/administrativo (no tendría sentido para solo una parte de la cuenta).
+export const pagarItemsSchema = z.union([
+  z.object({
+    itemIds: z.array(z.coerce.number().int().positive()).min(1),
+    metodoPago: z.enum(["efectivo", "banco"]),
+    ...propinaSchema,
+  }),
+  z
+    .object({
+      itemIds: z.array(z.coerce.number().int().positive()).min(1),
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+      ...propinaSchema,
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
+export type PagarItemsInput = z.infer<typeof pagarItemsSchema>;
+
 // Repartir las propinas pendientes — un solo reparto cubre efectivo y banco
 // a la vez, cada `entrega` elige su propio método de pago (en qué se le
 // entrega a ESA persona, sin importar en qué método vino la propina

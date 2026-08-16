@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { ReciboImprimible, type ReciboImprimibleProps } from "./ReciboImprimible";
@@ -20,38 +20,14 @@ type ModalImprimirProps = Omit<ReciboImprimibleProps, "anchoMm"> & { onCerrar: (
 
 /**
  * Modal reutilizable para imprimir una factura o una cotización: muestra la
- * vista previa exacta del recibo y un botón "Imprimir" que abre el diálogo
- * del navegador contra la impresora térmica (instalada como impresora del
- * sistema — ver shared/print/print.css). El ancho 58mm/80mm se recuerda en
- * localStorage para no tener que elegirlo cada vez.
+ * vista previa exacta del recibo, y solo abre el diálogo de impresión del
+ * navegador cuando el cajero toca "Imprimir" (nunca automático al abrir —
+ * este modal es también la pantalla donde se revisa el recibo antes de
+ * mandarlo). El ancho 58mm/80mm se recuerda en localStorage para no tener
+ * que elegirlo cada vez.
  */
 export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
   const [anchoMm, setAnchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
-  // El logo (SVG) tarda un poquito en llegar la primera vez de la sesión —
-  // si se imprimía apenas se abría el modal (como antes), a veces la
-  // impresión salía disparada ANTES de que la imagen terminara de pintarse
-  // y quedaba sin logo. Se espera a que la copia que de verdad se imprime
-  // avise que ya cargó (o falló) antes de mandar a imprimir.
-  const [logoListo, setLogoListo] = useState(false);
-
-  // Salta directo al diálogo de impresión del navegador al abrir — sin este
-  // paso, había que ver nuestra vista previa Y LUEGO la del navegador, dos
-  // pantallas para lo mismo. El navegador siempre va a pedir su propia
-  // confirmación antes de imprimir (ninguna web puede saltársela por
-  // seguridad), así que este modal queda de respaldo debajo por si hay que
-  // reimprimir o cambiar el ancho de papel.
-  useEffect(() => {
-    if (!logoListo) return;
-    window.print();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logoListo]);
-
-  // Red de seguridad: si por lo que sea el logo nunca dispara onLoad/onError
-  // (ej. algún caso raro de caché), no dejar al cajero esperando para siempre.
-  useEffect(() => {
-    const timeout = setTimeout(() => setLogoListo(true), 1500);
-    return () => clearTimeout(timeout);
-  }, []);
 
   function cambiarAncho(valor: 58 | 80) {
     setAnchoMm(valor);
@@ -108,12 +84,7 @@ export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
               <thead> al paginar). Ancho dinámico porque el cajero puede
               cambiarlo (58mm/80mm) sin recargar. */}
           <style>{`@page { size: ${anchoMm}mm auto; margin: 0; }`}</style>
-          <ReciboImprimible
-            {...recibo}
-            anchoMm={anchoMm}
-            id="recibo-imprimible"
-            onLogoSettled={() => setLogoListo(true)}
-          />
+          <ReciboImprimible {...recibo} anchoMm={anchoMm} id="recibo-imprimible" />
         </div>,
         document.body,
       )}

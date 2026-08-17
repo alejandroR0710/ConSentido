@@ -176,7 +176,10 @@ export interface ItemActivo extends ItemCocina {
 
 export interface IngredienteLimitante {
   nombre: string;
-  stockUnidades: string;
+  // A diferencia de otros campos NUMERIC de la API (que llegan como texto),
+  // este viene de json_build_object en la consulta — Postgres ya lo entrega
+  // como número JSON limpio, sin decimales de sobra.
+  stockUnidades: number;
   unidadMedida: string;
   // true = ya no alcanza ni para 1 unidad más (sin_stock); false = alcanza
   // pero ya cruzó su mínimo (bajo_stock) — ver migao.repository.ts::listProductosMigao.

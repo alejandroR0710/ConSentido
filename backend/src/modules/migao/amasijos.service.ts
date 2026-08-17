@@ -155,7 +155,9 @@ async function aplicarPreparacionBase(
       usuarioId,
     });
     if (actualizado && Number(actualizado.stock_unidades) < 0) {
-      alertas.push(`⚠ Sin stock suficiente de "${actualizado.nombre}" — quedan ${actualizado.stock_unidades} ${actualizado.unidad_medida}.`);
+      // Ver mismo comentario en inventario.service.ts: Number(...) limpia el
+      // "-5.000" crudo de Postgres a "-5" antes de mostrarlo.
+      alertas.push(`⚠ Sin stock suficiente de "${actualizado.nombre}" — quedan ${Number(actualizado.stock_unidades)} ${actualizado.unidad_medida}.`);
     }
   }
 

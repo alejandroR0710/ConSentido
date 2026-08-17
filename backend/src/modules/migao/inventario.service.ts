@@ -132,8 +132,11 @@ export async function aplicarConsumoPorProducto(
     });
 
     if (deltaUnidades < 0 && Number(actualizado.stock_unidades) < 0) {
+      // stock_unidades viene de Postgres como texto de NUMERIC (ej. "-5.000",
+      // siempre con 3 decimales) — Number(...) lo deja limpio ("-5") antes de
+      // mostrarlo.
       alertas.push(
-        `⚠ Sin stock suficiente de "${ingrediente.nombre}" — quedan ${actualizado.stock_unidades} ${ingrediente.unidadMedida}.`,
+        `⚠ Sin stock suficiente de "${ingrediente.nombre}" — quedan ${Number(actualizado.stock_unidades)} ${ingrediente.unidadMedida}.`,
       );
     }
   }

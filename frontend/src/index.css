@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 /*
+ * Fuerza el modo oscuro siempre, sin importar el sistema operativo del
+ * dispositivo: redefine la variante "dark:" para que no dependa de ninguna
+ * condición (se aplica igual que si no tuviera prefijo). Reutiliza TODAS las
+ * clases dark: que ya existen en cada página — no hace falta tocar archivo
+ * por archivo.
+ */
+@custom-variant dark (&);
+
+/*
  * Paleta de marca: verde oscuro + blanco vainilla (ambientación de naturaleza).
  * Se definen como tokens de Tailwind v4 (@theme) para usarse como bg-brand-*, text-brand-*, etc.
  */
@@ -18,19 +27,12 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
-  background-color: var(--color-brand-vanilla);
-  color: var(--color-brand-ink);
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: var(--color-brand-green-900);
-    color: var(--color-brand-vanilla);
-  }
+  background-color: var(--color-brand-green-900);
+  color: var(--color-brand-vanilla);
 }

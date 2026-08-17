@@ -16,10 +16,27 @@ interface FilaEntrega {
   // true = nombre libre (persona sin cuenta en la plataforma) en vez de
   // elegido de la lista de usuarios.
   nombreManual: boolean;
-  metodoPago: "efectivo" | "banco";
+  metodoPago: "efectivo" | "banco" | "mixto";
+  // Solo se usa si metodoPago es "efectivo" o "banco".
   monto: number;
+  // Solo se usan si metodoPago es "mixto" — al confirmar, esta fila se
+  // descompone en 1-2 entregas ya puras (mismo criterio que "mixto" en
+  // cualquier otro cobro de la app, ver descomponerPago en el backend).
+  montoEfectivo: number;
+  montoBanco: number;
   fechaEntrega: string;
   motivo: string;
+}
+
+function montoEfectivoDeFila(e: FilaEntrega) {
+  if (e.metodoPago === "efectivo") return Number.isFinite(e.monto) ? e.monto : 0;
+  if (e.metodoPago === "mixto") return Number.isFinite(e.montoEfectivo) ? e.montoEfectivo : 0;
+  return 0;
+}
+function montoBancoDeFila(e: FilaEntrega) {
+  if (e.metodoPago === "banco") return Number.isFinite(e.monto) ? e.monto : 0;
+  if (e.metodoPago === "mixto") return Number.isFinite(e.montoBanco) ? e.montoBanco : 0;
+  return 0;
 }
 
 const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -88,7 +105,16 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
   const [entregas, setEntregas] = useState<FilaEntrega[]>([
-    { nombrePersona: "", nombreManual: false, metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+    {
+      nombrePersona: "",
+      nombreManual: false,
+      metodoPago: "efectivo",
+      monto: 0,
+      montoEfectivo: 0,
+      montoBanco: 0,
+      fechaEntrega: hoyBogota(),
+      motivo: "",
+    },
   ]);
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
@@ -126,12 +152,8 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const totalBancoSeleccionado = diasElegidos.reduce((acc, d) => acc + d.montoBanco, 0);
   const totalSeleccionado = totalEfectivoSeleccionado + totalBancoSeleccionado;
 
-  const sumaEntregasEfectivo = entregas
-    .filter((e) => e.metodoPago === "efectivo")
-    .reduce((acc, e) => acc + (Number.isFinite(e.monto) ? e.monto : 0), 0);
-  const sumaEntregasBanco = entregas
-    .filter((e) => e.metodoPago === "banco")
-    .reduce((acc, e) => acc + (Number.isFinite(e.monto) ? e.monto : 0), 0);
+  const sumaEntregasEfectivo = entregas.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
+  const sumaEntregasBanco = entregas.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
   const restanteEfectivo = totalEfectivoSeleccionado - sumaEntregasEfectivo;
   const restanteBanco = totalBancoSeleccionado - sumaEntregasBanco;
 
@@ -162,7 +184,16 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   function agregarEntrega() {
     setEntregas((prev) => [
       ...prev,
-      { nombrePersona: "", nombreManual: false, metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+      {
+        nombrePersona: "",
+        nombreManual: false,
+        metodoPago: "efectivo",
+        monto: 0,
+        montoEfectivo: 0,
+        montoBanco: 0,
+        fechaEntrega: hoyBogota(),
+        motivo: "",
+      },
     ]);
   }
 
@@ -170,10 +201,19 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     setEntregas((prev) => prev.filter((_, i) => i !== indice));
   }
 
-  /** Llena el monto de esta fila con lo que falte del MISMO método para
-   *  cuadrar — atajo para el caso más común (repartir todo entre 1-2 personas). */
+  /** Llena el/los monto(s) de esta fila con lo que falte para cuadrar —
+   *  atajo para el caso más común (repartir todo entre 1-2 personas). En
+   *  mixto llena efectivo y banco por separado, cada uno con lo que quede
+   *  de SU método. */
   function usarRestante(indice: number) {
     const fila = entregas[indice];
+    if (fila.metodoPago === "mixto") {
+      const otrasEfectivo = entregas.reduce((acc, e, i) => (i === indice ? acc : acc + montoEfectivoDeFila(e)), 0);
+      const otrasBanco = entregas.reduce((acc, e, i) => (i === indice ? acc : acc + montoBancoDeFila(e)), 0);
+      actualizarEntrega(indice, "montoEfectivo", Math.max(0, totalEfectivoSeleccionado - otrasEfectivo));
+      actualizarEntrega(indice, "montoBanco", Math.max(0, totalBancoSeleccionado - otrasBanco));
+      return;
+    }
     const totalDelMetodo = fila.metodoPago === "efectivo" ? totalEfectivoSeleccionado : totalBancoSeleccionado;
     const otras = entregas.reduce(
       (acc, e, i) => (i === indice || e.metodoPago !== fila.metodoPago ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)),
@@ -183,7 +223,11 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     actualizarEntrega(indice, "monto", sugerido);
   }
 
-  const entregasValidas = entregas.every((e) => e.nombrePersona.trim().length > 0 && e.monto > 0);
+  const entregasValidas = entregas.every((e) => {
+    if (e.nombrePersona.trim().length === 0) return false;
+    if (e.metodoPago === "mixto") return (e.montoEfectivo || 0) + (e.montoBanco || 0) > 0;
+    return e.monto > 0;
+  });
   const puedeRepartir =
     !cargando &&
     diasSeleccionados.size > 0 &&
@@ -198,16 +242,27 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     setProcesando(true);
     setError(null);
     try {
+      // "Mixto" no es un método real en la base (mismo criterio que en
+      // cualquier otro cobro de la app) — cada fila mixta se descompone acá
+      // en 1-2 entregas ya puras antes de mandarlas.
+      const entregasParaEnviar = entregas.flatMap((e) => {
+        const base = {
+          nombrePersona: e.nombrePersona.trim(),
+          fechaEntrega: e.fechaEntrega || undefined,
+          motivo: e.motivo.trim() || undefined,
+        };
+        if (e.metodoPago === "mixto") {
+          const lineas: (typeof base & { metodoPago: "efectivo" | "banco"; monto: number })[] = [];
+          if (e.montoEfectivo > 0) lineas.push({ ...base, metodoPago: "efectivo", monto: e.montoEfectivo });
+          if (e.montoBanco > 0) lineas.push({ ...base, metodoPago: "banco", monto: e.montoBanco });
+          return lineas;
+        }
+        return [{ ...base, metodoPago: e.metodoPago, monto: e.monto }];
+      });
       await migaoApi.repartirPropinas({
         fechas: Array.from(diasSeleccionados),
         nota: nota.trim() || undefined,
-        entregas: entregas.map((e) => ({
-          nombrePersona: e.nombrePersona.trim(),
-          metodoPago: e.metodoPago,
-          monto: e.monto,
-          fechaEntrega: e.fechaEntrega || undefined,
-          motivo: e.motivo.trim() || undefined,
-        })),
+        entregas: entregasParaEnviar,
       });
       await onRepartido();
       onCerrar();
@@ -343,17 +398,39 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                     >
                       <option value="efectivo">Efectivo</option>
                       <option value="banco">Banco</option>
+                      <option value="mixto">Mixto</option>
                     </select>
                   </div>
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
-                    <div className="flex items-center gap-1">
-                      <MoneyInput
-                        value={entrega.monto}
-                        onChange={(v) => actualizarEntrega(indice, "monto", v)}
-                        className={inputClase}
-                      />
-                    </div>
+                    {entrega.metodoPago === "mixto" ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1">
+                          <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Ef.</span>
+                          <MoneyInput
+                            value={entrega.montoEfectivo}
+                            onChange={(v) => actualizarEntrega(indice, "montoEfectivo", v)}
+                            className={inputClase}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Bc.</span>
+                          <MoneyInput
+                            value={entrega.montoBanco}
+                            onChange={(v) => actualizarEntrega(indice, "montoBanco", v)}
+                            className={inputClase}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <MoneyInput
+                          value={entrega.monto}
+                          onChange={(v) => actualizarEntrega(indice, "monto", v)}
+                          className={inputClase}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Fecha</label>

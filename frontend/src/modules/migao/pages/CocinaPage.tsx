@@ -227,7 +227,12 @@ export function CocinaPage() {
           No hay pedidos pendientes. 🎉
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        // min-[480px] en vez de sm (640px): una tablet chica de cocina (ej.
+        // Lenovo TB-7305X, 7") en horizontal ronda un ancho lógico CSS justo
+        // por debajo o encima de 640px según el zoom del navegador — con el
+        // punto de quiebre normal se quedaba en una sola columna aunque la
+        // pantalla ya estuviera en horizontal.
+        <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 xl:grid-cols-3">
           {tickets.map((ticket) => {
             const pendientes = ticket.items.filter((i) => i.estado === "pendiente");
             const preparando = ticket.items.filter((i) => i.estado === "preparando");

@@ -295,7 +295,7 @@ export function CocinaPage() {
                     <button
                       onClick={() => empezarPreparar(ticket.ordenId)}
                       disabled={procesando}
-                      className="w-full rounded-md bg-amber-500 px-4 py-3 text-lg font-bold text-white hover:bg-amber-600 disabled:opacity-60"
+                      className="w-full rounded-md bg-amber-700 px-4 py-3 text-lg font-bold text-white hover:bg-amber-800 disabled:opacity-60"
                     >
                       {procesando
                         ? "Procesando..."

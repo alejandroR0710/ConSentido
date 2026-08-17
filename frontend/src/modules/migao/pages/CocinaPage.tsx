@@ -227,12 +227,14 @@ export function CocinaPage() {
           No hay pedidos pendientes. 🎉
         </p>
       ) : (
-        // min-[480px] en vez de sm (640px): una tablet chica de cocina (ej.
-        // Lenovo TB-7305X, 7") en horizontal ronda un ancho lógico CSS justo
-        // por debajo o encima de 640px según el zoom del navegador — con el
-        // punto de quiebre normal se quedaba en una sola columna aunque la
-        // pantalla ya estuviera en horizontal.
-        <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 xl:grid-cols-3">
+        // auto-fill en vez de puntos de quiebre fijos (sm/min-[480px]): el
+        // ancho lógico CSS de la tablet de cocina (Lenovo TB-7305X) no se
+        // pudo predecir con un breakpoint — depende del nivel de zoom del
+        // navegador y del DPR reportado, que ya hicieron fallar dos ajustes
+        // de punto de quiebre distintos. Con auto-fill, el navegador mismo
+        // calcula cuántas columnas de al menos 300px caben en el ancho real
+        // disponible, sin tener que adivinar ningún número de píxeles.
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
           {tickets.map((ticket) => {
             const pendientes = ticket.items.filter((i) => i.estado === "pendiente");
             const preparando = ticket.items.filter((i) => i.estado === "preparando");

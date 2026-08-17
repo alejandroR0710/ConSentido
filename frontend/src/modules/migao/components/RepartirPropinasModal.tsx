@@ -13,6 +13,9 @@ interface RepartirPropinasModalProps {
 
 interface FilaEntrega {
   nombrePersona: string;
+  // true = nombre libre (persona sin cuenta en la plataforma) en vez de
+  // elegido de la lista de usuarios.
+  nombreManual: boolean;
   metodoPago: "efectivo" | "banco";
   monto: number;
   fechaEntrega: string;
@@ -85,7 +88,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
   const [entregas, setEntregas] = useState<FilaEntrega[]>([
-    { nombrePersona: "", metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+    { nombrePersona: "", nombreManual: false, metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
   ]);
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
@@ -152,14 +155,14 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     });
   }
 
-  function actualizarEntrega(indice: number, campo: keyof FilaEntrega, valor: string | number) {
+  function actualizarEntrega(indice: number, campo: keyof FilaEntrega, valor: string | number | boolean) {
     setEntregas((prev) => prev.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e)));
   }
 
   function agregarEntrega() {
     setEntregas((prev) => [
       ...prev,
-      { nombrePersona: "", metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
+      { nombrePersona: "", nombreManual: false, metodoPago: "efectivo", monto: 0, fechaEntrega: hoyBogota(), motivo: "" },
     ]);
   }
 
@@ -219,7 +222,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 
   return (
-    <Modal titulo="Repartir propinas" onCerrar={onCerrar} maxWidth="sm:max-w-2xl">
+    <Modal titulo="Repartir propinas" onCerrar={onCerrar} maxWidth="sm:max-w-4xl">
       {cargando ? (
         <p className="text-center text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Cargando días pendientes...</p>
       ) : pendientesDia.length === 0 ? (
@@ -296,19 +299,40 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                   className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-end dark:border-brand-green-700"
                 >
                   <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Persona</label>
-                    <select
-                      value={entrega.nombrePersona}
-                      onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                      className={inputClase}
-                    >
-                      <option value="">Elegir...</option>
-                      {usuarios.map((u) => (
-                        <option key={u.id} value={u.nombre}>
-                          {u.nombre} · {u.rol_nombre}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="mb-0.5 flex items-center justify-between gap-1 text-[11px] font-medium">
+                      <span>Persona</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          actualizarEntrega(indice, "nombreManual", !entrega.nombreManual);
+                          actualizarEntrega(indice, "nombrePersona", "");
+                        }}
+                        className="font-normal text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                      >
+                        {entrega.nombreManual ? "← elegir de la lista" : "escribir nombre"}
+                      </button>
+                    </label>
+                    {entrega.nombreManual ? (
+                      <input
+                        value={entrega.nombrePersona}
+                        onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
+                        placeholder="Ej. Juan Pérez"
+                        className={inputClase}
+                      />
+                    ) : (
+                      <select
+                        value={entrega.nombrePersona}
+                        onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
+                        className={inputClase}
+                      >
+                        <option value="">Elegir...</option>
+                        {usuarios.map((u) => (
+                          <option key={u.id} value={u.nombre}>
+                            {u.nombre} · {u.rol_nombre}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Método</label>

@@ -57,3 +57,32 @@ export function entregaPropinaAReciboProps(entrega: EntregaPropina): Omit<Recibo
     total: monto,
   };
 }
+
+/** Igual que entregaPropinaAReciboProps, pero para una entrega "mixta": el
+ *  backend no tiene un metodo_pago 'mixto' real (se descompone en 2 filas
+ *  puras al guardar, ver RepartirPropinasModal::confirmar) — acá se
+ *  reconstruye el comprobante único con las dos líneas. */
+export function entregaMixtaAReciboProps(
+  efectivo: EntregaPropina,
+  banco: EntregaPropina,
+): Omit<ReciboImprimibleProps, "anchoMm"> {
+  const camposEncabezado: { etiqueta: string; valor: string }[] = [
+    { etiqueta: "Persona", valor: efectivo.nombre_persona },
+    { etiqueta: "Método", valor: "Mixto" },
+  ];
+  if (efectivo.motivo) camposEncabezado.push({ etiqueta: "Motivo", valor: efectivo.motivo });
+  if (efectivo.usuario_nombre) camposEncabezado.push({ etiqueta: "Registrado por", valor: efectivo.usuario_nombre });
+
+  const montoEfectivo = Number(efectivo.monto);
+  const montoBanco = Number(banco.monto);
+  return {
+    tipo: "comprobante_propina",
+    fecha: efectivo.fecha_entrega,
+    camposEncabezado,
+    items: [
+      { nombre: "Propina entregada (efectivo)", cantidad: 1, precioUnitario: montoEfectivo, subtotal: montoEfectivo },
+      { nombre: "Propina entregada (banco)", cantidad: 1, precioUnitario: montoBanco, subtotal: montoBanco },
+    ],
+    total: montoEfectivo + montoBanco,
+  };
+}

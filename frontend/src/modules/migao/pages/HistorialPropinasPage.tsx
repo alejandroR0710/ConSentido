@@ -12,7 +12,7 @@ import { migaoApi, type EntregaPropina, type PropinaEntrada } from "../api";
 import { labelArea } from "../areas";
 import { BotonFactura } from "../components/BotonFactura";
 import { RepartirPropinasModal } from "../components/RepartirPropinasModal";
-import { entregaPropinaAReciboProps } from "../factura";
+import { entregaMixtaAReciboProps, entregaPropinaAReciboProps } from "../factura";
 
 const POLL_MS = 15000;
 
@@ -76,22 +76,59 @@ function agruparPorDia(historial: PropinaEntrada[]): GrupoDiaPropinas[] {
   return grupos;
 }
 
+/** El backend no tiene un metodo_pago 'mixto' real: una entrega "mixta" se
+ *  descompone en 2 filas puras (una efectivo, una banco) al guardar, ver
+ *  RepartirPropinasModal::confirmar — reutiliza la misma infraestructura de
+ *  siempre en vez de agregar un valor nuevo a la base. Acá se reconstruyen
+ *  para mostrarlas como una sola fila "Mixto" en la tabla, buscando su pareja
+ *  por persona/motivo/fecha/quién la registró/liquidación, a menos de 5s de
+ *  diferencia (mismo request de reparto, ver flatMap en confirmar()). */
+function combinarEntregasMixtas(entregas: EntregaPropina[]): EntregaPropina[][] {
+  const usadas = new Set<string>();
+  const grupos: EntregaPropina[][] = [];
+  for (const e of entregas) {
+    if (usadas.has(e.id)) continue;
+    const pareja = entregas.find(
+      (otra) =>
+        otra.id !== e.id &&
+        !usadas.has(otra.id) &&
+        otra.metodo_pago !== e.metodo_pago &&
+        otra.nombre_persona === e.nombre_persona &&
+        otra.motivo === e.motivo &&
+        otra.fecha_entrega === e.fecha_entrega &&
+        otra.usuario_nombre === e.usuario_nombre &&
+        otra.liquidacion_id === e.liquidacion_id &&
+        Math.abs(new Date(otra.created_at).getTime() - new Date(e.created_at).getTime()) < 5000,
+    );
+    usadas.add(e.id);
+    if (pareja) {
+      usadas.add(pareja.id);
+      grupos.push([e, pareja]);
+    } else {
+      grupos.push([e]);
+    }
+  }
+  return grupos;
+}
+
 interface GrupoDiaEntregas {
   fecha: string;
-  entregas: EntregaPropina[];
+  filas: EntregaPropina[][];
 }
 
 /** Mismo criterio que agruparPorDia, pero por `fecha_entrega` (ya viene como
  *  'YYYY-MM-DD', no como timestamp) — el historial de entregas ya llega
- *  ordenado por esa fecha DESC desde el backend. */
-function agruparEntregasPorDia(entregas: EntregaPropina[]): GrupoDiaEntregas[] {
+ *  ordenado por esa fecha DESC desde el backend, y combinarEntregasMixtas
+ *  conserva ese orden relativo. */
+function agruparEntregasPorDia(filas: EntregaPropina[][]): GrupoDiaEntregas[] {
   const grupos: GrupoDiaEntregas[] = [];
-  for (const e of entregas) {
+  for (const fila of filas) {
+    const fecha = fila[0].fecha_entrega;
     const ultimo = grupos[grupos.length - 1];
-    if (ultimo && ultimo.fecha === e.fecha_entrega) {
-      ultimo.entregas.push(e);
+    if (ultimo && ultimo.fecha === fecha) {
+      ultimo.filas.push(fila);
     } else {
-      grupos.push({ fecha: e.fecha_entrega, entregas: [e] });
+      grupos.push({ fecha, filas: [fila] });
     }
   }
   return grupos;
@@ -151,7 +188,7 @@ export function HistorialPropinasPage() {
     .filter((p) => p.metodo_pago === "banco")
     .reduce((acc, p) => acc + Number(p.monto), 0);
   const grupos = agruparPorDia(historial);
-  const gruposEntregas = agruparEntregasPorDia(entregasPropinas);
+  const gruposEntregas = agruparEntregasPorDia(combinarEntregasMixtas(entregasPropinas));
 
   return (
     <div className="flex flex-col gap-6">
@@ -340,11 +377,12 @@ export function HistorialPropinasPage() {
                 </tr>
               ) : (
                 gruposEntregas.flatMap((grupo) => {
-                  const totalDelDia = grupo.entregas.reduce((acc, e) => acc + Number(e.monto), 0);
-                  const efectivoDelDia = grupo.entregas
+                  const todasDelDia = grupo.filas.flat();
+                  const totalDelDia = todasDelDia.reduce((acc, e) => acc + Number(e.monto), 0);
+                  const efectivoDelDia = todasDelDia
                     .filter((e) => e.metodo_pago === "efectivo")
                     .reduce((acc, e) => acc + Number(e.monto), 0);
-                  const bancoDelDia = grupo.entregas
+                  const bancoDelDia = todasDelDia
                     .filter((e) => e.metodo_pago === "banco")
                     .reduce((acc, e) => acc + Number(e.monto), 0);
                   const filaEncabezado = (
@@ -367,25 +405,44 @@ export function HistorialPropinasPage() {
                     </tr>
                   );
 
-                  const filasDelDia = grupo.entregas.map((e) => (
-                    <tr key={e.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
-                      <td className="px-3 py-2 font-medium">{e.nombre_persona}</td>
-                      <td className="px-3 py-2 capitalize">{e.metodo_pago}</td>
-                      <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">{e.motivo ?? "—"}</td>
-                      <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
-                        {e.usuario_nombre ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 font-semibold">{formatMoney(e.monto)}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          onClick={() => setReciboEntrega(entregaPropinaAReciboProps(e))}
-                          className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-                        >
-                          Comprobante
-                        </button>
-                      </td>
-                    </tr>
-                  ));
+                  const filasDelDia = grupo.filas.map((partes) => {
+                    const [principal] = partes;
+                    const esMixto = partes.length === 2;
+                    const monto = partes.reduce((acc, p) => acc + Number(p.monto), 0);
+                    const metodoLabel = esMixto ? "Mixto" : principal.metodo_pago === "efectivo" ? "Efectivo" : "Banco";
+                    return (
+                      <tr
+                        key={partes.map((p) => p.id).join("-")}
+                        className="border-t border-brand-vanilla-dark dark:border-brand-green-700"
+                      >
+                        <td className="px-3 py-2 font-medium">{principal.nombre_persona}</td>
+                        <td className="px-3 py-2">{metodoLabel}</td>
+                        <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
+                          {principal.motivo ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
+                          {principal.usuario_nombre ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 font-semibold">{formatMoney(monto)}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => {
+                              if (esMixto) {
+                                const efectivo = partes.find((p) => p.metodo_pago === "efectivo")!;
+                                const banco = partes.find((p) => p.metodo_pago === "banco")!;
+                                setReciboEntrega(entregaMixtaAReciboProps(efectivo, banco));
+                              } else {
+                                setReciboEntrega(entregaPropinaAReciboProps(principal));
+                              }
+                            }}
+                            className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                          >
+                            Comprobante
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  });
 
                   return [filaEncabezado, ...filasDelDia];
                 })

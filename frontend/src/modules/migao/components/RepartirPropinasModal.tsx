@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
+import { usuariosApi, type Usuario } from "../../general/api";
 import { migaoApi, type PendientePropinaDia } from "../api";
 
 interface RepartirPropinasModalProps {
@@ -80,6 +81,7 @@ function agruparPorSemana(dias: PendientePropinaDia[]): GrupoSemana[] {
  */
 export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropinasModalProps) {
   const [pendientesDia, setPendientesDia] = useState<PendientePropinaDia[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
   const [entregas, setEntregas] = useState<FilaEntrega[]>([
@@ -93,10 +95,16 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     let cancelado = false;
     (async () => {
       try {
-        const dias = await migaoApi.obtenerPendientesPropinasPorDia();
+        const [dias, listaUsuarios] = await Promise.all([
+          migaoApi.obtenerPendientesPropinasPorDia(),
+          usuariosApi.listar(),
+        ]);
         if (cancelado) return;
         setPendientesDia(dias);
         setDiasSeleccionados(new Set(dias.map((d) => d.fecha)));
+        // Super Root queda afuera: la propina se reparte entre el equipo, no
+        // tiene sentido ofrecerlo como destinatario.
+        setUsuarios(listaUsuarios.filter((u) => u.rol_nombre !== "Super Root"));
       } catch (err) {
         if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudieron cargar los días pendientes");
       } finally {
@@ -288,13 +296,19 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                   className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-end dark:border-brand-green-700"
                 >
                   <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Nombre</label>
-                    <input
+                    <label className="mb-0.5 block text-[11px] font-medium">Persona</label>
+                    <select
                       value={entrega.nombrePersona}
                       onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                      placeholder="Ej. Juan Pérez"
                       className={inputClase}
-                    />
+                    >
+                      <option value="">Elegir...</option>
+                      {usuarios.map((u) => (
+                        <option key={u.id} value={u.nombre}>
+                          {u.nombre} · {u.rol_nombre}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium">Método</label>

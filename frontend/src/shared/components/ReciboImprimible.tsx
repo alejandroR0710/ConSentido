@@ -35,7 +35,9 @@ export interface ReciboImprimibleProps {
   // "movimiento": comprobante simple de un ingreso/egreso suelto de Caja
   // General (sin ítems, ej. un ingreso manual o un egreso) — ver `variante`.
   // "resumen": totalizado de un día o un turno (ver resumenIngresos/Egresos).
-  tipo: "factura" | "cotizacion" | "movimiento" | "resumen";
+  // "comprobante_propina": vale de entrega de propina a una persona del
+  // equipo, con espacio para que firme de recibido (ver HistorialPropinasPage).
+  tipo: "factura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina";
   // Solo aplica a tipo "movimiento": qué franja/color mostrar.
   variante?: "ingreso" | "egreso";
   folio?: string;
@@ -103,17 +105,23 @@ export function ReciboImprimible({
   const esCotizacion = tipo === "cotizacion";
   const esMovimiento = tipo === "movimiento";
   const esResumen = tipo === "resumen";
+  const esComprobantePropina = tipo === "comprobante_propina";
   const esEgreso = esMovimiento && variante === "egreso";
+  // Comparte el layout simple de "movimiento" (una sola línea, sin columnas
+  // de cantidad/precio) — un comprobante de propina también es un solo monto.
+  const esLineaUnica = esMovimiento || esComprobantePropina;
 
   const franjaTexto = esCotizacion
     ? "COTIZACIÓN — NO es una factura de venta"
     : esResumen
       ? "RESUMEN DE CAJA"
-      : esMovimiento
-        ? esEgreso
-          ? "COMPROBANTE DE EGRESO"
-          : "COMPROBANTE DE INGRESO"
-        : "FACTURA DE VENTA";
+      : esComprobantePropina
+        ? "COMPROBANTE DE ENTREGA DE PROPINA"
+        : esMovimiento
+          ? esEgreso
+            ? "COMPROBANTE DE EGRESO"
+            : "COMPROBANTE DE INGRESO"
+          : "FACTURA DE VENTA";
   // Cotización: relleno sólido (no solo borde+texto de color) — un color
   // claro sobre blanco se convierte en un punteado casi invisible en la
   // impresora térmica (mismo problema que el peso de fuente, ver comentario
@@ -124,7 +132,15 @@ export function ReciboImprimible({
       ? "border-red-600 text-red-700"
       : "border-black text-black";
 
-  const tituloDocumento = esCotizacion ? "Cotización" : esMovimiento ? "Comprobante" : esResumen ? null : "Factura";
+  const tituloDocumento = esCotizacion
+    ? "Cotización"
+    : esComprobantePropina
+      ? "Comprobante de propina"
+      : esMovimiento
+        ? "Comprobante"
+        : esResumen
+          ? null
+          : "Factura";
 
   const totalIngresos = (resumenIngresos ?? []).reduce((acc, r) => acc + r.monto, 0);
   const totalEgresos = (resumenEgresos ?? []).reduce((acc, r) => acc + r.monto, 0);
@@ -260,21 +276,21 @@ export function ReciboImprimible({
         <table className="w-full text-[16px]">
           <thead>
             <tr className="border-b border-dashed border-black">
-              <th className="py-1 text-left font-semibold">{esMovimiento ? "Concepto" : "Producto"}</th>
-              {!esMovimiento && (
+              <th className="py-1 text-left font-semibold">{esLineaUnica ? "Concepto" : "Producto"}</th>
+              {!esLineaUnica && (
                 <>
                   <th className="py-1 text-right font-semibold">Cant.</th>
                   <th className="py-1 text-right font-semibold">Precio</th>
                 </>
               )}
-              <th className="py-1 text-right font-semibold">{esMovimiento ? "Monto" : "Total"}</th>
+              <th className="py-1 text-right font-semibold">{esLineaUnica ? "Monto" : "Total"}</th>
             </tr>
           </thead>
           <tbody>
             {(items ?? []).map((item, idx) => (
               <tr key={idx}>
                 <td className="py-0.5 pr-1 align-top">{item.nombre}</td>
-                {!esMovimiento && (
+                {!esLineaUnica && (
                   <>
                     <td className="py-0.5 text-right align-top">{item.cantidad}</td>
                     <td className="py-0.5 text-right align-top">{formatMoney(item.precioUnitario)}</td>
@@ -297,7 +313,7 @@ export function ReciboImprimible({
           </div>
         ) : (
           <>
-            {!esMovimiento && (
+            {!esLineaUnica && (
               <div className="flex justify-between">
                 <span>Subtotal</span>
                 <span>{formatMoney(subtotal ?? 0)}</span>
@@ -344,10 +360,17 @@ export function ReciboImprimible({
 
       {nota && <div className="mt-2 text-[16px] italic">Nota: {nota}</div>}
 
+      {esComprobantePropina && (
+        <div className="mt-6 text-[16px]">
+          <div className="border-t border-black pt-1 text-center">Firma de quien recibe</div>
+          <div className="mt-1 text-center text-[13px]">C.C.: _______________________</div>
+        </div>
+      )}
+
       <div className="mt-3 text-center text-[15px]">
         {esCotizacion
           ? "Precios sujetos a cambio. Válida por 15 días."
-          : esMovimiento || esResumen
+          : esMovimiento || esResumen || esComprobantePropina
             ? "Documento interno — no es una factura de venta."
             : "¡Gracias por tu compra!"}
       </div>

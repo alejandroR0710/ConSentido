@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { Modal } from "../../../shared/components/Modal";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -11,6 +12,7 @@ import { migaoApi, type EntregaPropina, type PropinaEntrada } from "../api";
 import { labelArea } from "../areas";
 import { BotonFactura } from "../components/BotonFactura";
 import { RepartirPropinasModal } from "../components/RepartirPropinasModal";
+import { entregaPropinaAReciboProps } from "../factura";
 
 const POLL_MS = 15000;
 
@@ -111,6 +113,7 @@ export function HistorialPropinasPage() {
 
   const [repartiendo, setRepartiendo] = useState(false);
   const [modalEntregasAbierto, setModalEntregasAbierto] = useState(false);
+  const [reciboEntrega, setReciboEntrega] = useState<ReturnType<typeof entregaPropinaAReciboProps> | null>(null);
 
   // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
   // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
@@ -319,18 +322,19 @@ export function HistorialPropinasPage() {
                 <th className="px-3 py-2">Motivo</th>
                 <th className="px-3 py-2">Registrado por</th>
                 <th className="px-3 py-2">Monto</th>
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                     Cargando...
                   </td>
                 </tr>
               ) : entregasPropinas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                     Todavía no se ha repartido ninguna propina.
                   </td>
                 </tr>
@@ -348,7 +352,7 @@ export function HistorialPropinasPage() {
                       key={`dia-entrega-${grupo.fecha}`}
                       className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
                     >
-                      <td colSpan={5} className="px-3 py-2">
+                      <td colSpan={6} className="px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                           <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                             {formatearFechaLarga(grupo.fecha)}
@@ -372,6 +376,14 @@ export function HistorialPropinasPage() {
                         {e.usuario_nombre ?? "—"}
                       </td>
                       <td className="px-3 py-2 font-semibold">{formatMoney(e.monto)}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => setReciboEntrega(entregaPropinaAReciboProps(e))}
+                          className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                        >
+                          Comprobante
+                        </button>
+                      </td>
                     </tr>
                   ));
 
@@ -387,6 +399,8 @@ export function HistorialPropinasPage() {
       {repartiendo && (
         <RepartirPropinasModal onCerrar={() => setRepartiendo(false)} onRepartido={cargar} />
       )}
+
+      {reciboEntrega && <ModalImprimir {...reciboEntrega} onCerrar={() => setReciboEntrega(null)} />}
     </div>
   );
 }

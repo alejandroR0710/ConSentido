@@ -299,19 +299,19 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                   className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-end dark:border-brand-green-700"
                 >
                   <div>
-                    <label className="mb-0.5 flex items-center justify-between gap-1 text-[11px] font-medium">
-                      <span>Persona</span>
+                    <div className="mb-0.5 flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-medium">Persona</label>
                       <button
                         type="button"
                         onClick={() => {
                           actualizarEntrega(indice, "nombreManual", !entrega.nombreManual);
                           actualizarEntrega(indice, "nombrePersona", "");
                         }}
-                        className="font-normal text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                        className="rounded-full border border-brand-green-600 px-2 py-0.5 text-[10px] font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
                       >
-                        {entrega.nombreManual ? "← elegir de la lista" : "escribir nombre"}
+                        {entrega.nombreManual ? "← elegir de la lista" : "✎ escribir nombre"}
                       </button>
-                    </label>
+                    </div>
                     {entrega.nombreManual ? (
                       <input
                         value={entrega.nombrePersona}

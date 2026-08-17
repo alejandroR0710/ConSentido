@@ -100,15 +100,24 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                         <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">{formatMoney(p.precio)}</span>
                       </div>
                       {(p.sin_stock || p.bajo_stock) && (
-                        <span
-                          className={`self-start rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        <div
+                          className={`self-start rounded-md px-2 py-1 text-xs font-semibold ${
                             p.sin_stock
                               ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
                               : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
                           }`}
                         >
-                          {p.sin_stock ? "⚠ Sin stock del insumo" : "⚠ Stock bajo del insumo"}
-                        </span>
+                          <div>{p.sin_stock ? "⚠ Sin stock de insumo(s):" : "⚠ Stock bajo de insumo(s):"}</div>
+                          {/* Un producto puede tener varios ingredientes en su
+                              receta — se dice cuál específicamente es el
+                              problema, no solo "sin stock" a secas (si no, el
+                              mesero revisa el insumo equivocado). */}
+                          {(p.ingredientes_limitantes ?? []).map((ing) => (
+                            <div key={ing.nombre} className="font-normal">
+                              {ing.nombre}: quedan {ing.stockUnidades} {ing.unidadMedida}
+                            </div>
+                          ))}
+                        </div>
                       )}
                       <div className="flex items-center gap-2">
                         <button
@@ -174,14 +183,14 @@ export function SelectorProductoModal({ productos, onCerrar, onSeleccionar, agre
                         {p.nombre}
                         {p.sin_stock && (
                           <span
-                            title="Sin stock del insumo"
+                            title={`Sin stock: ${(p.ingredientes_limitantes ?? []).map((i) => i.nombre).join(", ")}`}
                             aria-label="Sin stock del insumo"
                             className="h-2 w-2 shrink-0 rounded-full bg-red-500"
                           />
                         )}
                         {!p.sin_stock && p.bajo_stock && (
                           <span
-                            title="Stock bajo del insumo"
+                            title={`Stock bajo: ${(p.ingredientes_limitantes ?? []).map((i) => i.nombre).join(", ")}`}
                             aria-label="Stock bajo del insumo"
                             className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
                           />

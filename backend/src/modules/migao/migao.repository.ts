@@ -275,7 +275,10 @@ export async function crearOrden(
  *  alcanza para preparar ni 1 unidad más de algún ingrediente; `bajo_stock`
  *  = algún ingrediente ya cruzó su stock mínimo (mismo criterio que la
  *  página de Inventario), pero todavía alcanza para al menos 1 más. Un
- *  producto sin receta nunca sale marcado (no depende de inventario). */
+ *  producto sin receta nunca sale marcado (no depende de inventario).
+ *  `ingredientesLimitantes` trae CUÁL(ES) ingrediente(s) son el problema —
+ *  un producto puede tener varios en su receta, y el que le falta stock no
+ *  siempre es el más obvio a simple vista (ver SelectorProductoModal.tsx). */
 export async function listProductosMigao() {
   const result = await pool.query(
     `SELECT p.id, p.nombre, p.precio, p.categoria_id, p.descripcion, p.es_para_llevar, cp.nombre AS categoria_nombre,
@@ -289,7 +292,21 @@ export async function listProductosMigao() {
                 JOIN migao_inventario_productos ip ON ip.id = pi.inventario_producto_id
                WHERE pi.producto_id = p.id AND ip.stock_minimo_unidades IS NOT NULL
                  AND ip.stock_unidades <= ip.stock_minimo_unidades
-            ) AS bajo_stock
+            ) AS bajo_stock,
+            (SELECT json_agg(json_build_object(
+                       'nombre', ip.nombre,
+                       'stockUnidades', ip.stock_unidades,
+                       'unidadMedida', ip.unidad_medida,
+                       'sinStock', ip.stock_unidades < pi.cantidad_por_unidad
+                     ) ORDER BY ip.nombre)
+               FROM migao_producto_ingredientes pi
+               JOIN migao_inventario_productos ip ON ip.id = pi.inventario_producto_id
+              WHERE pi.producto_id = p.id
+                AND (
+                  ip.stock_unidades < pi.cantidad_por_unidad
+                  OR (ip.stock_minimo_unidades IS NOT NULL AND ip.stock_unidades <= ip.stock_minimo_unidades)
+                )
+            ) AS ingredientes_limitantes
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id

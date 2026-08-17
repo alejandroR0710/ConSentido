@@ -174,6 +174,15 @@ export interface ItemActivo extends ItemCocina {
   comensal_numero: number;
 }
 
+export interface IngredienteLimitante {
+  nombre: string;
+  stockUnidades: string;
+  unidadMedida: string;
+  // true = ya no alcanza ni para 1 unidad más (sin_stock); false = alcanza
+  // pero ya cruzó su mínimo (bajo_stock) — ver migao.repository.ts::listProductosMigao.
+  sinStock: boolean;
+}
+
 export interface Producto {
   id: string;
   nombre: string;
@@ -187,6 +196,9 @@ export interface Producto {
   // sale marcado, no depende de inventario.
   sin_stock: boolean;
   bajo_stock: boolean;
+  // Cuál(es) ingrediente(s) de la receta son el problema — un producto puede
+  // tener varios, y el que le falta stock no siempre es el más obvio.
+  ingredientes_limitantes: IngredienteLimitante[] | null;
 }
 
 export interface ProductoAdmin extends Producto {

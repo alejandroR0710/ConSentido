@@ -38,23 +38,31 @@ export function CocinaPage() {
   // permite repetirla cada MINUTOS_REPETICION_ALERTA en vez de solo una vez, y
   // se olvida en cuanto la orden se empieza a preparar (deja de estar "en espera").
   const ultimaAlertaRef = useRef<Map<string, number>>(new Map());
-  // Cuántas mutaciones (empezar a preparar / check / marcar listo) están en
-  // curso ahora mismo. Comparar solo la hora de inicio del poll contra la de
-  // la mutación no alcanza: un poll que arranca DESPUÉS de que la mutación
-  // empezó puede llegar al servidor y leer la fila ANTES de que la mutación
-  // la haya escrito/comiteado — ese poll igual trae datos viejos aunque su
-  // "inicio" sea más reciente. Por eso se descarta cualquier poll cuyo inicio
-  // O resolución se solape con una mutación en curso, sin importar el orden
-  // exacto: es la única forma de garantizar que el poll aplicado sea
-  // posterior al commit real de la mutación (lectura después de escritura).
+  // Cuántas mutaciones (empezar a preparar / check / marcar listo) siguen en
+  // curso ahora mismo — atrapa el caso en que YA había una en marcha cuando
+  // el poll salió (pudo no haber terminado de comitear cuando el servidor
+  // respondió el poll).
   const mutacionesEnCursoRef = useRef(0);
+  // Sube en 1 cada vez que ARRANCA una mutación — a diferencia del contador
+  // de arriba, ESTE nunca baja. Hace falta además del contador porque un
+  // "¿hay algo en curso AHORA?" mirado solo antes y después del poll se le
+  // escapa el caso más común del bug reportado: una mutación que arranca
+  // DESPUÉS de que el poll ya salió y TERMINA POR COMPLETO antes de que el
+  // poll responda — el contador vale 0 en los dos instantes en que se mira,
+  // así que "parecía" que no hubo solape, y el poll aplicaba datos viejos
+  // (de antes de la mutación) encima de los ya actualizados: el parpadeo que
+  // se veía en pantalla. Con una versión que solo sube, cualquier mutación
+  // que haya arrancado en algún punto DURANTE el viaje de un poll concreto
+  // cambia el número, sin importar si ya terminó — y ese poll se descarta.
+  const versionMutacionRef = useRef(0);
 
   async function cargar() {
     setAudioActivo(audioDesbloqueado());
     const habiaMutacionEnCurso = mutacionesEnCursoRef.current > 0;
+    const versionAlPedir = versionMutacionRef.current;
     try {
       const cola = await migaoApi.listarColaCocina();
-      if (habiaMutacionEnCurso || mutacionesEnCursoRef.current > 0) return;
+      if (habiaMutacionEnCurso || versionMutacionRef.current !== versionAlPedir) return;
 
       if (idsConocidosRef.current) {
         const hayPedidoNuevo = cola.some((item) => !idsConocidosRef.current!.has(item.id));
@@ -120,6 +128,7 @@ export function CocinaPage() {
 
   async function empezarPreparar(ordenId: string) {
     mutacionesEnCursoRef.current++;
+    versionMutacionRef.current++;
     setProcesandoId(ordenId);
     try {
       const actualizados = await migaoApi.empezarPreparar(ordenId);
@@ -134,6 +143,7 @@ export function CocinaPage() {
 
   async function toggleCheck(item: ItemCocina) {
     mutacionesEnCursoRef.current++;
+    versionMutacionRef.current++;
     // Optimista: se marca al instante en pantalla, sin esperar la ida y vuelta
     // al servidor (que en el plan gratuito de Render puede tardar segundos) —
     // si falla, se revierte al valor original.
@@ -152,6 +162,7 @@ export function CocinaPage() {
 
   async function marcarOrdenLista(ordenId: string) {
     mutacionesEnCursoRef.current++;
+    versionMutacionRef.current++;
     setProcesandoId(ordenId);
     // Optimista: la orden sale de la cola de Cocina al instante, sin esperar
     // la ida y vuelta al servidor — si falla, se restauran sus ítems.

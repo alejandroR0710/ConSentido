@@ -351,7 +351,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
               {entregas.map((entrega, indice) => (
                 <div
                   key={indice}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-end dark:border-brand-green-700"
+                  className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-center dark:border-brand-green-700"
                 >
                   <div>
                     <div className="mb-0.5 flex items-center justify-between gap-1">

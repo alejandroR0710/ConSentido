@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
+import { Modal } from "../../../shared/components/Modal";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -109,6 +110,7 @@ export function HistorialPropinasPage() {
   const [loading, setLoading] = useState(true);
 
   const [repartiendo, setRepartiendo] = useState(false);
+  const [modalEntregasAbierto, setModalEntregasAbierto] = useState(false);
 
   // No pone loading=true en cada llamada: el sondeo de fondo actualiza los
   // datos sin ocultar la pantalla — solo se ve "Cargando..." la primera vez.
@@ -152,7 +154,15 @@ export function HistorialPropinasPage() {
     <div className="flex flex-col gap-6">
       <div>
         <BotonVolver to="/migao" />
-        <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial de Propinas</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial de Propinas</h1>
+          <button
+            onClick={() => setModalEntregasAbierto(true)}
+            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            📋 Historial de entregas por persona
+          </button>
+        </div>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Propinas registradas al cobrar — dinero del mesero/personal, no cuenta para el cuadre de Caja General.
         </p>
@@ -294,10 +304,12 @@ export function HistorialPropinasPage() {
         </div>
       </div>
 
-      <div>
-        <h2 className="mb-2 text-base font-semibold text-brand-green-700 dark:text-brand-vanilla">
-          Historial de entregas por persona
-        </h2>
+      {modalEntregasAbierto && (
+        <Modal
+          titulo="Historial de entregas por persona"
+          onCerrar={() => setModalEntregasAbierto(false)}
+          maxWidth="sm:max-w-2xl"
+        >
         <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
@@ -369,7 +381,8 @@ export function HistorialPropinasPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </Modal>
+      )}
 
       {repartiendo && (
         <RepartirPropinasModal onCerrar={() => setRepartiendo(false)} onRepartido={cargar} />

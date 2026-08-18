@@ -75,8 +75,9 @@ function redondear(valor: number, multiplo: number): number {
 // % del peso total que NO queda como cera aprovechable en el producto final
 // (se pierde en el proceso propio de cada tipo) — cada tipo tiene su propia
 // merma de fabricación, confirmado por el negocio.
-const TIPO_VELA_MERMA_PORCENTAJE: Record<"decorativa" | "vaso" | "wax_melt", number> = {
+const TIPO_VELA_MERMA_PORCENTAJE: Record<"decorativa" | "decorativa_8" | "vaso" | "wax_melt", number> = {
   decorativa: 6,
+  decorativa_8: 8,
   vaso: 12,
   wax_melt: 10,
 };

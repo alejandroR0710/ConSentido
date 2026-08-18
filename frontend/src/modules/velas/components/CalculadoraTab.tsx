@@ -50,6 +50,7 @@ const REDONDEOS = [
 // servidor siempre recalcula con su propia copia como fuente de verdad.
 const TIPOS_VELA: { valor: TipoVela; label: string; mermaPorcentaje: number }[] = [
   { valor: "decorativa", label: "Decorativa", mermaPorcentaje: 6 },
+  { valor: "decorativa_8", label: "Decorativa", mermaPorcentaje: 8 },
   { valor: "vaso", label: "Vaso", mermaPorcentaje: 12 },
   { valor: "wax_melt", label: "Wax melt", mermaPorcentaje: 10 },
 ];

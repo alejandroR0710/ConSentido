@@ -818,6 +818,11 @@ ALTER TABLE velas_producto_insumos ADD CONSTRAINT velas_producto_insumos_manual_
 DROP INDEX IF EXISTS velas_producto_insumos_catalogo_uq;
 CREATE UNIQUE INDEX velas_producto_insumos_catalogo_uq ON velas_producto_insumos (producto_id, insumo_id) WHERE insumo_id IS NOT NULL;
 
+-- Tipo de vela nuevo "decorativa_8" (misma familia que "Decorativa", pero con
+-- 8% de merma en vez de 6%) — se agrega al CHECK de tipo_vela.
+ALTER TABLE velas_productos DROP CONSTRAINT IF EXISTS velas_productos_tipo_vela_check;
+ALTER TABLE velas_productos ADD CONSTRAINT velas_productos_tipo_vela_check CHECK (tipo_vela IN ('decorativa','decorativa_8','vaso','wax_melt'));
+
 
 -- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN

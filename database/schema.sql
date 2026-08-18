@@ -530,13 +530,13 @@ INSERT INTO velas_parametros (id) VALUES (true);
 -- tablas maestras cada vez que se consulta) — lo único persistido es la
 -- composición de la receta y, opcionalmente, el precio final ya autorizado.
 -- `tipo_vela` determina qué % del peso total NO es cera aprovechable
--- (decorativa -6%, vaso -12%, wax_melt -10%, ver calcularCostoReceta) —
--- `peso_mezcla_g` siempre guarda el peso TOTAL que se pesó, nunca el ya
--- descontado, para no perder el dato de origen.
+-- (decorativa -6%, decorativa_8 -8%, vaso -12%, wax_melt -10%, ver
+-- calcularCostoReceta) — `peso_mezcla_g` siempre guarda el peso TOTAL que se
+-- pesó, nunca el ya descontado, para no perder el dato de origen.
 CREATE TABLE velas_productos (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre                  VARCHAR(150) NOT NULL,
-  tipo_vela               VARCHAR(20) NOT NULL DEFAULT 'decorativa' CHECK (tipo_vela IN ('decorativa','vaso','wax_melt')),
+  tipo_vela               VARCHAR(20) NOT NULL DEFAULT 'decorativa' CHECK (tipo_vela IN ('decorativa','decorativa_8','vaso','wax_melt')),
   peso_mezcla_g           NUMERIC(10,2) NOT NULL CHECK (peso_mezcla_g > 0),
   pabilo_id               UUID REFERENCES velas_pabilos(id),
   cm_pabilo               NUMERIC(10,2),

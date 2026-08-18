@@ -228,7 +228,7 @@ export type LineaInsumoReceta =
   | { nombreManual: string; valorUnitarioManual: number; cantidad: number };
 
 export interface ComposicionReceta {
-  tipoVela: "decorativa" | "vaso" | "wax_melt";
+  tipoVela: "decorativa" | "decorativa_8" | "vaso" | "wax_melt";
   pesoMezclaG: number;
   ceras: { ceraId: string; gramos: number }[];
   fragancias: { fraganciaId: string; porcentaje: number }[];

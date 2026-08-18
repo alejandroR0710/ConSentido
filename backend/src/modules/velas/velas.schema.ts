@@ -67,7 +67,7 @@ export type ActualizarParametrosInput = z.infer<typeof actualizarParametrosSchem
 // Determina qué % del peso total NO queda como cera aprovechable (se pierde
 // en el proceso) — cada tipo de vela tiene su propia merma de fabricación,
 // ver TIPO_VELA_MERMA_PORCENTAJE en velas.service.ts.
-const TIPOS_VELA = ["decorativa", "vaso", "wax_melt"] as const;
+const TIPOS_VELA = ["decorativa", "decorativa_8", "vaso", "wax_melt"] as const;
 
 // Composición de una receta — la misma forma la usa tanto POST /calcular
 // (no persiste nada) como crear/editar una receta guardada, para que el

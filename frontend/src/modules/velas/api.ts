@@ -67,7 +67,7 @@ export interface ParametrosVela {
   updated_at: string;
 }
 
-export type TipoVela = "decorativa" | "vaso" | "wax_melt";
+export type TipoVela = "decorativa" | "decorativa_8" | "vaso" | "wax_melt";
 
 // Composición de una receta — misma forma para /calcular (no persiste) y
 // para crear/editar una receta guardada.

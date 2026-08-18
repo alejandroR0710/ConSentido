@@ -223,6 +223,10 @@ export async function actualizarParametros(data: ActualizarParametrosInput) {
 // persiste; el costo siempre se recalcula en vivo (ver velas.service.ts).
 // ============================================================================
 
+export type LineaInsumoReceta =
+  | { insumoId: string; cantidad: number }
+  | { nombreManual: string; valorUnitarioManual: number; cantidad: number };
+
 export interface ComposicionReceta {
   tipoVela: "decorativa" | "vaso" | "wax_melt";
   pesoMezclaG: number;
@@ -230,7 +234,7 @@ export interface ComposicionReceta {
   fragancias: { fraganciaId: string; porcentaje: number }[];
   pabiloId?: string;
   cmPabilo?: number;
-  insumos: { insumoId: string; cantidad: number }[];
+  insumos: LineaInsumoReceta[];
   costoManoObra: number;
   multiplicadorPrecio?: number;
   redondeo: number;
@@ -250,7 +254,10 @@ export async function getProductoById(id: string) {
   const [ceras, fragancias, insumos] = await Promise.all([
     pool.query(`SELECT cera_id, gramos FROM velas_producto_ceras WHERE producto_id = $1`, [id]),
     pool.query(`SELECT fragancia_id, porcentaje FROM velas_producto_fragancias WHERE producto_id = $1`, [id]),
-    pool.query(`SELECT insumo_id, cantidad FROM velas_producto_insumos WHERE producto_id = $1`, [id]),
+    pool.query(
+      `SELECT insumo_id, nombre_manual, valor_unitario_manual, cantidad FROM velas_producto_insumos WHERE producto_id = $1`,
+      [id],
+    ),
   ]);
   return {
     producto: producto.rows[0],
@@ -261,7 +268,11 @@ export async function getProductoById(id: string) {
       fragancias: fragancias.rows.map((f) => ({ fraganciaId: f.fragancia_id, porcentaje: Number(f.porcentaje) })),
       pabiloId: producto.rows[0].pabilo_id ?? undefined,
       cmPabilo: producto.rows[0].cm_pabilo != null ? Number(producto.rows[0].cm_pabilo) : undefined,
-      insumos: insumos.rows.map((i) => ({ insumoId: i.insumo_id, cantidad: Number(i.cantidad) })),
+      insumos: insumos.rows.map((i) =>
+        i.insumo_id
+          ? { insumoId: i.insumo_id as string, cantidad: Number(i.cantidad) }
+          : { nombreManual: i.nombre_manual as string, valorUnitarioManual: Number(i.valor_unitario_manual), cantidad: Number(i.cantidad) },
+      ),
       costoManoObra: Number(producto.rows[0].costo_mano_obra),
       multiplicadorPrecio:
         producto.rows[0].multiplicador_precio != null ? Number(producto.rows[0].multiplicador_precio) : undefined,
@@ -287,10 +298,17 @@ async function reemplazarComposicion(client: import("pg").PoolClient, productoId
     );
   }
   for (const ins of c.insumos) {
-    await client.query(
-      `INSERT INTO velas_producto_insumos (producto_id, insumo_id, cantidad) VALUES ($1, $2, $3)`,
-      [productoId, ins.insumoId, ins.cantidad],
-    );
+    if ("insumoId" in ins) {
+      await client.query(
+        `INSERT INTO velas_producto_insumos (producto_id, insumo_id, cantidad) VALUES ($1, $2, $3)`,
+        [productoId, ins.insumoId, ins.cantidad],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO velas_producto_insumos (producto_id, nombre_manual, valor_unitario_manual, cantidad) VALUES ($1, $2, $3, $4)`,
+        [productoId, ins.nombreManual, ins.valorUnitarioManual, ins.cantidad],
+      );
+    }
   }
 }
 

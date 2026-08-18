@@ -87,7 +87,21 @@ const recetaBaseSchema = z.object({
     .default([]),
   pabiloId: z.string().uuid().optional(),
   cmPabilo: z.number().positive().optional(),
-  insumos: z.array(z.object({ insumoId: z.string().uuid(), cantidad: z.number().positive() })).default([]),
+  // Del catálogo (insumoId) O escrito a mano para esa receta puntual
+  // (nombreManual+valorUnitarioManual, sin agregarlo al catálogo) — nunca
+  // los dos a la vez.
+  insumos: z
+    .array(
+      z.union([
+        z.object({ insumoId: z.string().uuid(), cantidad: z.number().positive() }),
+        z.object({
+          nombreManual: z.string().trim().min(2).max(120),
+          valorUnitarioManual: z.number().positive(),
+          cantidad: z.number().positive(),
+        }),
+      ]),
+    )
+    .default([]),
   // Monto fijo que el usuario escribe a mano, no minutos × tarifa.
   costoManoObra: z.number().nonnegative().default(0),
   // undefined = usa el multiplicador global de velas_parametros.

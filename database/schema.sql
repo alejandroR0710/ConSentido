@@ -565,12 +565,24 @@ CREATE TABLE velas_producto_fragancias (
   PRIMARY KEY (producto_id, fragancia_id)
 );
 
+-- insumo_id (catálogo) O nombre_manual+valor_unitario_manual (uno solo,
+-- escrito a mano en esa receta, sin agregarlo al catálogo) — nunca los dos.
 CREATE TABLE velas_producto_insumos (
-  producto_id UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
-  insumo_id   UUID NOT NULL REFERENCES velas_insumos(id),
-  cantidad    NUMERIC(10,2) NOT NULL CHECK (cantidad > 0),
-  PRIMARY KEY (producto_id, insumo_id)
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  producto_id           UUID NOT NULL REFERENCES velas_productos(id) ON DELETE CASCADE,
+  insumo_id             UUID REFERENCES velas_insumos(id),
+  nombre_manual         VARCHAR(120),
+  valor_unitario_manual NUMERIC(12,2),
+  cantidad              NUMERIC(10,2) NOT NULL CHECK (cantidad > 0),
+  CHECK (
+    (insumo_id IS NOT NULL AND nombre_manual IS NULL AND valor_unitario_manual IS NULL) OR
+    (insumo_id IS NULL AND nombre_manual IS NOT NULL AND valor_unitario_manual IS NOT NULL)
+  )
 );
+-- Un mismo insumo de catálogo no se repite en una receta (mismo criterio de
+-- antes, la antigua PK compuesta) — no aplica a los manuales, cada uno es su
+-- propia fila con su propio nombre.
+CREATE UNIQUE INDEX velas_producto_insumos_catalogo_uq ON velas_producto_insumos (producto_id, insumo_id) WHERE insumo_id IS NOT NULL;
 
 -- ============================================================================
 -- Inventario de Migao: catálogo de insumos "tal como los entrega el

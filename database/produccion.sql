@@ -795,6 +795,31 @@ ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS venta_id UUID REFERENCES ventas
 
 
 -- ========================================================================
+-- SECCIÓN 13: INSUMO MANUAL EN LA CALCULADORA DE VELAS
+-- ========================================================================
+-- Una línea de "Recipiente/empaque/accesorios" ahora puede ser insumo_id
+-- (del catálogo) O nombre_manual+valor_unitario_manual (escrito a mano para
+-- esa receta puntual, sin agregarlo al catálogo) — nunca los dos. Se agrega
+-- una PK propia (id) porque insumo_id deja de poder ser NOT NULL, así que ya
+-- no sirve como parte de la llave primaria compuesta de antes.
+ALTER TABLE velas_producto_insumos ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+UPDATE velas_producto_insumos SET id = gen_random_uuid() WHERE id IS NULL;
+ALTER TABLE velas_producto_insumos ALTER COLUMN id SET NOT NULL;
+ALTER TABLE velas_producto_insumos DROP CONSTRAINT IF EXISTS velas_producto_insumos_pkey;
+ALTER TABLE velas_producto_insumos ADD PRIMARY KEY (id);
+ALTER TABLE velas_producto_insumos ALTER COLUMN insumo_id DROP NOT NULL;
+ALTER TABLE velas_producto_insumos ADD COLUMN IF NOT EXISTS nombre_manual VARCHAR(120);
+ALTER TABLE velas_producto_insumos ADD COLUMN IF NOT EXISTS valor_unitario_manual NUMERIC(12,2);
+ALTER TABLE velas_producto_insumos DROP CONSTRAINT IF EXISTS velas_producto_insumos_manual_check;
+ALTER TABLE velas_producto_insumos ADD CONSTRAINT velas_producto_insumos_manual_check CHECK (
+  (insumo_id IS NOT NULL AND nombre_manual IS NULL AND valor_unitario_manual IS NULL) OR
+  (insumo_id IS NULL AND nombre_manual IS NOT NULL AND valor_unitario_manual IS NOT NULL)
+);
+DROP INDEX IF EXISTS velas_producto_insumos_catalogo_uq;
+CREATE UNIQUE INDEX velas_producto_insumos_catalogo_uq ON velas_producto_insumos (producto_id, insumo_id) WHERE insumo_id IS NOT NULL;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

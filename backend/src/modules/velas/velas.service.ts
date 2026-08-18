@@ -84,7 +84,7 @@ const TIPO_VELA_MERMA_PORCENTAJE: Record<"decorativa" | "vaso" | "wax_melt", num
 export async function calcularCostoReceta(input: CalcularRecetaInput | ComposicionReceta) {
   const ceraIds = input.ceras.map((c) => c.ceraId);
   const fraganciaIds = input.fragancias.map((f) => f.fraganciaId);
-  const insumoIds = input.insumos.map((i) => i.insumoId);
+  const insumoIds = input.insumos.filter((i): i is { insumoId: string; cantidad: number } => "insumoId" in i).map((i) => i.insumoId);
 
   const [ceras, fragancias, pabilo, insumos, parametros] = await Promise.all([
     repo.getCerasByIds(ceraIds),
@@ -132,6 +132,15 @@ export async function calcularCostoReceta(input: CalcularRecetaInput | Composici
   }
 
   const lineasInsumo = input.insumos.map((linea) => {
+    if (!("insumoId" in linea)) {
+      return {
+        nombre: linea.nombreManual,
+        categoria: "manual",
+        cantidad: linea.cantidad,
+        valorUnitario: linea.valorUnitarioManual,
+        costo: linea.cantidad * linea.valorUnitarioManual,
+      };
+    }
     const insumo = mapInsumos.get(linea.insumoId);
     if (!insumo) throw Errors.badRequest("Uno de los insumos seleccionados ya no existe");
     if (!insumo.activo) alertas.push(`El insumo "${insumo.nombre}" está inactivo`);

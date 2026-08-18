@@ -80,7 +80,9 @@ export interface RecetaInput {
   fragancias: { fraganciaId: string; porcentaje: number }[];
   pabiloId?: string;
   cmPabilo?: number;
-  insumos: { insumoId: string; cantidad: number }[];
+  // Del catálogo (insumoId) O escrito a mano para esa receta puntual
+  // (nombreManual+valorUnitarioManual, sin agregarlo al catálogo).
+  insumos: ({ insumoId: string; cantidad: number } | { nombreManual: string; valorUnitarioManual: number; cantidad: number })[];
   // Monto fijo escrito a mano, no minutos × tarifa.
   costoManoObra: number;
   multiplicadorPrecio?: number;

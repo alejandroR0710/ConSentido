@@ -29,7 +29,12 @@ interface LineaFraganciaForm {
 }
 interface LineaInsumoForm {
   key: number;
+  manual: boolean;
   insumoId: string;
+  // Solo se usan si manual es true — no está en el catálogo, se escribe a
+  // mano solo para esta receta.
+  nombreManual: string;
+  valorUnitarioManual: number;
   cantidad: number;
 }
 
@@ -48,6 +53,16 @@ const TIPOS_VELA: { valor: TipoVela; label: string; mermaPorcentaje: number }[] 
   { valor: "vaso", label: "Vaso", mermaPorcentaje: 12 },
   { valor: "wax_melt", label: "Wax melt", mermaPorcentaje: 10 },
 ];
+
+function lineasInsumoAPayload(lineas: LineaInsumoForm[]): RecetaInput["insumos"] {
+  return lineas
+    .filter((l) => l.cantidad > 0 && (l.manual ? l.nombreManual.trim() : l.insumoId))
+    .map((l) =>
+      l.manual
+        ? { nombreManual: l.nombreManual.trim(), valorUnitarioManual: l.valorUnitarioManual, cantidad: l.cantidad }
+        : { insumoId: l.insumoId, cantidad: l.cantidad },
+    );
+}
 
 function pesoEfectivoCera(pesoTotal: number, tipoVela: TipoVela): number {
   const merma = TIPOS_VELA.find((t) => t.valor === tipoVela)?.mermaPorcentaje ?? 0;
@@ -169,9 +184,7 @@ export function CalculadoraTab() {
         .map((l) => ({ fraganciaId: l.fraganciaId, porcentaje: l.porcentaje })),
       pabiloId: form.pabiloId || undefined,
       cmPabilo: form.cmPabilo > 0 ? form.cmPabilo : undefined,
-      insumos: form.lineasInsumo
-        .filter((l) => l.insumoId && l.cantidad > 0)
-        .map((l) => ({ insumoId: l.insumoId, cantidad: l.cantidad })),
+      insumos: lineasInsumoAPayload(form.lineasInsumo),
       costoManoObra: form.costoManoObra,
       multiplicadorPrecio: form.multiplicadorPrecio === "" ? undefined : form.multiplicadorPrecio,
       redondeo: form.redondeo,
@@ -215,7 +228,18 @@ export function CalculadoraTab() {
         lineasFragancia: detalle.composicion.fragancias.map((f) => ({ key: siguienteKey++, fraganciaId: f.fraganciaId, porcentaje: f.porcentaje })),
         pabiloId: detalle.composicion.pabiloId ?? "",
         cmPabilo: detalle.composicion.cmPabilo ?? 0,
-        lineasInsumo: detalle.composicion.insumos.map((i) => ({ key: siguienteKey++, insumoId: i.insumoId, cantidad: i.cantidad })),
+        lineasInsumo: detalle.composicion.insumos.map((i) =>
+          "insumoId" in i
+            ? { key: siguienteKey++, manual: false, insumoId: i.insumoId, nombreManual: "", valorUnitarioManual: 0, cantidad: i.cantidad }
+            : {
+                key: siguienteKey++,
+                manual: true,
+                insumoId: "",
+                nombreManual: i.nombreManual,
+                valorUnitarioManual: i.valorUnitarioManual,
+                cantidad: i.cantidad,
+              },
+        ),
         costoManoObra: detalle.composicion.costoManoObra,
         multiplicadorPrecio: detalle.composicion.multiplicadorPrecio ?? "",
         redondeo: detalle.composicion.redondeo as 0 | 100 | 500 | 1000,
@@ -241,7 +265,7 @@ export function CalculadoraTab() {
         .map((l) => ({ fraganciaId: l.fraganciaId, porcentaje: l.porcentaje })),
       pabiloId: form.pabiloId || undefined,
       cmPabilo: form.cmPabilo > 0 ? form.cmPabilo : undefined,
-      insumos: form.lineasInsumo.filter((l) => l.insumoId && l.cantidad > 0).map((l) => ({ insumoId: l.insumoId, cantidad: l.cantidad })),
+      insumos: lineasInsumoAPayload(form.lineasInsumo),
       costoManoObra: form.costoManoObra,
       multiplicadorPrecio: form.multiplicadorPrecio === "" ? undefined : form.multiplicadorPrecio,
       redondeo: form.redondeo,
@@ -484,7 +508,15 @@ export function CalculadoraTab() {
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-sky-700 dark:text-sky-400">📦 Recipiente / empaque / accesorios</span>
               <button
-                onClick={() => setForm({ ...form, lineasInsumo: [...form.lineasInsumo, { key: siguienteKey++, insumoId: "", cantidad: 1 }] })}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    lineasInsumo: [
+                      ...form.lineasInsumo,
+                      { key: siguienteKey++, manual: false, insumoId: "", nombreManual: "", valorUnitarioManual: 0, cantidad: 1 },
+                    ],
+                  })
+                }
                 className="text-xs font-medium text-sky-700 underline dark:text-sky-400"
               >
                 + Agregar
@@ -492,38 +524,87 @@ export function CalculadoraTab() {
             </div>
             {form.lineasInsumo.length === 0 && <p className="text-xs text-brand-ink/50">Sin empaque agregado todavía.</p>}
             {form.lineasInsumo.map((l) => (
-              <div key={l.key} className="mb-1 flex items-center gap-2">
-                <select
-                  value={l.insumoId}
-                  onChange={(e) =>
-                    setForm({ ...form, lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, insumoId: e.target.value } : x)) })
-                  }
-                  className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-                >
-                  <option value="">Elegir insumo...</option>
-                  {insumos.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.nombre}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="cant."
-                  value={l.cantidad || ""}
-                  onChange={(e) =>
-                    setForm({ ...form, lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, cantidad: Number(e.target.value) } : x)) })
-                  }
-                  className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-                />
-                <button
-                  onClick={() => setForm({ ...form, lineasInsumo: form.lineasInsumo.filter((x) => x.key !== l.key) })}
-                  className="text-red-600"
-                  aria-label="Quitar"
-                >
-                  ✕
-                </button>
+              <div key={l.key} className="mb-2 flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  {l.manual ? (
+                    <input
+                      value={l.nombreManual}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, nombreManual: e.target.value } : x)),
+                        })
+                      }
+                      placeholder="Ej. Frasco reciclado 250ml"
+                      className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                    />
+                  ) : (
+                    <select
+                      value={l.insumoId}
+                      onChange={(e) =>
+                        setForm({ ...form, lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, insumoId: e.target.value } : x)) })
+                      }
+                      className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                    >
+                      <option value="">Elegir insumo...</option>
+                      {insumos.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        lineasInsumo: form.lineasInsumo.map((x) =>
+                          x.key === l.key
+                            ? { ...x, manual: !x.manual, insumoId: "", nombreManual: "", valorUnitarioManual: 0 }
+                            : x,
+                        ),
+                      })
+                    }
+                    className="shrink-0 rounded-full border border-sky-600 px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50 dark:border-sky-400 dark:text-sky-400 dark:hover:bg-sky-950/30"
+                  >
+                    {l.manual ? "← elegir del catálogo" : "✎ uno manual"}
+                  </button>
+                  <button
+                    onClick={() => setForm({ ...form, lineasInsumo: form.lineasInsumo.filter((x) => x.key !== l.key) })}
+                    className="text-red-600"
+                    aria-label="Quitar"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {l.manual && (
+                    <>
+                      <span className="text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">Valor c/u</span>
+                      <MoneyInput
+                        value={l.valorUnitarioManual}
+                        onChange={(v) =>
+                          setForm({
+                            ...form,
+                            lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, valorUnitarioManual: v } : x)),
+                          })
+                        }
+                        className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                      />
+                    </>
+                  )}
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="cant."
+                    value={l.cantidad || ""}
+                    onChange={(e) =>
+                      setForm({ ...form, lineasInsumo: form.lineasInsumo.map((x) => (x.key === l.key ? { ...x, cantidad: Number(e.target.value) } : x)) })
+                    }
+                    className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                  />
+                </div>
               </div>
             ))}
           </div>

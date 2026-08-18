@@ -825,6 +825,29 @@ ALTER TABLE velas_productos ADD CONSTRAINT velas_productos_tipo_vela_check CHECK
 
 
 -- ========================================================================
+-- SECCIÓN 14: PONE AL DÍA velas_productos/velas_parametros AL MODELO ACTUAL
+-- ========================================================================
+-- El diseño original de Velas calculaba mano de obra como minutos × tarifa,
+-- con % de merma/indirectos/margen objetivo global (velas_parametros) — se
+-- rediseñó a un costo de mano de obra fijo por receta + un multiplicador de
+-- precio simple, pero esa segunda versión nunca se puso al día en Supabase
+-- (solo en la base local). Ambas tablas quedan como en schema.sql.
+ALTER TABLE velas_parametros ADD COLUMN IF NOT EXISTS multiplicador_precio NUMERIC(6,2) NOT NULL DEFAULT 4;
+ALTER TABLE velas_parametros DROP COLUMN IF EXISTS porcentaje_merma;
+ALTER TABLE velas_parametros DROP COLUMN IF EXISTS valor_minuto_mano_obra;
+ALTER TABLE velas_parametros DROP COLUMN IF EXISTS porcentaje_indirectos;
+ALTER TABLE velas_parametros DROP COLUMN IF EXISTS margen_objetivo;
+
+ALTER TABLE velas_productos ADD COLUMN IF NOT EXISTS tipo_vela VARCHAR(20) NOT NULL DEFAULT 'decorativa';
+ALTER TABLE velas_productos ADD COLUMN IF NOT EXISTS costo_mano_obra NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE velas_productos ADD COLUMN IF NOT EXISTS multiplicador_precio NUMERIC(6,2);
+ALTER TABLE velas_productos DROP COLUMN IF EXISTS minutos_mano_obra;
+ALTER TABLE velas_productos DROP COLUMN IF EXISTS margen_objetivo;
+ALTER TABLE velas_productos DROP CONSTRAINT IF EXISTS velas_productos_tipo_vela_check;
+ALTER TABLE velas_productos ADD CONSTRAINT velas_productos_tipo_vela_check CHECK (tipo_vela IN ('decorativa','decorativa_8','vaso','wax_melt'));
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

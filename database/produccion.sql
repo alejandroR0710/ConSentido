@@ -848,6 +848,16 @@ ALTER TABLE velas_productos ADD CONSTRAINT velas_productos_tipo_vela_check CHECK
 
 
 -- ========================================================================
+-- SECCIÓN 15: updated_at EN proveedores (faltaba, editar/eliminar fallaban)
+-- ========================================================================
+-- actualizarProveedor/desactivarProveedor siempre escribieron
+-- "updated_at = now()" pero la tabla nunca tuvo esa columna — creaba
+-- proveedores bien (el INSERT no la usa) pero editar o eliminar tiraba
+-- error de servidor.
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

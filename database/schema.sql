@@ -231,7 +231,8 @@ CREATE TABLE proveedores (
   telefono   VARCHAR(30),
   email      VARCHAR(160),
   activo     BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Proveedor opcional de un egreso de Caja (ej. "pago a proveedor X") — se

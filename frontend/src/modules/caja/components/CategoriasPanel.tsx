@@ -12,6 +12,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [editando, setEditando] = useState<number | null>(null);
+  const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
   function cancelar() {
     setEditando(null);
     setNuevaCategoria("");
+    setFormularioAbierto(false);
   }
 
   async function guardarCategoria() {
@@ -59,9 +61,19 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
     <div className="rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla sm:text-base">Categorías de Gasto</h3>
-        {categorias.length > 0 && (
-          <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">{categorias.length}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {categorias.length > 0 && (
+            <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">{categorias.length}</span>
+          )}
+          {!formularioAbierto && (
+            <button
+              onClick={() => setFormularioAbierto(true)}
+              className="rounded-md bg-brand-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-green-700"
+            >
+              + Agregar
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -69,17 +81,17 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
       )}
 
       {/* Formulario crear/editar */}
-      <div
-        className={`mb-4 rounded-md border p-3 ${
-          editando
-            ? "border-brand-green-600 bg-brand-green-50/50 dark:border-brand-green-500 dark:bg-brand-green-700/10"
-            : "border-brand-vanilla-dark dark:border-brand-green-700"
-        }`}
-      >
-        {editando && (
+      {formularioAbierto && (
+        <div
+          className={`mb-4 rounded-md border p-3 ${
+            editando
+              ? "border-brand-green-600 bg-brand-green-50/50 dark:border-brand-green-500 dark:bg-brand-green-700/10"
+              : "border-brand-vanilla-dark dark:border-brand-green-700"
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
-              ✎ Editando categoría
+              {editando ? "✎ Editando categoría" : "Nueva categoría"}
             </span>
             <button
               type="button"
@@ -89,27 +101,28 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
               Cancelar
             </button>
           </div>
-        )}
 
-        <label className="mb-1 block text-[11px] font-medium text-brand-ink/70 dark:text-brand-vanilla/70">Nombre *</label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Ej. Servicios públicos"
-            value={nuevaCategoria}
-            onChange={(e) => setNuevaCategoria(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && guardarCategoria()}
-            className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
-          <button
-            onClick={guardarCategoria}
-            disabled={guardando || !nuevaCategoria.trim()}
-            className="shrink-0 rounded-md bg-brand-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
-          >
-            {guardando ? "Guardando..." : editando ? "Guardar" : "+ Agregar"}
-          </button>
+          <label className="mb-1 block text-[11px] font-medium text-brand-ink/70 dark:text-brand-vanilla/70">Nombre *</label>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Ej. Servicios públicos"
+              value={nuevaCategoria}
+              onChange={(e) => setNuevaCategoria(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && guardarCategoria()}
+              className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <button
+              onClick={guardarCategoria}
+              disabled={guardando || !nuevaCategoria.trim()}
+              className="shrink-0 rounded-md bg-brand-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
+            >
+              {guardando ? "Guardando..." : editando ? "Guardar" : "Agregar"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Lista */}
       {loading ? (
@@ -132,6 +145,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
                 onClick={() => {
                   setEditando(c.id);
                   setNuevaCategoria(c.nombre);
+                  setFormularioAbierto(true);
                 }}
                 aria-label="Editar categoría"
                 title="Editar"

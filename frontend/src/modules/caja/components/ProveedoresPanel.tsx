@@ -17,6 +17,7 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
+  const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [formulario, setFormulario] = useState(FORMULARIO_VACIO);
   const [guardando, setGuardando] = useState(false);
 
@@ -39,6 +40,7 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
   function cancelar() {
     setEditando(null);
     setFormulario(FORMULARIO_VACIO);
+    setFormularioAbierto(false);
   }
 
   async function guardar() {
@@ -78,9 +80,19 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
     <div className="rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla sm:text-base">Proveedores</h3>
-        {proveedores.length > 0 && (
-          <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">{proveedores.length}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {proveedores.length > 0 && (
+            <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">{proveedores.length}</span>
+          )}
+          {!formularioAbierto && (
+            <button
+              onClick={() => setFormularioAbierto(true)}
+              className="rounded-md bg-brand-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-green-700"
+            >
+              + Agregar
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -88,17 +100,17 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
       )}
 
       {/* Formulario crear/editar */}
-      <div
-        className={`mb-4 rounded-md border p-3 ${
-          editando
-            ? "border-brand-green-600 bg-brand-green-50/50 dark:border-brand-green-500 dark:bg-brand-green-700/10"
-            : "border-brand-vanilla-dark dark:border-brand-green-700"
-        }`}
-      >
-        {editando && (
+      {formularioAbierto && (
+        <div
+          className={`mb-4 rounded-md border p-3 ${
+            editando
+              ? "border-brand-green-600 bg-brand-green-50/50 dark:border-brand-green-500 dark:bg-brand-green-700/10"
+              : "border-brand-vanilla-dark dark:border-brand-green-700"
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
-              ✎ Editando proveedor
+              {editando ? "✎ Editando proveedor" : "Nuevo proveedor"}
             </span>
             <button
               type="button"
@@ -108,57 +120,58 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
               Cancelar
             </button>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className={labelClase}>Nombre *</label>
-            <input
-              value={formulario.nombre}
-              onChange={(e) => setFormulario({ ...formulario, nombre: e.target.value })}
-              onKeyDown={(e) => e.key === "Enter" && guardar()}
-              placeholder="Ej. Distribuidora ABC"
-              className={inputClase}
-            />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className={labelClase}>Nombre *</label>
+              <input
+                autoFocus
+                value={formulario.nombre}
+                onChange={(e) => setFormulario({ ...formulario, nombre: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && guardar()}
+                placeholder="Ej. Distribuidora ABC"
+                className={inputClase}
+              />
+            </div>
+            <div>
+              <label className={labelClase}>Contacto</label>
+              <input
+                value={formulario.contacto}
+                onChange={(e) => setFormulario({ ...formulario, contacto: e.target.value })}
+                placeholder="Ej. Juan Pérez"
+                className={inputClase}
+              />
+            </div>
+            <div>
+              <label className={labelClase}>Teléfono</label>
+              <input
+                value={formulario.telefono}
+                onChange={(e) => setFormulario({ ...formulario, telefono: e.target.value })}
+                placeholder="Ej. 300 123 4567"
+                className={inputClase}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClase}>Email</label>
+              <input
+                type="email"
+                value={formulario.email}
+                onChange={(e) => setFormulario({ ...formulario, email: e.target.value })}
+                placeholder="correo@proveedor.com"
+                className={inputClase}
+              />
+            </div>
           </div>
-          <div>
-            <label className={labelClase}>Contacto</label>
-            <input
-              value={formulario.contacto}
-              onChange={(e) => setFormulario({ ...formulario, contacto: e.target.value })}
-              placeholder="Ej. Juan Pérez"
-              className={inputClase}
-            />
-          </div>
-          <div>
-            <label className={labelClase}>Teléfono</label>
-            <input
-              value={formulario.telefono}
-              onChange={(e) => setFormulario({ ...formulario, telefono: e.target.value })}
-              placeholder="Ej. 300 123 4567"
-              className={inputClase}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelClase}>Email</label>
-            <input
-              type="email"
-              value={formulario.email}
-              onChange={(e) => setFormulario({ ...formulario, email: e.target.value })}
-              placeholder="correo@proveedor.com"
-              className={inputClase}
-            />
-          </div>
+
+          <button
+            onClick={guardar}
+            disabled={guardando || !formulario.nombre.trim()}
+            className="mt-3 w-full rounded-md bg-brand-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
+          >
+            {guardando ? "Guardando..." : editando ? "Guardar cambios" : "Agregar proveedor"}
+          </button>
         </div>
-
-        <button
-          onClick={guardar}
-          disabled={guardando || !formulario.nombre.trim()}
-          className="mt-3 w-full rounded-md bg-brand-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
-        >
-          {guardando ? "Guardando..." : editando ? "Guardar cambios" : "+ Agregar proveedor"}
-        </button>
-      </div>
+      )}
 
       {/* Lista */}
       {loading ? (
@@ -194,6 +207,7 @@ export function ProveedoresPanel({ onActualizar }: ProveedoresPanelProps) {
                       telefono: p.telefono || "",
                       email: p.email || "",
                     });
+                    setFormularioAbierto(true);
                   }}
                   aria-label="Editar proveedor"
                   title="Editar"

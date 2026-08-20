@@ -1,16 +1,32 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
-import { migaoApi, type InventarioProducto } from "../api";
+import { migaoApi, type CategoriaInventario, type InventarioProducto } from "../api";
 import { EditarInventarioProductoModal } from "../components/EditarInventarioProductoModal";
 import { NuevoInventarioProductoModal } from "../components/NuevoInventarioProductoModal";
 import { RegistrarMovimientoInventarioModal } from "../components/RegistrarMovimientoInventarioModal";
 
 const POLL_MS = 15000;
+const SIN_CATEGORIA = "Sin categoría";
 
 function formatUnidades(valor: string) {
   const n = Number(valor);
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+function agruparPorCategoria(productos: InventarioProducto[]): [string, InventarioProducto[]][] {
+  const grupos = new Map<string, InventarioProducto[]>();
+  for (const p of productos) {
+    const clave = p.categoria_nombre ?? SIN_CATEGORIA;
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave)!.push(p);
+  }
+  // "Sin categoría" al final, el resto ordenado alfabéticamente.
+  return Array.from(grupos.entries()).sort(([a], [b]) => {
+    if (a === SIN_CATEGORIA) return 1;
+    if (b === SIN_CATEGORIA) return -1;
+    return a.localeCompare(b);
+  });
 }
 
 /** Inventario de Migao: catálogo de insumos "tal como los entrega el
@@ -19,6 +35,7 @@ function formatUnidades(valor: string) {
  *  una salida a mano, solo entradas y ajustes de conteo. */
 export function InventarioPage() {
   const [productos, setProductos] = useState<InventarioProducto[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaInventario[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +47,12 @@ export function InventarioPage() {
 
   async function cargar() {
     try {
-      setProductos(await migaoApi.listarInventario());
+      const [listaProductos, listaCategorias] = await Promise.all([
+        migaoApi.listarInventario(),
+        migaoApi.listarCategoriasInventario(),
+      ]);
+      setProductos(listaProductos);
+      setCategorias(listaCategorias);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el inventario");
@@ -47,7 +69,12 @@ export function InventarioPage() {
 
   useRegistrarRefresco(cargar);
 
+  function agregarCategoria(categoria: CategoriaInventario) {
+    setCategorias((actual) => [...actual, categoria].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+  }
+
   const productosFiltrados = productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
+  const grupos = agruparPorCategoria(productosFiltrados);
 
   return (
     <div className="flex flex-col gap-6">
@@ -87,96 +114,116 @@ export function InventarioPage() {
           Sin resultados para "{busqueda}".
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
-              <tr>
-                <th className="px-3 py-2">Producto</th>
-                <th className="px-3 py-2">Unidad</th>
-                <th className="px-3 py-2">Unid./paquete</th>
-                <th className="px-3 py-2">Stock</th>
-                <th className="px-3 py-2">Costo paquete</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {productosFiltrados.map((p) => {
-                const stock = Number(p.stock_unidades);
-                const stockMinimo = p.stock_minimo_unidades !== null ? Number(p.stock_minimo_unidades) : null;
-                const bajoStock = stock < 0 || (stockMinimo !== null && stock <= stockMinimo);
-                const paquetesAprox = Math.floor(stock / Number(p.unidades_por_paquete));
-                return (
-                  <tr
-                    key={p.id}
-                    className={`border-t border-brand-vanilla-dark dark:border-brand-green-700 ${
-                      !p.activo ? "opacity-50" : bajoStock ? "bg-red-50 dark:bg-red-950/20" : ""
-                    }`}
-                  >
-                    <td className="px-3 py-2">
-                      {p.nombre}
-                      {p.tamano_unidad && (
-                        <span className="ml-2 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-                          ({p.tamano_unidad})
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{p.unidad_medida}</td>
-                    <td className="px-3 py-2">{formatUnidades(p.unidades_por_paquete)}</td>
-                    <td className={`px-3 py-2 font-semibold ${bajoStock ? "text-red-600" : ""}`}>
-                      {formatUnidades(p.stock_unidades)} {p.unidad_medida}
-                      <div className="text-xs font-normal text-brand-ink/50 dark:text-brand-vanilla/50">
-                        ~{paquetesAprox} paquete{paquetesAprox === 1 ? "" : "s"}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">{p.costo_paquete ? `$${Number(p.costo_paquete).toLocaleString("es-CO")}` : "—"}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          p.activo ? "bg-brand-green-50 text-brand-green-700" : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {p.activo ? "activo" : "inactivo"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setMovimiento({ producto: p, tipo: "entrada" })}
-                          className="rounded-md border border-brand-green-700 px-3 py-1 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+        <div className="flex flex-col gap-6">
+          {grupos.map(([categoria, items]) => (
+            <div key={categoria}>
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
+                {categoria}
+              </h2>
+              <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+                    <tr>
+                      <th className="px-3 py-2">Producto</th>
+                      <th className="px-3 py-2">Unidad</th>
+                      <th className="px-3 py-2">Unid./paquete</th>
+                      <th className="px-3 py-2">Stock</th>
+                      <th className="px-3 py-2">Costo paquete</th>
+                      <th className="px-3 py-2">Estado</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((p) => {
+                      const stock = Number(p.stock_unidades);
+                      const stockMinimo = p.stock_minimo_unidades !== null ? Number(p.stock_minimo_unidades) : null;
+                      const bajoStock = stock < 0 || (stockMinimo !== null && stock <= stockMinimo);
+                      const paquetesAprox = Math.floor(stock / Number(p.unidades_por_paquete));
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`border-t border-brand-vanilla-dark dark:border-brand-green-700 ${
+                            !p.activo ? "opacity-50" : bajoStock ? "bg-red-50 dark:bg-red-950/20" : ""
+                          }`}
                         >
-                          + Entrada
-                        </button>
-                        <button
-                          onClick={() => setMovimiento({ producto: p, tipo: "ajuste" })}
-                          className="rounded-md border border-amber-500 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                        >
-                          Ajuste
-                        </button>
-                        <button
-                          onClick={() => setProductoEditando(p)}
-                          aria-label="Editar producto"
-                          className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
-                        >
-                          Editar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          <td className="px-3 py-2">
+                            {p.nombre}
+                            {p.tamano_unidad && (
+                              <span className="ml-2 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                                ({p.tamano_unidad})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">{p.unidad_medida}</td>
+                          <td className="px-3 py-2">{formatUnidades(p.unidades_por_paquete)}</td>
+                          <td className={`px-3 py-2 font-semibold ${bajoStock ? "text-red-600" : ""}`}>
+                            {formatUnidades(p.stock_unidades)} {p.unidad_medida}
+                            <div className="text-xs font-normal text-brand-ink/50 dark:text-brand-vanilla/50">
+                              ~{paquetesAprox} paquete{paquetesAprox === 1 ? "" : "s"}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            {p.costo_paquete ? `$${Number(p.costo_paquete).toLocaleString("es-CO")}` : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                p.activo ? "bg-brand-green-50 text-brand-green-700" : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {p.activo ? "activo" : "inactivo"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => setMovimiento({ producto: p, tipo: "entrada" })}
+                                className="rounded-md border border-brand-green-700 px-3 py-1 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                              >
+                                + Entrada
+                              </button>
+                              <button
+                                onClick={() => setMovimiento({ producto: p, tipo: "ajuste" })}
+                                className="rounded-md border border-amber-500 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                              >
+                                Ajuste
+                              </button>
+                              <button
+                                onClick={() => setProductoEditando(p)}
+                                aria-label="Editar producto"
+                                className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
+                              >
+                                Editar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {nuevoAbierto && <NuevoInventarioProductoModal onCerrar={() => setNuevoAbierto(false)} onCreado={cargar} />}
+      {nuevoAbierto && (
+        <NuevoInventarioProductoModal
+          categorias={categorias}
+          onCerrar={() => setNuevoAbierto(false)}
+          onCreado={cargar}
+          onCategoriaCreada={agregarCategoria}
+        />
+      )}
 
       {productoEditando && (
         <EditarInventarioProductoModal
           producto={productoEditando}
+          categorias={categorias}
           onCerrar={() => setProductoEditando(null)}
           onGuardado={cargar}
+          onCategoriaCreada={agregarCategoria}
         />
       )}
 

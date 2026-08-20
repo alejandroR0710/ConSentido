@@ -15,6 +15,14 @@ export async function listarProductos() {
   return repo.listProductos();
 }
 
+export async function listarCategorias() {
+  return repo.listCategoriasInventario();
+}
+
+export async function crearCategoria(nombre: string) {
+  return repo.crearCategoriaInventario(nombre);
+}
+
 export async function crearProducto(input: CrearInventarioProductoInput) {
   return repo.crearProducto(input);
 }

@@ -4,12 +4,14 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { NumeroInput } from "../../../shared/components/NumeroInput";
-import { migaoApi, type InventarioProducto } from "../api";
+import { migaoApi, type CategoriaInventario, type InventarioProducto } from "../api";
 
 interface EditarInventarioProductoModalProps {
   producto: InventarioProducto;
+  categorias: CategoriaInventario[];
   onCerrar: () => void;
   onGuardado: () => Promise<void> | void;
+  onCategoriaCreada: (categoria: CategoriaInventario) => void;
 }
 
 const campoClase =
@@ -22,7 +24,13 @@ const seccionOpcionalClase =
 const tituloSeccionClase =
   "mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla/70";
 
-export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }: EditarInventarioProductoModalProps) {
+export function EditarInventarioProductoModal({
+  producto,
+  categorias,
+  onCerrar,
+  onGuardado,
+  onCategoriaCreada,
+}: EditarInventarioProductoModalProps) {
   const { usuario } = useAuth();
   // Solo Super Root puede forzar el borrado aunque el producto ya tenga
   // movimientos/recetas asociadas (el backend valida el permiso igual); a
@@ -30,6 +38,7 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
   const esSuperRoot = usuario?.rol === "Super Root";
 
   const [nombre, setNombre] = useState(producto.nombre);
+  const [categoriaId, setCategoriaId] = useState<number | "">(producto.categoria_id ?? "");
   const [unidadMedida, setUnidadMedida] = useState(producto.unidad_medida);
   const [unidadesPorPaquete, setUnidadesPorPaquete] = useState(Number(producto.unidades_por_paquete));
   const [tamanoUnidad, setTamanoUnidad] = useState(producto.tamano_unidad ?? "");
@@ -41,7 +50,26 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+
   const puedeGuardar = nombre.trim().length >= 2 && unidadMedida.trim().length > 0 && unidadesPorPaquete > 0;
+
+  async function crearCategoria() {
+    if (!nuevaCategoria.trim()) return;
+    setCreandoCategoria(true);
+    setError(null);
+    try {
+      const categoria = await migaoApi.crearCategoriaInventario(nuevaCategoria.trim());
+      onCategoriaCreada(categoria);
+      setCategoriaId(categoria.id);
+      setNuevaCategoria("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la categoría");
+    } finally {
+      setCreandoCategoria(false);
+    }
+  }
 
   async function guardar() {
     if (!puedeGuardar) return;
@@ -50,6 +78,7 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
     try {
       await migaoApi.editarInventarioProducto(producto.id, {
         nombre: nombre.trim(),
+        categoriaId: categoriaId ? Number(categoriaId) : undefined,
         unidadMedida: unidadMedida.trim(),
         unidadesPorPaquete,
         tamanoUnidad: tamanoUnidad.trim() || undefined,
@@ -107,6 +136,36 @@ export function EditarInventarioProductoModal({ producto, onCerrar, onGuardado }
         </p>
         <label className={etiquetaClase}>Nombre</label>
         <input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} className={campoClase} />
+
+        <label className={`${etiquetaClase} mt-3`}>Categoría (opcional)</label>
+        <select
+          value={categoriaId}
+          onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
+          className={`${campoClase} mb-2`}
+        >
+          <option value="">Sin categoría</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <input
+            value={nuevaCategoria}
+            onChange={(e) => setNuevaCategoria(e.target.value)}
+            placeholder="Nueva categoría..."
+            className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-xs text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+          <button
+            type="button"
+            onClick={crearCategoria}
+            disabled={creandoCategoria || !nuevaCategoria.trim()}
+            className="rounded-md border border-brand-green-700 px-2 py-1 text-xs text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+          >
+            + Agregar
+          </button>
+        </div>
       </div>
 
       <div className={seccionClase}>

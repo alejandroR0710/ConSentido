@@ -239,9 +239,16 @@ export interface CategoriaProducto {
   nombre: string;
 }
 
+export interface CategoriaInventario {
+  id: number;
+  nombre: string;
+}
+
 export interface InventarioProducto {
   id: string;
   nombre: string;
+  categoria_id: number | null;
+  categoria_nombre: string | null;
   unidad_medida: string;
   unidades_por_paquete: string;
   tamano_unidad: string | null;
@@ -732,8 +739,12 @@ export const migaoApi = {
   // Inventario de Migao: catálogo de insumos "tal como los entrega el
   // proveedor" + stock, consumido automáticamente al vender productos con receta.
   listarInventario: () => apiFetch<InventarioProducto[]>("/migao/inventario/productos"),
+  listarCategoriasInventario: () => apiFetch<CategoriaInventario[]>("/migao/inventario/categorias"),
+  crearCategoriaInventario: (nombre: string) =>
+    apiFetch<CategoriaInventario>("/migao/inventario/categorias", { method: "POST", body: { nombre } }),
   crearInventarioProducto: (input: {
     nombre: string;
+    categoriaId?: number;
     unidadMedida: string;
     unidadesPorPaquete: number;
     tamanoUnidad?: string;
@@ -744,6 +755,7 @@ export const migaoApi = {
     id: string,
     input: {
       nombre?: string;
+      categoriaId?: number;
       unidadMedida?: string;
       unidadesPorPaquete?: number;
       tamanoUnidad?: string;

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { created, ok } from "../../shared/utils/response";
 import {
+  crearCategoriaInventarioSchema,
   crearInventarioProductoSchema,
   editarInventarioProductoSchema,
   guardarIngredientesSchema,
@@ -11,6 +12,17 @@ import * as service from "./inventario.service";
 export async function listarInventarioController(_req: Request, res: Response) {
   const productos = await service.listarProductos();
   return ok(res, productos);
+}
+
+export async function listarCategoriasInventarioController(_req: Request, res: Response) {
+  const categorias = await service.listarCategorias();
+  return ok(res, categorias);
+}
+
+export async function crearCategoriaInventarioController(req: Request, res: Response) {
+  const data = crearCategoriaInventarioSchema.parse(req.body);
+  const categoria = await service.crearCategoria(data.nombre);
+  return created(res, categoria);
 }
 
 export async function crearInventarioProductoController(req: Request, res: Response) {

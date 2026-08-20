@@ -4,10 +4,12 @@ import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { crearUploaderImagen } from "../../shared/middlewares/upload.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
+  crearCategoriaInventarioController,
   crearInventarioProductoController,
   editarInventarioProductoController,
   eliminarInventarioProductoController,
   guardarIngredientesProductoController,
+  listarCategoriasInventarioController,
   listarInventarioController,
   listarMovimientosInventarioController,
   obtenerIngredientesProductoController,
@@ -377,6 +379,16 @@ migaoRouter.get(
   "/inventario/productos",
   requirePermission("migao.inventario.ver"),
   asyncHandler(listarInventarioController),
+);
+migaoRouter.get(
+  "/inventario/categorias",
+  requirePermission("migao.inventario.ver"),
+  asyncHandler(listarCategoriasInventarioController),
+);
+migaoRouter.post(
+  "/inventario/categorias",
+  requirePermission("migao.inventario.administrar"),
+  asyncHandler(crearCategoriaInventarioController),
 );
 migaoRouter.post(
   "/inventario/productos",

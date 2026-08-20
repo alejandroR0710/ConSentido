@@ -3,11 +3,13 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { NumeroInput } from "../../../shared/components/NumeroInput";
-import { migaoApi } from "../api";
+import { migaoApi, type CategoriaInventario } from "../api";
 
 interface NuevoInventarioProductoModalProps {
+  categorias: CategoriaInventario[];
   onCerrar: () => void;
   onCreado: () => Promise<void> | void;
+  onCategoriaCreada: (categoria: CategoriaInventario) => void;
 }
 
 const campoClase =
@@ -26,8 +28,14 @@ const tituloSeccionClase =
  * una bolsita de amasijos suelta (unidades_por_paquete = 1). El stock arranca
  * en 0; se carga después con "Registrar movimiento" (entrada).
  */
-export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInventarioProductoModalProps) {
+export function NuevoInventarioProductoModal({
+  categorias,
+  onCerrar,
+  onCreado,
+  onCategoriaCreada,
+}: NuevoInventarioProductoModalProps) {
   const [nombre, setNombre] = useState("");
+  const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [unidadMedida, setUnidadMedida] = useState("");
   const [unidadesPorPaquete, setUnidadesPorPaquete] = useState(0);
   const [tamanoUnidad, setTamanoUnidad] = useState("");
@@ -36,7 +44,26 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+
   const puedeGuardar = nombre.trim().length >= 2 && unidadMedida.trim().length > 0 && unidadesPorPaquete > 0;
+
+  async function crearCategoria() {
+    if (!nuevaCategoria.trim()) return;
+    setCreandoCategoria(true);
+    setError(null);
+    try {
+      const categoria = await migaoApi.crearCategoriaInventario(nuevaCategoria.trim());
+      onCategoriaCreada(categoria);
+      setCategoriaId(categoria.id);
+      setNuevaCategoria("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la categoría");
+    } finally {
+      setCreandoCategoria(false);
+    }
+  }
 
   async function guardar() {
     if (!puedeGuardar) return;
@@ -45,6 +72,7 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
     try {
       await migaoApi.crearInventarioProducto({
         nombre: nombre.trim(),
+        categoriaId: categoriaId ? Number(categoriaId) : undefined,
         unidadMedida: unidadMedida.trim(),
         unidadesPorPaquete,
         tamanoUnidad: tamanoUnidad.trim() || undefined,
@@ -74,6 +102,36 @@ export function NuevoInventarioProductoModal({ onCerrar, onCreado }: NuevoInvent
           placeholder='Ej. "Torta de chocolate"'
           className={campoClase}
         />
+
+        <label className={`${etiquetaClase} mt-3`}>Categoría (opcional)</label>
+        <select
+          value={categoriaId}
+          onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
+          className={`${campoClase} mb-2`}
+        >
+          <option value="">Sin categoría</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <input
+            value={nuevaCategoria}
+            onChange={(e) => setNuevaCategoria(e.target.value)}
+            placeholder="Nueva categoría..."
+            className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-xs text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+          <button
+            type="button"
+            onClick={crearCategoria}
+            disabled={creandoCategoria || !nuevaCategoria.trim()}
+            className="rounded-md border border-brand-green-700 px-2 py-1 text-xs text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+          >
+            + Agregar
+          </button>
+        </div>
       </div>
 
       <div className={seccionClase}>

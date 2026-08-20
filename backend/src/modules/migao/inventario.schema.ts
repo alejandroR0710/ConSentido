@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const crearInventarioProductoSchema = z.object({
   nombre: z.string().trim().min(2).max(120),
+  categoriaId: z.number().int().positive().optional(),
   unidadMedida: z.string().trim().min(1).max(30),
   unidadesPorPaquete: z.number().positive().default(1),
   tamanoUnidad: z.string().trim().max(30).optional(),
@@ -12,6 +13,7 @@ export type CrearInventarioProductoInput = z.infer<typeof crearInventarioProduct
 
 export const editarInventarioProductoSchema = z.object({
   nombre: z.string().trim().min(2).max(120).optional(),
+  categoriaId: z.number().int().positive().optional(),
   unidadMedida: z.string().trim().min(1).max(30).optional(),
   unidadesPorPaquete: z.number().positive().optional(),
   tamanoUnidad: z.string().trim().max(30).optional(),
@@ -20,6 +22,11 @@ export const editarInventarioProductoSchema = z.object({
   activo: z.boolean().optional(),
 });
 export type EditarInventarioProductoInput = z.infer<typeof editarInventarioProductoSchema>;
+
+export const crearCategoriaInventarioSchema = z.object({
+  nombre: z.string().trim().min(2).max(80),
+});
+export type CrearCategoriaInventarioInput = z.infer<typeof crearCategoriaInventarioSchema>;
 
 // 'entrada' llega en paquetes (así lo entrega el proveedor) y se convierte a
 // unidades en el service; 'ajuste' ya viene en unidades directas y puede ser

@@ -597,9 +597,19 @@ CREATE UNIQUE INDEX velas_producto_insumos_catalogo_uq ON velas_producto_insumos
 -- con `inventario_productos` de arriba (producto terminado de Con Sentido).
 -- ============================================================================
 
+-- Igual patrón que categorias_producto (Menú): tabla mínima, se crea sobre la
+-- marcha desde el mismo modal de alta/edición de un producto de inventario.
+-- Aparte de categorias_producto porque agrupan cosas distintas (insumos
+-- crudos vs. productos vendibles del menú).
+CREATE TABLE migao_inventario_categorias (
+  id     SERIAL PRIMARY KEY,
+  nombre VARCHAR(80) UNIQUE NOT NULL
+);
+
 CREATE TABLE migao_inventario_productos (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre                VARCHAR(120) NOT NULL,
+  categoria_id          INT REFERENCES migao_inventario_categorias(id),
   unidad_medida         VARCHAR(30) NOT NULL,
   unidades_por_paquete  NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (unidades_por_paquete > 0),
   tamano_unidad         VARCHAR(30),

@@ -858,6 +858,18 @@ ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL
 
 
 -- ========================================================================
+-- SECCIÓN 16: CATEGORÍAS EN INVENTARIO DE MIGAO
+-- ========================================================================
+-- Mismo patrón que categorias_producto (Menú) pero aparte, porque agrupan
+-- cosas distintas (insumos crudos vs. productos vendibles del menú).
+CREATE TABLE IF NOT EXISTS migao_inventario_categorias (
+  id     SERIAL PRIMARY KEY,
+  nombre VARCHAR(80) UNIQUE NOT NULL
+);
+ALTER TABLE migao_inventario_productos ADD COLUMN IF NOT EXISTS categoria_id INT REFERENCES migao_inventario_categorias(id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

@@ -6,6 +6,8 @@ type Executor = Pool | PoolClient;
 export interface InventarioProducto {
   id: string;
   nombre: string;
+  categoria_id: number | null;
+  categoria_nombre: string | null;
   unidad_medida: string;
   unidades_por_paquete: string;
   tamano_unidad: string | null;
@@ -16,18 +18,32 @@ export interface InventarioProducto {
   created_at: string;
 }
 
+const COLUMNAS_PRODUCTO = `ip.*, ic.nombre AS categoria_nombre`;
+
 export async function listProductos(): Promise<InventarioProducto[]> {
-  const result = await pool.query(`SELECT * FROM migao_inventario_productos ORDER BY nombre ASC`);
+  const result = await pool.query(
+    `SELECT ${COLUMNAS_PRODUCTO}
+       FROM migao_inventario_productos ip
+       LEFT JOIN migao_inventario_categorias ic ON ic.id = ip.categoria_id
+      ORDER BY ip.nombre ASC`,
+  );
   return result.rows;
 }
 
 export async function getProductoById(id: string, executor: Executor = pool): Promise<InventarioProducto | null> {
-  const result = await executor.query(`SELECT * FROM migao_inventario_productos WHERE id = $1`, [id]);
+  const result = await executor.query(
+    `SELECT ${COLUMNAS_PRODUCTO}
+       FROM migao_inventario_productos ip
+       LEFT JOIN migao_inventario_categorias ic ON ic.id = ip.categoria_id
+      WHERE ip.id = $1`,
+    [id],
+  );
   return result.rowCount ? result.rows[0] : null;
 }
 
 export async function crearProducto(params: {
   nombre: string;
+  categoriaId?: number;
   unidadMedida: string;
   unidadesPorPaquete: number;
   tamanoUnidad?: string;
@@ -36,11 +52,12 @@ export async function crearProducto(params: {
 }): Promise<InventarioProducto> {
   const result = await pool.query(
     `INSERT INTO migao_inventario_productos
-       (nombre, unidad_medida, unidades_por_paquete, tamano_unidad, costo_paquete, stock_minimo_unidades)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING *`,
+       (nombre, categoria_id, unidad_medida, unidades_por_paquete, tamano_unidad, costo_paquete, stock_minimo_unidades)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id`,
     [
       params.nombre,
+      params.categoriaId ?? null,
       params.unidadMedida,
       params.unidadesPorPaquete,
       params.tamanoUnidad ?? null,
@@ -48,13 +65,14 @@ export async function crearProducto(params: {
       params.stockMinimoUnidades ?? null,
     ],
   );
-  return result.rows[0];
+  return (await getProductoById(result.rows[0].id))!;
 }
 
 export async function actualizarProducto(
   id: string,
   params: {
     nombre?: string;
+    categoriaId?: number;
     unidadMedida?: string;
     unidadesPorPaquete?: number;
     tamanoUnidad?: string;
@@ -66,17 +84,19 @@ export async function actualizarProducto(
   const result = await pool.query(
     `UPDATE migao_inventario_productos
         SET nombre = COALESCE($2, nombre),
-            unidad_medida = COALESCE($3, unidad_medida),
-            unidades_por_paquete = COALESCE($4, unidades_por_paquete),
-            tamano_unidad = COALESCE($5, tamano_unidad),
-            costo_paquete = COALESCE($6, costo_paquete),
-            stock_minimo_unidades = COALESCE($7, stock_minimo_unidades),
-            activo = COALESCE($8, activo)
+            categoria_id = COALESCE($3, categoria_id),
+            unidad_medida = COALESCE($4, unidad_medida),
+            unidades_por_paquete = COALESCE($5, unidades_por_paquete),
+            tamano_unidad = COALESCE($6, tamano_unidad),
+            costo_paquete = COALESCE($7, costo_paquete),
+            stock_minimo_unidades = COALESCE($8, stock_minimo_unidades),
+            activo = COALESCE($9, activo)
       WHERE id = $1
-      RETURNING *`,
+      RETURNING id`,
     [
       id,
       params.nombre ?? null,
+      params.categoriaId ?? null,
       params.unidadMedida ?? null,
       params.unidadesPorPaquete ?? null,
       params.tamanoUnidad ?? null,
@@ -85,7 +105,21 @@ export async function actualizarProducto(
       params.activo ?? null,
     ],
   );
-  return result.rowCount ? result.rows[0] : null;
+  if (!result.rowCount) return null;
+  return getProductoById(id);
+}
+
+export async function listCategoriasInventario() {
+  const result = await pool.query(`SELECT id, nombre FROM migao_inventario_categorias ORDER BY nombre ASC`);
+  return result.rows;
+}
+
+export async function crearCategoriaInventario(nombre: string) {
+  const result = await pool.query(
+    `INSERT INTO migao_inventario_categorias (nombre) VALUES ($1) RETURNING id, nombre`,
+    [nombre],
+  );
+  return result.rows[0];
 }
 
 /**

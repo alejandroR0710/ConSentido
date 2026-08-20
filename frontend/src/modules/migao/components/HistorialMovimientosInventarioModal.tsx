@@ -115,7 +115,6 @@ export function HistorialMovimientosInventarioModal({ tipo, onCerrar }: Historia
             </thead>
             <tbody>
               {grupos.flatMap((grupo) => {
-                const netoDelDia = grupo.entradas.reduce((acc, m) => acc + Number(m.cantidad_unidades), 0);
                 const filaEncabezado = (
                   <tr
                     key={`dia-${grupo.fecha}`}
@@ -127,9 +126,7 @@ export function HistorialMovimientosInventarioModal({ tipo, onCerrar }: Historia
                           {formatearFechaLarga(grupo.fecha)}
                         </span>
                         <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                          {grupo.entradas.length} movimiento{grupo.entradas.length > 1 ? "s" : ""} · neto{" "}
-                          {netoDelDia > 0 ? "+" : ""}
-                          {formatCantidad(netoDelDia)}
+                          {grupo.entradas.length} movimiento{grupo.entradas.length > 1 ? "s" : ""}
                         </span>
                       </div>
                     </td>

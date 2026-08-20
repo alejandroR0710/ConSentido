@@ -26,15 +26,9 @@ export const MODULES_META: ModuloMeta[] = [
     icon: "🗂️",
     roles: ["Super Root", "Root"],
   },
-  // Órdenes canceladas — nunca generaron un peso, historial aparte con el
-  // detalle de qué se había pedido (ver el guard en HistorialCanceladosPage.tsx).
-  {
-    slug: "migao",
-    label: "Órdenes Canceladas",
-    path: "/migao/historial-cancelado",
-    icon: "🚫",
-    roles: ["Super Root", "Root"],
-  },
+  // Órdenes canceladas: igual que Historial Migao, no vive en el sidebar —
+  // se abre desde el botón "🚫 Órdenes canceladas" dentro de Historial
+  // Migao (ver MigaoHistorialPage.tsx); la ruta sigue en App.tsx.
   { slug: "general", label: "Dashboard", path: "/", icon: "🏠" },
   { slug: "general", label: "Caja General", path: "/caja", icon: "💰", roles: ["Cajero"] },
   // Historial de Caja/Cocina/Mesero ya no viven en el sidebar: cada módulo

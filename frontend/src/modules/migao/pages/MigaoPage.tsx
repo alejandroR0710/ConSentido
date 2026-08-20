@@ -651,9 +651,9 @@ export function MigaoPage() {
               {AREAS_MESA.map((area) => (
                 <div
                   key={area.valor}
-                  className={`flex flex-col gap-2 rounded-lg border-l-4 p-2 ${area.colorBorde} ${area.colorFondo}`}
+                  className={`flex flex-col gap-2 rounded-lg border-l-8 p-2 ${area.colorBorde} ${area.colorFondo}`}
                 >
-                  <h3 className={`text-sm font-semibold ${area.colorTexto}`}>
+                  <h3 className={`text-base font-bold ${area.colorTexto}`}>
                     <span aria-hidden>{area.icon}</span> {area.label}
                   </h3>
                   <FloorPlanCanvas
@@ -680,14 +680,18 @@ export function MigaoPage() {
                   <button
                     key={o.id}
                     onClick={() => seleccionarOrden(o.id)}
-                    className={`rounded-lg border-2 p-4 text-left transition-colors hover:brightness-95 dark:hover:brightness-125 ${
-                      estadoCocina ? BORDE_POR_ESTADO[estadoCocina] : (area?.colorBorde ?? "border-brand-vanilla-dark dark:border-brand-green-700")
+                    className={`rounded-lg p-4 text-left transition-colors hover:brightness-95 dark:hover:brightness-125 ${
+                      estadoCocina
+                        ? BORDE_POR_ESTADO[estadoCocina]
+                        : area
+                          ? `border-4 ${area.colorBorde}`
+                          : "border-2 border-brand-vanilla-dark dark:border-brand-green-700"
                     } ${area?.colorFondo ?? ""}`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                         Mesa {o.mesa_numero ?? "—"}
-                        {area && <span className={`text-sm font-normal ${area.colorTexto}`}> ({area.label})</span>}
+                        {area && <span className={`text-sm font-bold ${area.colorTexto}`}> ({area.label})</span>}
                       </div>
                       {estadoCocina && (
                         <span

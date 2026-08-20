@@ -184,6 +184,7 @@ export interface InventarioMovimiento {
   referencia_entidad: string | null;
   referencia_id: string | null;
   usuario_id: string;
+  usuario_nombre?: string | null;
   created_at: string;
 }
 
@@ -226,6 +227,27 @@ export async function listMovimientosPorProducto(productoId: string): Promise<In
       ORDER BY mi.created_at DESC
       LIMIT 200`,
     [productoId],
+  );
+  return result.rows;
+}
+
+/** Historial global (todos los productos) de un solo tipo de movimiento —
+ *  'entrada' para el historial de ingresos, 'ajuste' para el de ajustes con
+ *  motivo. Nunca 'consumo' acá (eso lo genera automáticamente cada venta,
+ *  no es algo que alguien "registre" — se ve producto por producto si hace
+ *  falta, vía listMovimientosPorProducto). */
+export async function listMovimientosGlobalPorTipo(
+  tipo: "entrada" | "ajuste",
+): Promise<(InventarioMovimiento & { producto_nombre: string })[]> {
+  const result = await pool.query(
+    `SELECT mi.*, ip.nombre AS producto_nombre, u.nombre AS usuario_nombre
+       FROM migao_inventario_movimientos mi
+       JOIN migao_inventario_productos ip ON ip.id = mi.producto_id
+       LEFT JOIN usuarios u ON u.id = mi.usuario_id
+      WHERE mi.tipo = $1
+      ORDER BY mi.created_at DESC
+      LIMIT 300`,
+    [tipo],
   );
   return result.rows;
 }

@@ -5,6 +5,7 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type CategoriaInventario, type InventarioProducto } from "../api";
 import { EditarInventarioProductoModal } from "../components/EditarInventarioProductoModal";
+import { HistorialMovimientosInventarioModal } from "../components/HistorialMovimientosInventarioModal";
 import { NuevoInventarioProductoModal } from "../components/NuevoInventarioProductoModal";
 import { RegistrarMovimientoInventarioModal } from "../components/RegistrarMovimientoInventarioModal";
 
@@ -52,6 +53,7 @@ export function InventarioPage() {
   const [movimiento, setMovimiento] = useState<{ producto: InventarioProducto; tipo: "entrada" | "ajuste" } | null>(
     null,
   );
+  const [historialTipo, setHistorialTipo] = useState<"entrada" | "ajuste" | null>(null);
 
   async function cargar() {
     try {
@@ -94,12 +96,26 @@ export function InventarioPage() {
             receta asociada — acá solo se registran entradas y ajustes de conteo.
           </p>
         </div>
-        <button
-          onClick={() => setNuevoAbierto(true)}
-          className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
-        >
-          + Nuevo producto
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setHistorialTipo("entrada")}
+            className="rounded-md border border-brand-green-700 px-3 py-2 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+          >
+            📥 Historial de ingresos
+          </button>
+          <button
+            onClick={() => setHistorialTipo("ajuste")}
+            className="rounded-md border border-amber-500 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+          >
+            📝 Historial de ajustes
+          </button>
+          <button
+            onClick={() => setNuevoAbierto(true)}
+            className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+          >
+            + Nuevo producto
+          </button>
+        </div>
       </div>
 
       <input
@@ -246,6 +262,10 @@ export function InventarioPage() {
           onCerrar={() => setMovimiento(null)}
           onRegistrado={cargar}
         />
+      )}
+
+      {historialTipo && (
+        <HistorialMovimientosInventarioModal tipo={historialTipo} onCerrar={() => setHistorialTipo(null)} />
       )}
     </div>
   );

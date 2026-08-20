@@ -11,6 +11,7 @@ import {
   guardarIngredientesProductoController,
   listarCategoriasInventarioController,
   listarInventarioController,
+  listarMovimientosGlobalInventarioController,
   listarMovimientosInventarioController,
   obtenerIngredientesProductoController,
   registrarMovimientoInventarioController,
@@ -416,6 +417,14 @@ migaoRouter.post(
   "/inventario/movimientos",
   requirePermission("migao.inventario.administrar"),
   asyncHandler(registrarMovimientoInventarioController),
+);
+// Historial global (todos los productos) de un solo tipo — "entrada" para el
+// historial de ingresos, "ajuste" para el de ajustes con motivo. Mismo
+// permiso que ver el inventario (es solo lectura, no cambia nada).
+migaoRouter.get(
+  "/inventario/movimientos",
+  requirePermission("migao.inventario.ver"),
+  asyncHandler(listarMovimientosGlobalInventarioController),
 );
 
 // Amasijos y bases: viven como productos normales del inventario general de

@@ -113,6 +113,10 @@ export async function listarMovimientos(productoId: string) {
   return repo.listMovimientosPorProducto(productoId);
 }
 
+export async function listarMovimientosGlobalPorTipo(tipo: "entrada" | "ajuste") {
+  return repo.listMovimientosGlobalPorTipo(tipo);
+}
+
 /**
  * Se llama desde migao.service.ts en cada alta/edición/cancelación de un
  * ítem de orden. `deltaCantidadProducto` positivo = se pidió/aumentó

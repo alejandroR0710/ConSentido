@@ -6,6 +6,7 @@ import {
   editarInventarioProductoSchema,
   guardarIngredientesSchema,
   registrarMovimientoInventarioSchema,
+  tipoMovimientoGlobalSchema,
 } from "./inventario.schema";
 import * as service from "./inventario.service";
 
@@ -51,6 +52,12 @@ export async function registrarMovimientoInventarioController(req: Request, res:
 
 export async function listarMovimientosInventarioController(req: Request, res: Response) {
   const movimientos = await service.listarMovimientos(req.params.id);
+  return ok(res, movimientos);
+}
+
+export async function listarMovimientosGlobalInventarioController(req: Request, res: Response) {
+  const tipo = tipoMovimientoGlobalSchema.parse(req.query.tipo);
+  const movimientos = await service.listarMovimientosGlobalPorTipo(tipo);
   return ok(res, movimientos);
 }
 

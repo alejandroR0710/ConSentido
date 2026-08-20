@@ -272,6 +272,10 @@ export interface InventarioMovimiento {
   created_at: string;
 }
 
+export interface InventarioMovimientoGlobal extends InventarioMovimiento {
+  producto_nombre: string;
+}
+
 export interface IngredienteProducto {
   id: number;
   productoId: string;
@@ -783,6 +787,9 @@ export const migaoApi = {
     ),
   listarMovimientosInventario: (productoId: string) =>
     apiFetch<InventarioMovimiento[]>(`/migao/inventario/productos/${productoId}/movimientos`),
+  // Historial global (todos los productos) de ingresos o de ajustes.
+  listarMovimientosInventarioGlobal: (tipo: "entrada" | "ajuste") =>
+    apiFetch<InventarioMovimientoGlobal[]>(`/migao/inventario/movimientos?tipo=${tipo}`),
 
   // Plano visual de mesas por área. Ver/seleccionar (Mesero, Cajero) solo usa
   // listarMesas(); crear/mover/editar/eliminar es exclusivo del editor

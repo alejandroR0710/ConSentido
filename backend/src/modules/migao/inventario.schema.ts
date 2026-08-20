@@ -28,6 +28,8 @@ export const crearCategoriaInventarioSchema = z.object({
 });
 export type CrearCategoriaInventarioInput = z.infer<typeof crearCategoriaInventarioSchema>;
 
+export const tipoMovimientoGlobalSchema = z.enum(["entrada", "ajuste"]);
+
 // 'entrada' llega en paquetes (así lo entrega el proveedor) y se convierte a
 // unidades en el service; 'ajuste' ya viene en unidades directas y puede ser
 // negativo (corrige un conteo). 'consumo' nunca se acepta acá — lo escribe

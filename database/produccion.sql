@@ -870,6 +870,33 @@ ALTER TABLE migao_inventario_productos ADD COLUMN IF NOT EXISTS categoria_id INT
 
 
 -- ========================================================================
+-- SECCIÓN 17: EDITAR/AJUSTAR INVENTARIO PASA A SER SOLO ROOT/SUPER ROOT
+-- ========================================================================
+-- Cocina conserva migao.inventario.administrar (crear producto nuevo +
+-- registrar ENTRADA de stock, su trabajo diario) pero editar un producto ya
+-- creado, eliminarlo o hacer un AJUSTE manual de conteo pasa a requerir este
+-- permiso nuevo, que Cocina no tiene — no hace falta tocar su permiso
+-- existente para nada, ver inventario.service.ts/inventario.routes.ts.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
+FROM (VALUES
+  ('editar_producto_inventario', 'migao.inventario.editar_producto')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo = 'migao.inventario.editar_producto'
+  AND NOT EXISTS (
+    SELECT 1 FROM roles_permisos rp
+    WHERE rp.rol_id = r.id AND rp.permiso_id = p.id
+  );
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

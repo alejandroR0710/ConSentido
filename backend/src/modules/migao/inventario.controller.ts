@@ -45,7 +45,7 @@ export async function eliminarInventarioProductoController(req: Request, res: Re
 
 export async function registrarMovimientoInventarioController(req: Request, res: Response) {
   const data = registrarMovimientoInventarioSchema.parse(req.body);
-  const resultado = await service.registrarMovimiento(data, req.auth!.usuarioId);
+  const resultado = await service.registrarMovimiento(data, req.auth!.usuarioId, req.auth!.rolId);
   return created(res, resultado);
 }
 

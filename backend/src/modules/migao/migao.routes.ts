@@ -395,14 +395,16 @@ migaoRouter.post(
   requirePermission("migao.inventario.administrar"),
   asyncHandler(crearInventarioProductoController),
 );
+// Editar/eliminar un producto ya creado es distinto de crearlo o registrar
+// una entrada (arriba, sigue siendo de Cocina): exclusivo de Root/Super Root.
 migaoRouter.patch(
   "/inventario/productos/:id",
-  requirePermission("migao.inventario.administrar"),
+  requirePermission("migao.inventario.editar_producto"),
   asyncHandler(editarInventarioProductoController),
 );
 migaoRouter.delete(
   "/inventario/productos/:id",
-  requirePermission("migao.inventario.administrar"),
+  requirePermission("migao.inventario.editar_producto"),
   asyncHandler(eliminarInventarioProductoController),
 );
 migaoRouter.get(

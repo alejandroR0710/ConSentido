@@ -78,7 +78,15 @@ export async function eliminarProducto(id: string, rolId: number, forzar = false
  * entrada a la base — da igual si se registra acá o desde el módulo de
  * Amasijos, es el mismo código (ver amasijos.service.ts::prepararBaseSiAplica).
  */
-export async function registrarMovimiento(input: RegistrarMovimientoInventarioInput, usuarioId: string) {
+export async function registrarMovimiento(input: RegistrarMovimientoInventarioInput, usuarioId: string, rolId: number) {
+  // "Entrada" (llegó mercancía) sigue siendo del día a día de Cocina, ya
+  // cubierto por migao.inventario.administrar (permiso del propio endpoint) —
+  // "ajuste" (corregir un conteo a mano) es más delicado y queda exclusivo
+  // de Root/Super Root.
+  if (input.tipo === "ajuste" && !(await tienePermiso(rolId, "migao.inventario.editar_producto"))) {
+    throw Errors.forbidden("No tienes permiso para hacer un ajuste de inventario");
+  }
+
   const producto = await repo.getProductoById(input.productoId);
   if (!producto) throw Errors.notFound("Producto de inventario no encontrado");
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type CategoriaInventario, type InventarioProducto } from "../api";
 import { EditarInventarioProductoModal } from "../components/EditarInventarioProductoModal";
@@ -34,6 +36,12 @@ function agruparPorCategoria(productos: InventarioProducto[]): [string, Inventar
  *  se vende un producto del menú con receta asociada — acá nunca se registra
  *  una salida a mano, solo entradas y ajustes de conteo. */
 export function InventarioPage() {
+  const { usuario } = useAuth();
+  // Ajustar stock a mano y editar/eliminar un producto ya creado es
+  // exclusivo de Root/Super Root (el backend también lo valida) — crear
+  // producto y registrar entrada siguen siendo del día a día de Cocina.
+  const puedeEditarOAjustar = tieneAccesoTotal(usuario?.rol);
+
   const [productos, setProductos] = useState<InventarioProducto[]>([]);
   const [categorias, setCategorias] = useState<CategoriaInventario[]>([]);
   const [busqueda, setBusqueda] = useState("");
@@ -182,19 +190,23 @@ export function InventarioPage() {
                               >
                                 + Entrada
                               </button>
-                              <button
-                                onClick={() => setMovimiento({ producto: p, tipo: "ajuste" })}
-                                className="rounded-md border border-amber-500 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                              >
-                                Ajuste
-                              </button>
-                              <button
-                                onClick={() => setProductoEditando(p)}
-                                aria-label="Editar producto"
-                                className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
-                              >
-                                Editar
-                              </button>
+                              {puedeEditarOAjustar && (
+                                <>
+                                  <button
+                                    onClick={() => setMovimiento({ producto: p, tipo: "ajuste" })}
+                                    className="rounded-md border border-amber-500 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                                  >
+                                    Ajuste
+                                  </button>
+                                  <button
+                                    onClick={() => setProductoEditando(p)}
+                                    aria-label="Editar producto"
+                                    className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs dark:border-brand-green-700"
+                                  >
+                                    Editar
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

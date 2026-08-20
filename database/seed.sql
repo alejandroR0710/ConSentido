@@ -44,6 +44,11 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_inventario',         'migao.inventario.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_inventario', 'migao.inventario.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'eliminar_forzado_inventario', 'migao.inventario.eliminar_forzado'),
+  -- Editar un producto ya creado, eliminarlo o hacer un ajuste manual de
+  -- stock — a diferencia de crear producto/registrar entrada (eso sigue
+  -- siendo parte de migao.inventario.administrar, que Cocina sí tiene), esto
+  -- queda exclusivo de Root/Super Root.
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_producto_inventario', 'migao.inventario.editar_producto'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_mesas',          'migao.mesas.ver'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'administrar_mesas',  'migao.mesas.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'ver_propinas',       'migao.propinas.ver'),

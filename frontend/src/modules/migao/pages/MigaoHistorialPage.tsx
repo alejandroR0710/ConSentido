@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
@@ -171,9 +171,17 @@ export function MigaoHistorialPage() {
     <div className="flex flex-col gap-6">
       <div>
         <BotonVolver to="/migao" />
-        <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial Migao</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Historial Migao</h1>
+          <Link
+            to="/migao/historial-cancelado"
+            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            🚫 Órdenes canceladas
+          </Link>
+        </div>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-          Órdenes cobradas/canceladas + ingresos manuales de Migao.
+          Órdenes cobradas + ingresos manuales de Migao. Las canceladas viven aparte.
         </p>
       </div>
 

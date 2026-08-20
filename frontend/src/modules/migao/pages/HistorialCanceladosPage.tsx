@@ -115,7 +115,7 @@ export function HistorialCanceladosPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BotonVolver to="/migao" />
+        <BotonVolver to="/migao/historial" />
         <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Órdenes Canceladas</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Cuentas canceladas antes de cobrarse — nunca generaron un peso, quedan aparte del historial normal con el

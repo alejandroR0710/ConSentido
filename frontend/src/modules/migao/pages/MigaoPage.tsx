@@ -693,7 +693,7 @@ export function MigaoPage() {
                         Mesa {o.mesa_numero ?? "—"}
                         {area && <span className={`text-sm font-bold ${area.colorTexto}`}> ({area.label})</span>}
                         {o.nombre && (
-                          <span className="ml-1 text-sm font-normal italic text-brand-ink/70 dark:text-brand-vanilla/70">
+                          <span className="ml-1 text-sm font-semibold italic text-brand-green-700 dark:text-brand-vanilla">
                             "{o.nombre}"
                           </span>
                         )}

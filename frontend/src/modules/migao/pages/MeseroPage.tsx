@@ -596,7 +596,7 @@ export function MeseroPage() {
                 </span>
               )}
               {detalle.orden.nombre && (
-                <span className="ml-2 block text-sm font-normal italic text-brand-ink/70 dark:text-brand-vanilla/70">
+                <span className="ml-2 block text-sm font-semibold italic text-brand-green-700 dark:text-brand-vanilla">
                   "{detalle.orden.nombre}"
                 </span>
               )}

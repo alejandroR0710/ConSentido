@@ -19,7 +19,7 @@ import {
   type OrdenResumen,
   type RegistrarAbonoInput,
 } from "../api";
-import { AREAS_MESA, labelArea } from "../areas";
+import { AREAS_MESA, areaDeMesa } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
@@ -649,8 +649,11 @@ export function MigaoPage() {
           ) : vistaOrdenes === "plano" ? (
             <div className="flex flex-col gap-6">
               {AREAS_MESA.map((area) => (
-                <div key={area.valor} className="flex flex-col gap-2">
-                  <h3 className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+                <div
+                  key={area.valor}
+                  className={`flex flex-col gap-2 rounded-lg border-l-4 p-2 ${area.colorBorde} ${area.colorFondo}`}
+                >
+                  <h3 className={`text-sm font-semibold ${area.colorTexto}`}>
                     <span aria-hidden>{area.icon}</span> {area.label}
                   </h3>
                   <FloorPlanCanvas
@@ -672,20 +675,19 @@ export function MigaoPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {ordenes.map((o) => {
                 const estadoCocina = estadoAgregadoOrden(o.id, itemsActivos);
+                const area = areaDeMesa(o.mesa_piso);
                 return (
                   <button
                     key={o.id}
                     onClick={() => seleccionarOrden(o.id)}
-                    className={`rounded-lg p-4 text-left transition-colors hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30 ${
-                      estadoCocina
-                        ? BORDE_POR_ESTADO[estadoCocina]
-                        : "border border-brand-vanilla-dark dark:border-brand-green-700"
-                    }`}
+                    className={`rounded-lg border-2 p-4 text-left transition-colors hover:brightness-95 dark:hover:brightness-125 ${
+                      estadoCocina ? BORDE_POR_ESTADO[estadoCocina] : (area?.colorBorde ?? "border-brand-vanilla-dark dark:border-brand-green-700")
+                    } ${area?.colorFondo ?? ""}`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                         Mesa {o.mesa_numero ?? "—"}
-                        {o.mesa_piso && <span className="text-sm font-normal"> ({labelArea(o.mesa_piso)})</span>}
+                        {area && <span className={`text-sm font-normal ${area.colorTexto}`}> ({area.label})</span>}
                       </div>
                       {estadoCocina && (
                         <span

@@ -135,6 +135,12 @@ export async function listarHistorialAdministrativo() {
   return repo.listOrdenesHistorialAdministrativo();
 }
 
+/** Historial de órdenes canceladas — separado del historial normal porque
+ *  nunca generaron un peso, con el detalle completo de qué se había pedido. */
+export async function listarHistorialCancelado() {
+  return repo.listOrdenesHistorialCancelado();
+}
+
 export async function listarPropinas() {
   return repo.listPropinas();
 }

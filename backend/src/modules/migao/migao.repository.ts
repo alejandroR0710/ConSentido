@@ -126,11 +126,14 @@ export async function listOrdenesAbiertas() {
   return result.rows;
 }
 
-/** Registro de órdenes ya resueltas (cobradas o canceladas) para la pantalla de
- *  cobro del Cajero: separado de `listOrdenesAbiertas` a propósito, para que lo
- *  activo y lo ya cerrado no se mezclen en la misma tabla. Últimas 200 primero.
- *  Con `meseroId` se acota a las órdenes creadas por ese mesero (usado por
- *  "mi historial" en Mesero, en vez del historial completo que ve el Cajero). */
+/** Registro de órdenes ya cobradas para la pantalla de cobro del Cajero:
+ *  separado de `listOrdenesAbiertas` a propósito, para que lo activo y lo ya
+ *  cerrado no se mezclen en la misma tabla. Las canceladas viven en su propio
+ *  historial aparte (ver listOrdenesHistorialCancelado) — no tiene sentido
+ *  mezclar cuentas que nunca generaron un peso con el pago diario real.
+ *  Últimas 200 primero. Con `meseroId` se acota a las órdenes creadas por ese
+ *  mesero (usado por "mi historial" en Mesero, en vez del historial completo
+ *  que ve el Cajero). */
 export async function listOrdenesHistorial(meseroId?: string) {
   const result = await pool.query(
     `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
@@ -162,8 +165,13 @@ export async function listOrdenesHistorial(meseroId?: string) {
          FROM movimientos_caja inner_mc
          WHERE inner_mc.referencia_entidad = 'ventas' AND inner_mc.referencia_id = v.id::text
        ) mc ON true
-      WHERE o.estado IN ('cerrada', 'cancelada')
-        AND ($1::uuid IS NULL OR o.mesero_id = $1)
+      -- Cajero ($1 = NULL): solo cobradas — las canceladas viven en su propio
+      -- historial aparte (ver listOrdenesHistorialCancelado), no tiene sentido
+      -- mezclar cuentas que nunca generaron un peso con el pago diario real.
+      -- "Mi historial" de un mesero puntual ($1 = su id) sí sigue mostrando
+      -- también las que él mismo canceló, como siempre.
+      WHERE (($1::uuid IS NULL AND o.estado = 'cerrada')
+         OR  ($1::uuid IS NOT NULL AND o.estado IN ('cerrada', 'cancelada') AND o.mesero_id = $1))
         -- Las cuentas cerradas con pago administrativo no cuentan como "pago
         -- diario": viven en su propio historial (ver listOrdenesHistorialAdministrativo).
         AND NOT EXISTS (
@@ -174,6 +182,39 @@ export async function listOrdenesHistorial(meseroId?: string) {
       ORDER BY o.closed_at DESC
       LIMIT 200`,
     [meseroId ?? null],
+  );
+  return result.rows;
+}
+
+/**
+ * Historial separado de órdenes canceladas: nunca generaron un peso (no hay
+ * venta/factura), así que no tiene sentido mezclarlas con `listOrdenesHistorial`
+ * (el pago diario real) — quedan aquí con el detalle completo de qué se había
+ * pedido (todos los ítems quedan en estado 'cancelado' al cancelar la orden,
+ * ver migao.service.ts::cancelarOrden, por eso NO se filtran acá como sí hace
+ * listOrdenesHistorial). Exclusivo de Root/Super Root (ver migao.routes.ts).
+ */
+export async function listOrdenesHistorialCancelado() {
+  const result = await pool.query(
+    `SELECT o.id, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
+            m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
+            COALESCE(items.total, 0) AS total, COALESCE(items.detalle, '[]') AS items
+       FROM ordenes o
+       LEFT JOIN mesas m ON m.id = o.mesa_id
+       LEFT JOIN usuarios u ON u.id = o.mesero_id
+       LEFT JOIN LATERAL (
+         SELECT SUM(oi.cantidad * oi.precio_unitario) AS total,
+                json_agg(
+                  json_build_object('nombre', p.nombre, 'cantidad', oi.cantidad, 'precioUnitario', oi.precio_unitario)
+                  ORDER BY oi.id
+                ) AS detalle
+           FROM orden_items oi
+           JOIN productos p ON p.id = oi.producto_id
+          WHERE oi.orden_id = o.id
+       ) items ON true
+      WHERE o.estado = 'cancelada'
+      ORDER BY o.closed_at DESC NULLS LAST, o.created_at DESC
+      LIMIT 200`,
   );
   return result.rows;
 }

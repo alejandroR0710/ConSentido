@@ -70,6 +70,27 @@ export interface HistorialAdministrativoEntrada {
   numero_factura: string | null;
 }
 
+export interface ItemHistorialCancelado {
+  nombre: string;
+  cantidad: number;
+  precioUnitario: number;
+}
+
+/** Orden cancelada: nunca generó un peso, vive en su propio historial con el
+ *  detalle completo de qué se había pedido (ver HistorialCanceladosPage). */
+export interface HistorialCanceladoEntrada {
+  id: string;
+  created_at: string;
+  closed_at: string | null;
+  comensal_numero: number | null;
+  numero_personas: number | null;
+  mesa_numero: string | null;
+  mesa_piso: number | null;
+  mesero_nombre: string | null;
+  total: string;
+  items: ItemHistorialCancelado[];
+}
+
 /** Cuánto entró de Migao ese día en efectivo/banco, tomado de Caja General —
  *  se usa para agrupar el historial de órdenes por día con su subtotal. */
 export interface ResumenDiarioIngreso {
@@ -512,6 +533,8 @@ export const migaoApi = {
   // Cuentas cerradas con pago "administrativo" — exclusivo de Root/Super Root.
   listarHistorialAdministrativo: () =>
     apiFetch<HistorialAdministrativoEntrada[]>("/migao/ordenes/historial-administrativo"),
+  // Órdenes canceladas — exclusivo de Root/Super Root.
+  listarHistorialCancelado: () => apiFetch<HistorialCanceladoEntrada[]>("/migao/ordenes/historial-cancelado"),
   // Historial aparte de propinas — exclusivo de Root/Super Root.
   listarPropinas: () => apiFetch<PropinaEntrada[]>("/migao/propinas"),
   // Pendiente por día (efectivo y banco desglosados) — para elegir qué días

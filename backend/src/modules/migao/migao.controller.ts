@@ -88,6 +88,11 @@ export async function listarHistorialAdministrativoController(_req: Request, res
   return ok(res, ordenes);
 }
 
+export async function listarHistorialCanceladoController(_req: Request, res: Response) {
+  const ordenes = await service.listarHistorialCancelado();
+  return ok(res, ordenes);
+}
+
 // Historial separado de propinas — dinero del mesero/personal, exclusivo de
 // Root/Super Root (migao.propinas.ver), ver migao.routes.ts.
 export async function listarPropinasController(_req: Request, res: Response) {

@@ -37,6 +37,7 @@ import {
   listarCotizacionesController,
   listarEntregasPropinasController,
   listarHistorialAdministrativoController,
+  listarHistorialCanceladoController,
   listarHistorialDespachadosController,
   listarHistorialOrdenesController,
   listarHistorialPropioController,
@@ -162,6 +163,13 @@ migaoRouter.get(
   "/ordenes/historial-administrativo",
   requirePermission("migao.ordenes.pago_administrativo"),
   asyncHandler(listarHistorialAdministrativoController),
+);
+// Historial separado de órdenes canceladas — mismo permiso que el historial
+// normal, registrado antes de /ordenes/:id por el mismo motivo de arriba.
+migaoRouter.get(
+  "/ordenes/historial-cancelado",
+  requirePermission("migao.ordenes.ver"),
+  asyncHandler(listarHistorialCanceladoController),
 );
 // Historial separado de propinas — dinero del mesero/personal, exclusivo de
 // Root/Super Root.

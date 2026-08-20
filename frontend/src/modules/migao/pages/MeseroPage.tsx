@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { migaoApi, type ItemActivo, type Mesa, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
-import { AREAS_MESA, labelArea } from "../areas";
+import { AREAS_MESA, areaDeMesa, labelArea } from "../areas";
 import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
 import { CambiarMesaModal } from "../components/CambiarMesaModal";
@@ -395,18 +395,23 @@ export function MeseroPage() {
           ) : (
             ordenes.map((o) => {
               const estadoCocina = estadoAgregadoOrden(o.id, itemsActivos);
+              const area = areaDeMesa(o.mesa_piso);
               return (
                 <button
                   key={o.id}
                   onClick={() => seleccionarOrden(o.id)}
-                  className={`rounded-lg p-4 text-left hover:bg-brand-green-50 dark:hover:bg-brand-green-700/30 ${
-                    estadoCocina ? BORDE_POR_ESTADO[estadoCocina] : "border border-brand-vanilla-dark dark:border-brand-green-700"
-                  }`}
+                  className={`rounded-lg p-4 text-left transition-colors hover:brightness-95 dark:hover:brightness-125 ${
+                    estadoCocina
+                      ? BORDE_POR_ESTADO[estadoCocina]
+                      : area
+                        ? `border-4 ${area.colorBorde}`
+                        : "border-2 border-brand-vanilla-dark dark:border-brand-green-700"
+                  } ${area?.colorFondo ?? ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                       Mesa {o.mesa_numero ?? "—"}
-                      {o.mesa_piso && <span className="text-sm font-normal"> (salón {o.mesa_piso})</span>} · Comensal{" "}
+                      {area && <span className={`text-sm font-bold ${area.colorTexto}`}> ({area.label})</span>} · Comensal{" "}
                       {o.comensal_numero}
                       {o.numero_personas && (
                         <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -455,10 +460,10 @@ export function MeseroPage() {
                   key={a.valor}
                   type="button"
                   onClick={() => setBorradorPiso(a.valor)}
-                  className={`flex flex-1 flex-col items-center gap-1 rounded-lg border-2 px-2 py-3 text-sm font-semibold ${
+                  className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-3 text-sm font-bold ${
                     borradorPiso === a.valor
-                      ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                      : "border-brand-vanilla-dark text-brand-ink hover:border-brand-green-400 dark:border-brand-green-700 dark:text-brand-vanilla"
+                      ? `border-4 ${a.colorBorde} ${a.colorFondo} ${a.colorTexto}`
+                      : "border-2 border-brand-vanilla-dark text-brand-ink hover:border-brand-green-400 dark:border-brand-green-700 dark:text-brand-vanilla"
                   }`}
                 >
                   <span className="text-xl" aria-hidden>
@@ -580,8 +585,11 @@ export function MeseroPage() {
           <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
             <span>
               Mesa {ordenActual?.mesa_numero ?? "—"}
-              {ordenActual?.mesa_piso && <span className="text-sm font-normal"> (salón {ordenActual.mesa_piso})</span>} ·
-              Comensal {detalle.orden.comensal_numero}
+              {(() => {
+                const area = areaDeMesa(ordenActual?.mesa_piso);
+                return area && <span className={`text-sm font-bold ${area.colorTexto}`}> ({area.label})</span>;
+              })()}{" "}
+              · Comensal {detalle.orden.comensal_numero}
               {detalle.orden.numero_personas && (
                 <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
                   👥 {detalle.orden.numero_personas}

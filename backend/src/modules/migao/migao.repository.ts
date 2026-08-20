@@ -735,6 +735,17 @@ export async function actualizarMesaOrden(
   return result.rows[0];
 }
 
+/** Pone/cambia/borra el nombre de una orden ya creada, sin tocar la mesa —
+ *  a diferencia de actualizarMesaOrden, acá "" sí borra el nombre (se manda
+ *  siempre, nunca se omite). Usado desde Caja Migao. */
+export async function actualizarNombreOrden(ordenId: string, nombre: string, executor: Executor = pool) {
+  const result = await executor.query(`UPDATE ordenes SET nombre = $2 WHERE id = $1 RETURNING *`, [
+    ordenId,
+    nombre || null,
+  ]);
+  return result.rowCount ? result.rows[0] : null;
+}
+
 export async function getItemsPorOrden(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
     `SELECT oi.*, p.nombre AS producto_nombre, p.es_para_llevar

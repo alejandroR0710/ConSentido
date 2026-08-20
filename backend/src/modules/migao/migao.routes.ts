@@ -20,6 +20,7 @@ import {
   agregarCargoParaLlevarController,
   agregarItemController,
   cambiarMesaController,
+  editarNombreOrdenController,
   cancelarOrdenController,
   cerrarOrdenController,
   crearCategoriaController,
@@ -234,6 +235,14 @@ migaoRouter.patch(
   "/ordenes/:id/mesa",
   requirePermission("migao.ordenes.cambiar_mesa"),
   asyncHandler(cambiarMesaController),
+);
+// Ponerle/cambiarle/borrarle el nombre a una cuenta (ej. "Cumpleaños de
+// Juan") sin necesitar el permiso de cambiar mesa — así Caja Migao también
+// puede hacerlo, no solo el mesero.
+migaoRouter.patch(
+  "/ordenes/:id/nombre",
+  requirePermission("migao.ordenes.editar_nombre"),
+  asyncHandler(editarNombreOrdenController),
 );
 migaoRouter.post(
   "/ordenes/:id/items",

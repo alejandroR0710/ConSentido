@@ -5,6 +5,7 @@ import { created, ok } from "../../shared/utils/response";
 import {
   agregarItemSchema,
   cambiarMesaSchema,
+  editarNombreOrdenSchema,
   cerrarOrdenSchema,
   checkItemSchema,
   crearCategoriaProductoSchema,
@@ -165,6 +166,12 @@ export async function editarItemController(req: Request, res: Response) {
 export async function cambiarMesaController(req: Request, res: Response) {
   const data = cambiarMesaSchema.parse(req.body);
   const orden = await service.cambiarMesaOrden(req.params.id, data);
+  return ok(res, orden);
+}
+
+export async function editarNombreOrdenController(req: Request, res: Response) {
+  const data = editarNombreOrdenSchema.parse(req.body);
+  const orden = await service.editarNombreOrden(req.params.id, data);
   return ok(res, orden);
 }
 

@@ -625,6 +625,14 @@ export const migaoApi = {
       method: "PATCH",
       body: { mesaNumero, piso, nombre },
     }),
+  // Aparte de cambiarMesa: Caja Migao también puede ponerle/cambiarle/
+  // borrarle el nombre a una cuenta sin necesitar el permiso de cambiar
+  // mesa — "" sí borra el nombre acá.
+  editarNombreOrden: (ordenId: string, nombre: string) =>
+    apiFetch<{ id: string }>(`/migao/ordenes/${ordenId}/nombre`, {
+      method: "PATCH",
+      body: { nombre },
+    }),
   resetearOrdenes: () =>
     apiFetch<{ ordenesBorradas: number; ventasBorradas: number; pagosBorrados: number; movimientosCajaBorrados: number }>(
       "/migao/ordenes/reset",

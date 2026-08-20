@@ -22,6 +22,7 @@ import {
 import { AREAS_MESA, areaDeMesa } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
+import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
@@ -52,6 +53,7 @@ export function MigaoPage() {
   const [vistaOrdenes, setVistaOrdenes] = useState<"lista" | "plano">("lista");
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<OrdenDetalle | null>(null);
+  const [nombreAbierto, setNombreAbierto] = useState(false);
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   // "Pago administrativo": no genera ingreso en Caja General, exclusivo de
   // Root/Super Root. Aparte del selector normal (efectivo/banco/mixto) porque
@@ -731,12 +733,29 @@ export function MigaoPage() {
             ← Volver a órdenes
           </button>
 
-          <h2 className="-mt-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
-            {ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
-            {ordenActual?.mesero_nombre && (
-              <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                Mesero: {ordenActual.mesero_nombre}
-              </span>
+          <h2 className="-mt-2 flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            <span>
+              {ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
+              {ordenActual?.mesero_nombre && (
+                <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                  Mesero: {ordenActual.mesero_nombre}
+                </span>
+              )}
+              {ordenActual?.nombre && (
+                <span className="ml-2 text-sm font-semibold italic text-brand-green-700 dark:text-brand-vanilla">
+                  "{ordenActual.nombre}"
+                </span>
+              )}
+            </span>
+            {ordenActual && (
+              <button
+                onClick={() => setNombreAbierto(true)}
+                aria-label="Editar nombre de la cuenta"
+                title="Editar nombre de la cuenta"
+                className="rounded-md px-1.5 py-1 text-sm text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
+              >
+                ✏️
+              </button>
             )}
           </h2>
 
@@ -1310,6 +1329,15 @@ export function MigaoPage() {
             setOrdenSeleccionadaId(null);
             await cargarOrdenes();
           }}
+        />
+      )}
+
+      {nombreAbierto && ordenActual && (
+        <EditarNombreOrdenModal
+          ordenId={ordenActual.id}
+          nombreActual={ordenActual.nombre}
+          onCerrar={() => setNombreAbierto(false)}
+          onGuardado={cargarOrdenes}
         />
       )}
 

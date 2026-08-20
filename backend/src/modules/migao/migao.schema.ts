@@ -268,6 +268,15 @@ export const cambiarMesaSchema = z.object({
 });
 export type CambiarMesaInput = z.infer<typeof cambiarMesaSchema>;
 
+// Endpoint aparte (no comparte permiso con cambiarMesaSchema): Caja Migao
+// puede ponerle/cambiarle el nombre a una cuenta sin necesitar el permiso de
+// cambiar mesa. "" sí borra el nombre acá (a diferencia de cambiarMesaOrden,
+// que no puede borrarlo por venir junto con la mesa en un solo COALESCE).
+export const editarNombreOrdenSchema = z.object({
+  nombre: z.string().trim().max(120),
+});
+export type EditarNombreOrdenInput = z.infer<typeof editarNombreOrdenSchema>;
+
 // Plano visual de mesas por área (editor, exclusivo de Root/Super Root vía
 // migao.mesas.administrar). Posición/tamaño en % (0-100) del lienzo de esa
 // área, para que el layout sea responsive sin depender de un tamaño de

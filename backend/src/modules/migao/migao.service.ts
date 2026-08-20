@@ -9,6 +9,7 @@ import * as repo from "./migao.repository";
 import {
   AgregarItemInput,
   CambiarMesaInput,
+  EditarNombreOrdenInput,
   CerrarOrdenInput,
   CheckItemInput,
   CrearCotizacionInput,
@@ -535,6 +536,17 @@ export async function cambiarMesaOrden(ordenId: string, input: CambiarMesaInput)
   }
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
   return repo.actualizarMesaOrden(ordenId, mesa.id, input.nombre);
+}
+
+/** Caja Migao le pone/cambia/borra el nombre a una cuenta ya abierta (ej.
+ *  "Cumpleaños de Juan"), sin necesitar el permiso de cambiar mesa. */
+export async function editarNombreOrden(ordenId: string, input: EditarNombreOrdenInput) {
+  const orden = await repo.getOrdenById(ordenId);
+  if (!orden) throw Errors.notFound("Orden no encontrada");
+  if (orden.estado === "cerrada" || orden.estado === "cancelada") {
+    throw Errors.conflict("No se puede editar el nombre de una orden cerrada o cancelada");
+  }
+  return repo.actualizarNombreOrden(ordenId, input.nombre);
 }
 
 export async function listarItemsActivos() {

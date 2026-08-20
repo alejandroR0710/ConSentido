@@ -30,6 +30,10 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_item', 'migao.ordenes.agregar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_item',   'migao.ordenes.editar_item'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'cambiar_mesa',  'migao.ordenes.cambiar_mesa'),
+  -- Aparte de cambiar_mesa a propósito: Caja Migao también puede ponerle/
+  -- cambiarle/borrarle el nombre a una cuenta sin necesitar poder cambiarle
+  -- la mesa.
+  ((SELECT id FROM modulos WHERE slug = 'migao'), 'editar_nombre', 'migao.ordenes.editar_nombre'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'agregar_para_llevar', 'migao.ordenes.agregar_para_llevar'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'pago_administrativo', 'migao.ordenes.pago_administrativo'),
   ((SELECT id FROM modulos WHERE slug = 'migao'), 'entregar_item', 'migao.ordenes.entregar_item'),
@@ -113,6 +117,7 @@ WHERE p.codigo IN (
   'migao.ordenes.cerrar',
   'migao.ordenes.cancelar',
   'migao.ordenes.agregar_para_llevar',
+  'migao.ordenes.editar_nombre',
   'migao.mesas.ver',
   'migao.cotizaciones.ver',
   'migao.cotizaciones.crear',
@@ -146,6 +151,7 @@ WHERE p.codigo IN (
   'migao.ordenes.editar_item',
   'migao.ordenes.entregar_item',
   'migao.ordenes.cambiar_mesa',
+  'migao.ordenes.editar_nombre',
   'migao.productos.ver',
   'migao.mesas.ver'
 );

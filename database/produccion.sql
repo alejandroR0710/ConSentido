@@ -907,6 +907,30 @@ ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS nombre VARCHAR(120);
 
 
 -- ========================================================================
+-- SECCIÓN 19: CAJA MIGAO TAMBIÉN PUEDE PONERLE NOMBRE A UNA ORDEN
+-- ========================================================================
+-- Permiso aparte de migao.ordenes.cambiar_mesa: así Cajero puede ponerle/
+-- cambiarle/borrarle el nombre a una cuenta sin poder cambiarle la mesa.
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'migao'), x.accion, x.codigo
+FROM (VALUES
+  ('editar_nombre', 'migao.ordenes.editar_nombre')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root', 'Cajero', 'Mesero')
+  AND p.codigo = 'migao.ordenes.editar_nombre'
+  AND NOT EXISTS (
+    SELECT 1 FROM roles_permisos rp
+    WHERE rp.rol_id = r.id AND rp.permiso_id = p.id
+  );
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

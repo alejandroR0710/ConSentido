@@ -32,7 +32,10 @@ function lineaVacia(): LineaIngreso {
 }
 
 export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
-  const [modulo, setModulo] = useState<ModuloOrigenSlug>("migao");
+  // Con Sentido por defecto: la mayoría de ingresos manuales acá son de ahí
+  // (Migao casi siempre cobra desde su propia pantalla, no desde acá) — antes
+  // arrancaba en "migao" y era fácil dejarlo así sin querer.
+  const [modulo, setModulo] = useState<ModuloOrigenSlug>("con_sentido");
   const [modoMonto, setModoMonto] = useState<"unico" | "productos">("unico");
   // "Monto" siempre es el bruto (antes de descuento); lo que realmente se
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
@@ -149,7 +152,7 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
             key={m.value}
             type="button"
             onClick={() => setModulo(m.value)}
-            autoFocus={m.value === "migao"}
+            autoFocus={m.value === "con_sentido"}
             className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-center transition-colors ${
               modulo === m.value
                 ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-400 dark:bg-brand-green-700/30"

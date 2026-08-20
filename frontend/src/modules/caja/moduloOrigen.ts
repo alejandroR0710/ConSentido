@@ -1,8 +1,12 @@
 import type { ModuloOrigenSlug, MovimientoCaja } from "./api";
 
+// Con Sentido primero a propósito: es el origen más común de un ingreso
+// registrado a mano desde acá (Migao casi siempre cobra desde su propia
+// pantalla) — varios formularios usan MODULOS_ORIGEN[0] como valor por
+// defecto, así que el orden decide qué área queda pre-seleccionada.
 export const MODULOS_ORIGEN: { value: ModuloOrigenSlug; label: string; icon: string }[] = [
-  { value: "migao", label: "Migao (POS)", icon: "🍽️" },
   { value: "con_sentido", label: "Con Sentido", icon: "🎨" },
+  { value: "migao", label: "Migao (POS)", icon: "🍽️" },
   { value: "talleres", label: "Talleres", icon: "🔧" },
   { value: "pedidos", label: "Pedidos", icon: "🚚" },
   { value: "insumos", label: "Insumos", icon: "📦" },

@@ -29,9 +29,9 @@ export const AREAS_MESA: AreaMesa[] = [
     valor: 3,
     label: "Jardín",
     icon: "🌿",
-    colorBorde: "border-sky-500 dark:border-sky-400",
-    colorFondo: "bg-sky-100 dark:bg-sky-900",
-    colorTexto: "text-sky-700 dark:text-sky-300",
+    colorBorde: "border-teal-500 dark:border-teal-400",
+    colorFondo: "bg-teal-100 dark:bg-teal-900",
+    colorTexto: "text-teal-700 dark:text-teal-300",
   },
   {
     valor: 2,

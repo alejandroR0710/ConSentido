@@ -262,6 +262,9 @@ export const cambiarMesaSchema = z.object({
   // Antes tope en 2: no dejaba cambiar la mesa de una orden a Jardín (piso 3),
   // aunque crearOrdenSchema sí lo permitía desde el inicio.
   piso: z.number().int().min(1).max(3).default(1),
+  // Etiqueta libre para la cuenta (ej. "Cumpleaños de Juan") — si no viene,
+  // se deja igual (ver actualizarMesaOrden en el repositorio).
+  nombre: z.string().trim().max(120).optional(),
 });
 export type CambiarMesaInput = z.infer<typeof cambiarMesaSchema>;
 

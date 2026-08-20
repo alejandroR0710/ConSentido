@@ -9,6 +9,9 @@ export interface OrdenResumen {
   mesa_id: number | null;
   mesa_numero: string | null;
   mesa_piso: number | null;
+  // Etiqueta libre de la cuenta (ej. "Cumpleaños de Juan"), editable desde
+  // "cambiar mesa" — distinto de cliente_nombre (cliente real reutilizable).
+  nombre: string | null;
   cliente_nombre: string | null;
   mesero_nombre: string | null;
   total: string;
@@ -152,6 +155,7 @@ export interface OrdenDetalle {
     estado: string;
     mesa_id: number | null;
     cliente_id: string | null;
+    nombre: string | null;
     comensal_numero: number;
     numero_personas: number | null;
   };
@@ -616,10 +620,10 @@ export const migaoApi = {
   // El mesero cambia la mesa de una orden abierta (ej. los comensales se
   // cambiaron de mesa a mitad del pedido). La mesa se resuelve/crea por
   // número, igual que al crear la orden.
-  cambiarMesa: (ordenId: string, mesaNumero: string, piso: number) =>
+  cambiarMesa: (ordenId: string, mesaNumero: string, piso: number, nombre?: string) =>
     apiFetch<{ id: string }>(`/migao/ordenes/${ordenId}/mesa`, {
       method: "PATCH",
-      body: { mesaNumero, piso },
+      body: { mesaNumero, piso, nombre },
     }),
   resetearOrdenes: () =>
     apiFetch<{ ordenesBorradas: number; ventasBorradas: number; pagosBorrados: number; movimientosCajaBorrados: number }>(

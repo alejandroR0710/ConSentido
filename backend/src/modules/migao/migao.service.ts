@@ -534,7 +534,7 @@ export async function cambiarMesaOrden(ordenId: string, input: CambiarMesaInput)
     throw Errors.conflict("No se puede cambiar la mesa de una orden cerrada o cancelada");
   }
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
-  return repo.actualizarMesaOrden(ordenId, mesa.id);
+  return repo.actualizarMesaOrden(ordenId, mesa.id, input.nombre);
 }
 
 export async function listarItemsActivos() {

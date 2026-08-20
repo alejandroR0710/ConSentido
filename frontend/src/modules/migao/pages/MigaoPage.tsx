@@ -692,6 +692,11 @@ export function MigaoPage() {
                       <div className="min-w-0 text-lg font-semibold text-brand-ink dark:text-brand-vanilla">
                         Mesa {o.mesa_numero ?? "—"}
                         {area && <span className={`text-sm font-bold ${area.colorTexto}`}> ({area.label})</span>}
+                        {o.nombre && (
+                          <span className="ml-1 text-sm font-normal italic text-brand-ink/70 dark:text-brand-vanilla/70">
+                            "{o.nombre}"
+                          </span>
+                        )}
                       </div>
                       {estadoCocina && (
                         <span

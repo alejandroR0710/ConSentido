@@ -772,6 +772,12 @@ CREATE TABLE ordenes (
   mesa_id         INT REFERENCES mesas(id),
   mesero_id       UUID REFERENCES usuarios(id),
   cliente_id      UUID REFERENCES clientes(id),
+  -- Etiqueta libre para identificar la cuenta a simple vista (ej. "Cumpleaños
+  -- de Juan") — a propósito NO es cliente_id: eso es un cliente real
+  -- reutilizable entre módulos, esto es solo un nombre para esta cuenta
+  -- puntual, editable únicamente desde "cambiar mesa". Mismo criterio que
+  -- migao_cotizaciones.cliente_nombre (texto libre, sin FK).
+  nombre          VARCHAR(120),
   comensal_numero INT NOT NULL DEFAULT nextval('comensal_seq'),
   numero_personas SMALLINT,
   estado          VARCHAR(20) NOT NULL DEFAULT 'abierta'

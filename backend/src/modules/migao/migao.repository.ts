@@ -90,7 +90,7 @@ export async function getOrCreateMesaPorNumero(numero: string, piso = 1) {
 
 export async function listOrdenesAbiertas() {
   const result = await pool.query(
-    `SELECT o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id,
+    `SELECT o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id, o.nombre,
             m.numero AS mesa_numero, m.piso AS mesa_piso, c.nombre AS cliente_nombre,
             u.nombre AS mesero_nombre,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
@@ -120,7 +120,7 @@ export async function listOrdenesAbiertas() {
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
       WHERE o.estado NOT IN ('cerrada', 'cancelada')
-      GROUP BY o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id, m.numero, m.piso, c.nombre, u.nombre
+      GROUP BY o.id, o.estado, o.created_at, o.comensal_numero, o.numero_personas, o.mesa_id, o.nombre, m.numero, m.piso, c.nombre, u.nombre
       ORDER BY o.created_at ASC`,
   );
   return result.rows;
@@ -719,11 +719,19 @@ export async function getOrdenById(ordenId: string, executor: Executor = pool, f
 
 /** Cambia la mesa de una orden ya creada (ej. los comensales se cambiaron de
  *  mesa a mitad del pedido). No toca nada más de la orden. */
-export async function actualizarMesaOrden(ordenId: string, mesaId: number, executor: Executor = pool) {
-  const result = await executor.query(`UPDATE ordenes SET mesa_id = $2 WHERE id = $1 RETURNING *`, [
-    ordenId,
-    mesaId,
-  ]);
+export async function actualizarMesaOrden(
+  ordenId: string,
+  mesaId: number,
+  nombre: string | undefined,
+  executor: Executor = pool,
+) {
+  // COALESCE dejar el nombre igual si no viene uno nuevo (mismo criterio que
+  // el resto de "editar" de la app, ej. categoria_id en inventario): no hay
+  // forma de borrar el nombre una vez puesto desde acá, solo reemplazarlo.
+  const result = await executor.query(
+    `UPDATE ordenes SET mesa_id = $2, nombre = COALESCE($3, nombre) WHERE id = $1 RETURNING *`,
+    [ordenId, mesaId, nombre ?? null],
+  );
   return result.rows[0];
 }
 

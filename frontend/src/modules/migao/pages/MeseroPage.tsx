@@ -315,13 +315,13 @@ export function MeseroPage() {
     }
   }
 
-  async function guardarNuevaMesa(mesaNumero: string, piso: number) {
+  async function guardarNuevaMesa(mesaNumero: string, piso: number, nombre: string) {
     if (!ordenSeleccionadaId) return;
     try {
-      await migaoApi.cambiarMesa(ordenSeleccionadaId, mesaNumero, piso);
+      await migaoApi.cambiarMesa(ordenSeleccionadaId, mesaNumero, piso, nombre || undefined);
       await cargarOrdenes();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cambiar la mesa");
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar la cuenta");
       throw err;
     }
   }
@@ -595,10 +595,15 @@ export function MeseroPage() {
                   👥 {detalle.orden.numero_personas}
                 </span>
               )}
+              {detalle.orden.nombre && (
+                <span className="ml-2 block text-sm font-normal italic text-brand-ink/70 dark:text-brand-vanilla/70">
+                  "{detalle.orden.nombre}"
+                </span>
+              )}
             </span>
             <button
               onClick={() => setCambiarMesaAbierto(true)}
-              aria-label="Cambiar mesa"
+              aria-label="Editar cuenta"
               className="rounded-md px-1.5 py-1 text-sm text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
             >
               ✏️
@@ -684,6 +689,7 @@ export function MeseroPage() {
         <CambiarMesaModal
           mesaActual={ordenActual?.mesa_numero ?? null}
           pisoActual={ordenActual?.mesa_piso ?? null}
+          nombreActual={ordenActual?.nombre ?? null}
           mesasLayout={mesasLayout}
           ordenes={ordenes}
           onCerrar={() => setCambiarMesaAbierto(false)}

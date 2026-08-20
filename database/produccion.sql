@@ -897,6 +897,16 @@ WHERE r.nombre IN ('Super Root', 'Root')
 
 
 -- ========================================================================
+-- SECCIÓN 18: NOMBRE LIBRE DE LA CUENTA EN ordenes
+-- ========================================================================
+-- Etiqueta libre para identificar la cuenta a simple vista (ej. "Cumpleaños
+-- de Juan"), editable únicamente desde "cambiar mesa" — a propósito NO es
+-- cliente_id (eso es un cliente real reutilizable entre módulos). Mismo
+-- criterio que migao_cotizaciones.cliente_nombre (texto libre, sin FK).
+ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS nombre VARCHAR(120);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

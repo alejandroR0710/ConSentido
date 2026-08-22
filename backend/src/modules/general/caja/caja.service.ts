@@ -592,10 +592,11 @@ export async function agregarMovimientoHistorico(
 }
 
 /**
- * Corrige monto/método/motivo/módulo-o-categoría de un movimiento de un turno
- * YA cerrado. Los ingresos ligados a una venta de Migao (referencia_entidad
- * = 'ventas') no se pueden tocar aquí — se desincronizarían con `pagos`; para
- * esos ya existe "Corregir método de pago" (solo con turno abierto).
+ * Corrige monto/método/motivo/módulo-o-categoría de un movimiento — funciona
+ * con el turno abierto o ya cerrado. Los ingresos ligados a una venta de
+ * Migao (referencia_entidad = 'ventas') no se pueden tocar aquí — se
+ * desincronizarían con `pagos`; para esos ya existe "Corregir método de
+ * pago" (turno abierto) o "Anular venta" (cualquier estado).
  */
 export async function editarMovimientoHistorico(
   movimientoId: number,
@@ -612,9 +613,7 @@ export async function editarMovimientoHistorico(
   }
 
   const turno = await repo.getTurnoById(movimiento.turnoId);
-  if (!turno || turno.estado !== "cerrado") {
-    throw Errors.conflict("Este ajuste es solo para movimientos de un turno ya cerrado.");
-  }
+  if (!turno) throw Errors.notFound("Turno no encontrado");
 
   // Snapshot en snake_case (mismas llaves que `actualizado`, que viene crudo
   // de la fila de la base vía RETURNING *) para que el historial de cambios
@@ -660,9 +659,9 @@ export async function listarEdicionesDelDia(fecha: string) {
 /**
  * Anula una venta (Migao o Con Sentido) desde cualquier día del historial de
  * Caja — Root o Super Root, ver general.caja.editar_movimiento. A diferencia
- * de editarMetodoPagoMovimiento (turno abierto) y editarMovimientoHistorico
- * (turno cerrado, nunca ventas), esta es la única vía para tocar un ingreso
- * ligado a una venta sin importar si el turno ya cerró.
+ * de editarMetodoPagoMovimiento y editarMovimientoHistorico (ninguno de los
+ * dos toca ingresos ligados a una venta), esta es la única vía para tocar
+ * uno, sin importar si el turno ya cerró.
  *
  * "Anular" nunca borra la venta de verdad (queda para auditoría, con
  * estado='anulada'): solo borra sus pagos/movimientos de Caja, así que deja

@@ -15,6 +15,7 @@ import { AdministracionModal } from "../components/AdministracionModal";
 import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
+import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoModal } from "../components/EgresoModal";
 import { resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
@@ -56,6 +57,7 @@ export function CajaPage() {
   const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | "administracion" | null>(null);
   const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
+  const [movimientoAEditarCompleto, setMovimientoAEditarCompleto] = useState<MovimientoCaja | null>(null);
   const [imprimirResumenTurno, setImprimirResumenTurno] = useState(false);
 
   const turnoIdRef = useRef<string | null>(null);
@@ -375,13 +377,16 @@ export function CajaPage() {
                                 (m.referencia_entidad === "ventas" && m.modulo_origen_slug === "migao") ||
                                 (m.referencia_entidad === "con_sentido_ventas" && m.modulo_origen_slug === "con_sentido")) &&
                               !facturaYaMostradaDeVenta.has(m.referencia_id);
-                            // "Editar" (más abajo) solo corrige método de pago/área — no
-                            // el monto. Para una venta, la única forma de corregir el
-                            // valor es anularla del todo (mismo criterio que
-                            // CajaHistorialPage.tsx, antes esto solo vivía ahí).
+                            // Una venta nunca se puede editar de verdad (desincroniza
+                            // `pagos`) — ahí "Editar" solo corrige método de pago/área,
+                            // y la única forma de corregir el valor es anularla del todo.
+                            // Un ingreso/egreso manual sí admite editar el monto (mismo
+                            // criterio que CajaHistorialPage.tsx, antes solo vivía ahí y
+                            // solo con el turno ya cerrado — ya no hace falta esperar).
                             const puedeAnular =
                               m.tipo === "ingreso" &&
                               ["ventas", "caja_ventas", "con_sentido_ventas"].includes(m.referencia_entidad ?? "");
+                            const puedeEditarCompleto = m.tipo === "egreso" || !m.referencia_entidad;
                             if (puedeVerFactura) facturaYaMostradaDeVenta.add(m.referencia_id!);
                             return (
                             <li
@@ -446,7 +451,9 @@ export function CajaPage() {
                                   )}
                                   {puedeEditarPagos && (
                                     <button
-                                      onClick={() => setMovimientoEditando(m)}
+                                      onClick={() =>
+                                        puedeEditarCompleto ? setMovimientoAEditarCompleto(m) : setMovimientoEditando(m)
+                                      }
                                       className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                                     >
                                       Editar
@@ -558,6 +565,15 @@ export function CajaPage() {
           movimiento={movimientoAAnular}
           onCerrar={() => setMovimientoAAnular(null)}
           onAnulado={cargarResumenDeTurnoActual}
+        />
+      )}
+
+      {movimientoAEditarCompleto && (
+        <EditarMovimientoHistoricoModal
+          movimiento={movimientoAEditarCompleto}
+          categorias={categorias}
+          onCerrar={() => setMovimientoAEditarCompleto(null)}
+          onGuardado={cargarResumenDeTurnoActual}
         />
       )}
 

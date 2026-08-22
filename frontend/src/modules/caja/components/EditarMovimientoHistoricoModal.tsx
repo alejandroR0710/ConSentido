@@ -23,10 +23,10 @@ interface EditarMovimientoHistoricoModalProps {
 }
 
 /**
- * Corrige monto/método/motivo/módulo-o-categoría de un movimiento de un
- * turno YA cerrado (ej. el egreso "amasijos" que en realidad fue por
- * transferencia, no efectivo). Exige nota + frase de confirmación, igual que
- * el resto de acciones sensibles de Caja — reabre contabilidad ya contada.
+ * Corrige monto/método/motivo/módulo-o-categoría de un movimiento — el turno
+ * puede estar abierto o ya cerrado (ej. el egreso "amasijos" que en realidad
+ * fue por transferencia, no efectivo). Exige nota + frase de confirmación,
+ * igual que el resto de acciones sensibles de Caja.
  */
 export function EditarMovimientoHistoricoModal({
   movimiento,
@@ -88,7 +88,7 @@ export function EditarMovimientoHistoricoModal({
   return (
     <Modal titulo={`Editar ${movimiento.tipo}`} onCerrar={onCerrar}>
       <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-        Este movimiento pertenece a un día ya cerrado. Editarlo recalcula el cierre de ese turno.
+        Esto recalcula el cuadre de ese turno.
       </p>
 
       <p className="mb-3 text-sm text-brand-ink/70 dark:text-brand-vanilla/70">

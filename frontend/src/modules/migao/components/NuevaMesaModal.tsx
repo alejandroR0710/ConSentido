@@ -30,14 +30,14 @@ export function NuevaMesaModal({ onCerrar, onGuardar }: NuevaMesaModalProps) {
 
   return (
     <Modal titulo="Nueva mesa" onCerrar={onCerrar}>
-      <label className="mb-1 block text-xs font-medium">Número de mesa</label>
+      <label className="mb-1 block text-xs font-medium">Número o nombre de mesa</label>
       <input
         autoFocus
-        inputMode="numeric"
+        maxLength={10}
         value={numero}
         onChange={(e) => setNumero(e.target.value)}
         className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        placeholder="Ej. 7"
+        placeholder='Ej. "7" o "Terraza"'
       />
 
       <label className="mb-1 block text-xs font-medium">Capacidad (comensales)</label>

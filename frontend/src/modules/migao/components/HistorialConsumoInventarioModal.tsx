@@ -114,7 +114,6 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
   }, []);
 
   const grupos = agruparPorDia(consumo);
-  const totalesPorInsumo = agruparPorInsumo(consumo);
 
   return (
     <Modal titulo="Historial de salidas" onCerrar={onCerrar} maxWidth="sm:max-w-4xl">
@@ -127,31 +126,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
           Todavía no hay salidas registradas.
         </p>
       ) : (
-        <>
-          <div className="mb-3 rounded-lg border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
-            <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
-              Total por insumo (últimas {consumo.length} salidas)
-            </p>
-            <div className="max-h-32 overflow-auto">
-              <table className="w-full text-left text-xs">
-                <tbody>
-                  {totalesPorInsumo.map((t) => (
-                    <tr key={t.insumoNombre} className="border-t border-brand-vanilla-dark/50 dark:border-brand-green-700/50">
-                      <td className="px-2 py-1 font-medium">{t.insumoNombre}</td>
-                      <td className="px-2 py-1 text-brand-ink/60 dark:text-brand-vanilla/60">
-                        {t.salidas} salida{t.salidas > 1 ? "s" : ""}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold text-red-600">
-                        {formatCantidad(t.cantidad)} {t.unidadMedida}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="max-h-[60vh] overflow-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+        <div className="max-h-[60vh] overflow-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
           <table className="w-full min-w-[680px] text-left text-sm">
             <thead className="sticky top-0 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
@@ -165,6 +140,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
             </thead>
             <tbody>
               {grupos.flatMap((grupo) => {
+                const totalesDelDia = agruparPorInsumo(grupo.entradas);
                 const filaEncabezado = (
                   <tr
                     key={`dia-${grupo.fecha}`}
@@ -178,6 +154,13 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
                         <span className="text-xs font-semibold text-brand-green-700 dark:text-brand-vanilla">
                           {grupo.entradas.length} salida{grupo.entradas.length > 1 ? "s" : ""}
                         </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                        {totalesDelDia.map((t) => (
+                          <span key={t.insumoNombre}>
+                            {t.insumoNombre}: <span className="font-semibold text-red-600">{formatCantidad(t.cantidad)} {t.unidadMedida}</span>
+                          </span>
+                        ))}
                       </div>
                     </td>
                   </tr>
@@ -216,8 +199,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
               })}
             </tbody>
           </table>
-          </div>
-        </>
+        </div>
       )}
     </Modal>
   );

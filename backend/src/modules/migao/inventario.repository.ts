@@ -278,12 +278,22 @@ export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventa
             u.nombre AS mesero_nombre, p.nombre AS producto_nombre, oi.cantidad AS cantidad_producto
        FROM migao_inventario_movimientos mi
        JOIN migao_inventario_productos ip ON ip.id = mi.producto_id
-       LEFT JOIN orden_items oi ON mi.referencia_entidad = 'orden_items' AND oi.id = mi.referencia_id::bigint
+       -- 'consumo' también lo genera preparar una base en Amasijos, con
+       -- referencia_entidad='preparacion_base' y referencia_id un UUID (no
+       -- numérico) — el CASE evita castear a bigint cualquier referencia_id
+       -- que no sea de 'orden_items' (si no, ::bigint revienta la consulta
+       -- entera con "invalid input syntax for type bigint"). Esas filas de
+       -- Amasijos simplemente no son "por orden", quedan fuera de este historial.
+       LEFT JOIN orden_items oi
+         ON oi.id = CASE
+                      WHEN mi.referencia_entidad = 'orden_items' AND mi.referencia_id ~ '^[0-9]+$'
+                      THEN mi.referencia_id::bigint
+                    END
        LEFT JOIN productos p ON p.id = oi.producto_id
        LEFT JOIN ordenes o ON o.id = oi.orden_id
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
-      WHERE mi.tipo = 'consumo'
+      WHERE mi.tipo = 'consumo' AND mi.referencia_entidad = 'orden_items'
       ORDER BY mi.created_at DESC
       LIMIT 300`,
   );

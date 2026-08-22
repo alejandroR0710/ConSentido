@@ -20,6 +20,11 @@ export async function listarCategoriasInventarioController(_req: Request, res: R
   return ok(res, categorias);
 }
 
+export async function listarConsumoInventarioController(_req: Request, res: Response) {
+  const consumo = await service.listarConsumoPorOrdenes();
+  return ok(res, consumo);
+}
+
 export async function crearCategoriaInventarioController(req: Request, res: Response) {
   const data = crearCategoriaInventarioSchema.parse(req.body);
   const categoria = await service.crearCategoria(data.nombre);

@@ -10,6 +10,7 @@ import {
   eliminarInventarioProductoController,
   guardarIngredientesProductoController,
   listarCategoriasInventarioController,
+  listarConsumoInventarioController,
   listarInventarioController,
   listarMovimientosGlobalInventarioController,
   listarMovimientosInventarioController,
@@ -394,6 +395,13 @@ migaoRouter.get(
   "/inventario/categorias",
   requirePermission("migao.inventario.ver"),
   asyncHandler(listarCategoriasInventarioController),
+);
+// Historial de salidas (consumo automático por órdenes) — solo lectura,
+// mismo permiso que ver el inventario.
+migaoRouter.get(
+  "/inventario/consumo",
+  requirePermission("migao.inventario.ver"),
+  asyncHandler(listarConsumoInventarioController),
 );
 migaoRouter.post(
   "/inventario/categorias",

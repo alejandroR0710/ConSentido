@@ -5,6 +5,7 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { migaoApi, type CategoriaInventario, type InventarioProducto } from "../api";
 import { EditarInventarioProductoModal } from "../components/EditarInventarioProductoModal";
+import { HistorialConsumoInventarioModal } from "../components/HistorialConsumoInventarioModal";
 import { HistorialMovimientosInventarioModal } from "../components/HistorialMovimientosInventarioModal";
 import { NuevoInventarioProductoModal } from "../components/NuevoInventarioProductoModal";
 import { RegistrarMovimientoInventarioModal } from "../components/RegistrarMovimientoInventarioModal";
@@ -54,6 +55,7 @@ export function InventarioPage() {
     null,
   );
   const [historialTipo, setHistorialTipo] = useState<"entrada" | "ajuste" | null>(null);
+  const [historialConsumoAbierto, setHistorialConsumoAbierto] = useState(false);
 
   async function cargar() {
     try {
@@ -108,6 +110,12 @@ export function InventarioPage() {
             className="rounded-md border border-amber-500 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
           >
             📝 Historial de ajustes
+          </button>
+          <button
+            onClick={() => setHistorialConsumoAbierto(true)}
+            className="rounded-md border border-red-400 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            📤 Historial de salidas
           </button>
           <button
             onClick={() => setNuevoAbierto(true)}
@@ -266,6 +274,10 @@ export function InventarioPage() {
 
       {historialTipo && (
         <HistorialMovimientosInventarioModal tipo={historialTipo} onCerrar={() => setHistorialTipo(null)} />
+      )}
+
+      {historialConsumoAbierto && (
+        <HistorialConsumoInventarioModal onCerrar={() => setHistorialConsumoAbierto(false)} />
       )}
     </div>
   );

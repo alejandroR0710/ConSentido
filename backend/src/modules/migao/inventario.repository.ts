@@ -252,6 +252,44 @@ export async function listMovimientosGlobalPorTipo(
   return result.rows;
 }
 
+export interface ConsumoInventarioEntrada {
+  id: number;
+  insumo_nombre: string;
+  cantidad_unidades: string;
+  unidad_medida: string;
+  created_at: string;
+  orden_id: string | null;
+  mesa_numero: string | null;
+  mesa_piso: number | null;
+  orden_nombre: string | null;
+  mesero_nombre: string | null;
+  producto_nombre: string | null;
+  cantidad_producto: string | null;
+}
+
+/** Historial de salidas de inventario por consumo automático de órdenes
+ *  (nunca a mano, ver aplicarConsumoPorProducto en inventario.service.ts) —
+ *  cada fila es un insumo descontado al servir un producto del menú, con la
+ *  orden/mesa/mesero de dónde vino. */
+export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventarioEntrada[]> {
+  const result = await pool.query(
+    `SELECT mi.id, ip.nombre AS insumo_nombre, mi.cantidad_unidades, ip.unidad_medida, mi.created_at,
+            o.id AS orden_id, m.numero AS mesa_numero, m.piso AS mesa_piso, o.nombre AS orden_nombre,
+            u.nombre AS mesero_nombre, p.nombre AS producto_nombre, oi.cantidad AS cantidad_producto
+       FROM migao_inventario_movimientos mi
+       JOIN migao_inventario_productos ip ON ip.id = mi.producto_id
+       LEFT JOIN orden_items oi ON mi.referencia_entidad = 'orden_items' AND oi.id = mi.referencia_id::bigint
+       LEFT JOIN productos p ON p.id = oi.producto_id
+       LEFT JOIN ordenes o ON o.id = oi.orden_id
+       LEFT JOIN mesas m ON m.id = o.mesa_id
+       LEFT JOIN usuarios u ON u.id = o.mesero_id
+      WHERE mi.tipo = 'consumo'
+      ORDER BY mi.created_at DESC
+      LIMIT 300`,
+  );
+  return result.rows;
+}
+
 export interface IngredienteProducto {
   id: number;
   productoId: string;

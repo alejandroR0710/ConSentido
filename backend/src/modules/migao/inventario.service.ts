@@ -19,6 +19,10 @@ export async function listarCategorias() {
   return repo.listCategoriasInventario();
 }
 
+export async function listarConsumoPorOrdenes() {
+  return repo.listMovimientosConsumoPorOrdenes();
+}
+
 export async function crearCategoria(nombre: string) {
   return repo.crearCategoriaInventario(nombre);
 }

@@ -280,6 +280,23 @@ export interface InventarioMovimientoGlobal extends InventarioMovimiento {
   producto_nombre: string;
 }
 
+/** Una salida de inventario por consumo automático de una orden (nunca a
+ *  mano) — el insumo que se descontó al servir un producto del menú. */
+export interface ConsumoInventarioEntrada {
+  id: number;
+  insumo_nombre: string;
+  cantidad_unidades: string;
+  unidad_medida: string;
+  created_at: string;
+  orden_id: string | null;
+  mesa_numero: string | null;
+  mesa_piso: number | null;
+  orden_nombre: string | null;
+  mesero_nombre: string | null;
+  producto_nombre: string | null;
+  cantidad_producto: string | null;
+}
+
 export interface IngredienteProducto {
   id: number;
   productoId: string;
@@ -802,6 +819,8 @@ export const migaoApi = {
   // Historial global (todos los productos) de ingresos o de ajustes.
   listarMovimientosInventarioGlobal: (tipo: "entrada" | "ajuste") =>
     apiFetch<InventarioMovimientoGlobal[]>(`/migao/inventario/movimientos?tipo=${tipo}`),
+  // Historial de salidas por consumo automático de órdenes — solo lectura.
+  listarConsumoInventario: () => apiFetch<ConsumoInventarioEntrada[]>("/migao/inventario/consumo"),
 
   // Plano visual de mesas por área. Ver/seleccionar (Mesero, Cajero) solo usa
   // listarMesas(); crear/mover/editar/eliminar es exclusivo del editor

@@ -271,10 +271,18 @@ export interface ConsumoInventarioEntrada {
 /** Historial de salidas de inventario por consumo automático de órdenes
  *  (nunca a mano, ver aplicarConsumoPorProducto en inventario.service.ts) —
  *  cada fila es un insumo descontado al servir un producto del menú, con la
- *  orden/mesa/mesero de dónde vino. */
+ *  orden/mesa/mesero de dónde vino.
+ *
+ *  Cancelar (o reducir la cantidad de) un ítem ya servido genera OTRO
+ *  movimiento 'consumo' con el mismo referencia_id pero en positivo (el
+ *  stock se devuelve, ver aplicarConsumoPorProducto) — se agrupa por
+ *  ítem+insumo y se suma en vez de listar cada movimiento suelto, así que
+ *  una cancelación que devolvió TODO el stock (neto = 0) desaparece sola de
+ *  este historial en vez de seguir contando como una salida real. */
 export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventarioEntrada[]> {
   const result = await pool.query(
-    `SELECT mi.id, ip.nombre AS insumo_nombre, mi.cantidad_unidades, ip.unidad_medida, mi.created_at,
+    `SELECT MIN(mi.id) AS id, ip.nombre AS insumo_nombre, SUM(mi.cantidad_unidades) AS cantidad_unidades,
+            ip.unidad_medida, MIN(mi.created_at) AS created_at,
             o.id AS orden_id, m.numero AS mesa_numero, m.piso AS mesa_piso, o.nombre AS orden_nombre,
             u.nombre AS mesero_nombre, p.nombre AS producto_nombre, oi.cantidad AS cantidad_producto,
             -- Subconsulta escalar (no JOIN directo) para no multiplicar filas
@@ -305,7 +313,9 @@ export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventa
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
       WHERE mi.tipo = 'consumo' AND mi.referencia_entidad = 'orden_items'
-      ORDER BY mi.created_at DESC
+      GROUP BY ip.id, ip.nombre, ip.unidad_medida, oi.id, oi.cantidad, o.id, m.numero, m.piso, o.nombre, u.nombre, p.nombre
+     HAVING SUM(mi.cantidad_unidades) != 0
+      ORDER BY MIN(mi.created_at) DESC
       LIMIT 300`,
   );
   return result.rows;

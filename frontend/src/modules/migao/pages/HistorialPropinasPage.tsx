@@ -187,6 +187,7 @@ export function HistorialPropinasPage() {
   const pendienteBanco = pendientes
     .filter((p) => p.metodo_pago === "banco")
     .reduce((acc, p) => acc + Number(p.monto), 0);
+  const pendienteTotal = pendienteEfectivo + pendienteBanco;
   const grupos = agruparPorDia(historial);
   const gruposEntregas = agruparEntregasPorDia(combinarEntregasMixtas(entregasPropinas));
 
@@ -221,6 +222,9 @@ export function HistorialPropinasPage() {
             </span>
             <span className="text-sm text-brand-ink dark:text-brand-vanilla">
               Banco <span className="font-bold">{formatMoney(pendienteBanco)}</span>
+            </span>
+            <span className="text-sm text-brand-green-700 dark:text-brand-vanilla">
+              Total disponible <span className="text-base font-bold">{formatMoney(pendienteTotal)}</span>
             </span>
           </div>
           <button

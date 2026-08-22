@@ -54,6 +54,32 @@ interface GrupoDiaConsumo {
   entradas: ConsumoInventarioEntrada[];
 }
 
+interface TotalPorInsumo {
+  insumoNombre: string;
+  unidadMedida: string;
+  cantidad: number;
+  salidas: number;
+}
+
+/** Suma cuánto salió de cada insumo (siempre negativo en cantidad_unidades,
+ *  se muestra en positivo) — de mayor a menor consumo. */
+function agruparPorInsumo(consumo: ConsumoInventarioEntrada[]): TotalPorInsumo[] {
+  const totales = new Map<string, TotalPorInsumo>();
+  for (const c of consumo) {
+    const clave = c.insumo_nombre;
+    const actual = totales.get(clave) ?? {
+      insumoNombre: c.insumo_nombre,
+      unidadMedida: c.unidad_medida,
+      cantidad: 0,
+      salidas: 0,
+    };
+    actual.cantidad += Math.abs(Number(c.cantidad_unidades));
+    actual.salidas += 1;
+    totales.set(clave, actual);
+  }
+  return Array.from(totales.values()).sort((a, b) => b.cantidad - a.cantidad);
+}
+
 /** El historial ya viene ordenado por fecha DESC, así que agrupar es un solo
  *  recorrido: cuando cambia el día (hora Colombia) se abre un grupo nuevo. */
 function agruparPorDia(consumo: ConsumoInventarioEntrada[]): GrupoDiaConsumo[] {
@@ -88,6 +114,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
   }, []);
 
   const grupos = agruparPorDia(consumo);
+  const totalesPorInsumo = agruparPorInsumo(consumo);
 
   return (
     <Modal titulo="Historial de salidas" onCerrar={onCerrar} maxWidth="sm:max-w-4xl">
@@ -100,7 +127,31 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
           Todavía no hay salidas registradas.
         </p>
       ) : (
-        <div className="max-h-[60vh] overflow-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+        <>
+          <div className="mb-3 rounded-lg border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
+            <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-brand-green-700 dark:text-brand-vanilla">
+              Total por insumo (últimas {consumo.length} salidas)
+            </p>
+            <div className="max-h-32 overflow-auto">
+              <table className="w-full text-left text-xs">
+                <tbody>
+                  {totalesPorInsumo.map((t) => (
+                    <tr key={t.insumoNombre} className="border-t border-brand-vanilla-dark/50 dark:border-brand-green-700/50">
+                      <td className="px-2 py-1 font-medium">{t.insumoNombre}</td>
+                      <td className="px-2 py-1 text-brand-ink/60 dark:text-brand-vanilla/60">
+                        {t.salidas} salida{t.salidas > 1 ? "s" : ""}
+                      </td>
+                      <td className="px-2 py-1 text-right font-semibold text-red-600">
+                        {formatCantidad(t.cantidad)} {t.unidadMedida}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="max-h-[60vh] overflow-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
           <table className="w-full min-w-[680px] text-left text-sm">
             <thead className="sticky top-0 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
@@ -165,7 +216,8 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </Modal>
   );

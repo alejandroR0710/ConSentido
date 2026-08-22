@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { migaoApi, type ConsumoInventarioEntrada } from "../api";
 import { labelArea } from "../areas";
+import { BotonFactura } from "./BotonFactura";
 import { formatCantidad } from "../format";
 
 interface HistorialConsumoInventarioModalProps {
@@ -127,7 +128,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
         </p>
       ) : (
         <div className="max-h-[60vh] overflow-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          <table className="w-full min-w-[680px] text-left text-sm">
+          <table className="w-full min-w-[780px] text-left text-sm">
             <thead className="sticky top-0 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
                 <th className="px-3 py-2">Insumo</th>
@@ -135,6 +136,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
                 <th className="px-3 py-2">Producto vendido</th>
                 <th className="px-3 py-2">Mesa</th>
                 <th className="px-3 py-2">Mesero</th>
+                <th className="px-3 py-2">Factura</th>
                 <th className="px-3 py-2">Fecha y hora</th>
               </tr>
             </thead>
@@ -146,7 +148,7 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
                     key={`dia-${grupo.fecha}`}
                     className="border-t-2 border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-900/20"
                   >
-                    <td colSpan={6} className="px-3 py-2">
+                    <td colSpan={7} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <span className="font-semibold capitalize text-brand-green-700 dark:text-brand-vanilla">
                           {formatearFechaLarga(grupo.fecha)}
@@ -188,6 +190,23 @@ export function HistorialConsumoInventarioModal({ onCerrar }: HistorialConsumoIn
                     </td>
                     <td className="px-3 py-2 text-brand-ink/70 dark:text-brand-vanilla/70">
                       {c.mesero_nombre ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {c.orden_id ? (
+                        <div className="flex items-center gap-1.5">
+                          {c.numero_factura && (
+                            <span className="font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                              {c.numero_factura}
+                            </span>
+                          )}
+                          <BotonFactura
+                            origen={{ tipo: "orden", id: c.orden_id }}
+                            className="rounded border border-brand-vanilla-dark px-1.5 py-0.5 text-[11px] text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                          />
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-brand-ink/60 dark:text-brand-vanilla/60">
                       {formatearFechaHora(c.created_at)}

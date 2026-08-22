@@ -295,6 +295,7 @@ export interface ConsumoInventarioEntrada {
   mesero_nombre: string | null;
   producto_nombre: string | null;
   cantidad_producto: string | null;
+  numero_factura: string | null;
 }
 
 export interface IngredienteProducto {

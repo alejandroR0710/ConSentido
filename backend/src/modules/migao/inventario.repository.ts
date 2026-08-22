@@ -265,6 +265,7 @@ export interface ConsumoInventarioEntrada {
   mesero_nombre: string | null;
   producto_nombre: string | null;
   cantidad_producto: string | null;
+  numero_factura: string | null;
 }
 
 /** Historial de salidas de inventario por consumo automático de órdenes
@@ -275,7 +276,17 @@ export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventa
   const result = await pool.query(
     `SELECT mi.id, ip.nombre AS insumo_nombre, mi.cantidad_unidades, ip.unidad_medida, mi.created_at,
             o.id AS orden_id, m.numero AS mesa_numero, m.piso AS mesa_piso, o.nombre AS orden_nombre,
-            u.nombre AS mesero_nombre, p.nombre AS producto_nombre, oi.cantidad AS cantidad_producto
+            u.nombre AS mesero_nombre, p.nombre AS producto_nombre, oi.cantidad AS cantidad_producto,
+            -- Subconsulta escalar (no JOIN directo) para no multiplicar filas
+            -- de consumo si la orden tiene más de una venta (cuenta dividida/
+            -- pago parcial) — se queda con la factura más reciente de esa
+            -- orden. Puede dar NULL si todavía no se ha cobrado nada.
+            (SELECT f.numero
+               FROM ventas v
+               JOIN facturas f ON f.venta_id = v.id
+              WHERE v.orden_id = o.id
+              ORDER BY v.created_at DESC
+              LIMIT 1) AS numero_factura
        FROM migao_inventario_movimientos mi
        JOIN migao_inventario_productos ip ON ip.id = mi.producto_id
        -- 'consumo' también lo genera preparar una base en Amasijos, con

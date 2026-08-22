@@ -252,7 +252,7 @@ export function FloorPlanCanvas({
                 height: `${alto}%`,
                 touchAction: modo === "editor" ? "none" : undefined,
               }}
-              className={`absolute flex flex-col items-center justify-center rounded-md border-2 text-xs font-semibold transition-all ${
+              className={`absolute flex flex-col items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center text-xs font-semibold transition-all ${
                 seleccionable ? "cursor-pointer" : "cursor-default opacity-60"
               } ${
                 seleccionada
@@ -267,7 +267,7 @@ export function FloorPlanCanvas({
                   ✓
                 </span>
               )}
-              <span>Mesa {mesa.numero}</span>
+              <span className="w-full break-words leading-tight">Mesa {mesa.numero}</span>
               {modo === "ver" && ocupada && (
                 <span className="text-[10px] font-normal">
                   {mesa.ordenes.length === 1

@@ -68,6 +68,10 @@ export function MigaoPage() {
   // 0 = sin propina, null = "otro valor" (propinaMontoCustom).
   const [propinaPorcentaje, setPropinaPorcentaje] = useState<0 | 5 | 10 | null>(0);
   const [propinaMontoCustom, setPropinaMontoCustom] = useState(0);
+  // Hasta que el cajero no elija explícitamente "Sin propina" / 5% / 10% /
+  // "Otro valor" no se muestra la sumatoria de la cuenta — evita que se cobre
+  // de una sin pasar por la pregunta de la propina (ver bloque de Total).
+  const [propinaDecidida, setPropinaDecidida] = useState(false);
   // En qué método se recibió la propina — determina de qué "pendiente por
   // repartir" descuenta (ver HistorialPropinasPage, reparto por separado).
   const [propinaMetodoPago, setPropinaMetodoPago] = useState<"efectivo" | "banco">("efectivo");
@@ -212,6 +216,7 @@ export function MigaoPage() {
     setDescuentoPorcentaje(0);
     setPropinaPorcentaje(0);
     setPropinaMontoCustom(0);
+    setPropinaDecidida(false);
     setPropinaMetodoPago("efectivo");
     setEsAdministrativo(false);
     reiniciarDivision();
@@ -856,36 +861,42 @@ export function MigaoPage() {
                 </p>
               )}
 
-              <div className="flex flex-col gap-2 rounded-lg bg-brand-green-50 px-4 py-3 dark:bg-brand-green-700/20">
-                {descuentoPorcentaje > 0 && (
-                  <div className="flex items-center justify-between text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-                    <span>Sin descuento</span>
-                    <span className="line-through">{formatMoney(detalle.total)}</span>
+              {propinaDecidida ? (
+                <div className="flex flex-col gap-2 rounded-lg bg-brand-green-50 px-4 py-3 dark:bg-brand-green-700/20">
+                  {descuentoPorcentaje > 0 && (
+                    <div className="flex items-center justify-between text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                      <span>Sin descuento</span>
+                      <span className="line-through">{formatMoney(detalle.total)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">Total</span>
+                    <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+                      {formatMoney(totalConDescuento)}
+                    </span>
                   </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">Total</span>
-                  <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                    {formatMoney(totalConDescuento)}
-                  </span>
+                  {propinaMonto > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-sm text-brand-green-700 dark:text-brand-vanilla">
+                        <span>+ Propina{propinaPorcentaje ? ` (${propinaPorcentaje}%)` : ""}</span>
+                        <span className="font-semibold">{formatMoney(propinaMonto)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-brand-green-600/30 pt-2 dark:border-brand-vanilla/30">
+                        <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
+                          Total a cobrar
+                        </span>
+                        <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
+                          {formatMoney(totalConDescuento + propinaMonto)}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
-                {propinaMonto > 0 && (
-                  <>
-                    <div className="flex items-center justify-between text-sm text-brand-green-700 dark:text-brand-vanilla">
-                      <span>+ Propina{propinaPorcentaje ? ` (${propinaPorcentaje}%)` : ""}</span>
-                      <span className="font-semibold">{formatMoney(propinaMonto)}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-t border-brand-green-600/30 pt-2 dark:border-brand-vanilla/30">
-                      <span className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
-                        Total a cobrar
-                      </span>
-                      <span className="text-3xl font-bold text-brand-green-700 dark:text-brand-vanilla">
-                        {formatMoney(totalConDescuento + propinaMonto)}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
+              ) : (
+                <p className="rounded-lg bg-brand-green-50 px-4 py-3 text-sm text-brand-ink/70 dark:bg-brand-green-700/20 dark:text-brand-vanilla/70">
+                  Elige abajo si hay propina o no para ver el total de la cuenta.
+                </p>
+              )}
 
               {!dividirCuenta && (
                 <div className="flex items-center gap-2">
@@ -910,7 +921,10 @@ export function MigaoPage() {
                     <button
                       key={p}
                       type="button"
-                      onClick={() => setPropinaPorcentaje(p)}
+                      onClick={() => {
+                        setPropinaPorcentaje(p);
+                        setPropinaDecidida(true);
+                      }}
                       className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
                         propinaPorcentaje === p
                           ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
@@ -922,7 +936,10 @@ export function MigaoPage() {
                   ))}
                   <button
                     type="button"
-                    onClick={() => setPropinaPorcentaje(null)}
+                    onClick={() => {
+                      setPropinaPorcentaje(null);
+                      setPropinaDecidida(true);
+                    }}
                     className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
                       propinaPorcentaje === null
                         ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"

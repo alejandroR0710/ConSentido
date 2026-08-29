@@ -39,6 +39,12 @@ export function CajaPage() {
   // movimiento es una capacidad más general que "Root" también tiene.
   const esSuperRoot = usuario?.rol === "Super Root";
   const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
+  // Cajero ve una versión reducida de esta pantalla: nada de sumatorias
+  // (efectivo/banco/total general/propinas) mientras el turno sigue abierto
+  // — el cuadre completo solo aparece al cerrar caja (CerrarTurnoModal), que
+  // ahí sí ofrece imprimirlo. Root/Super Root siguen viendo todo en vivo,
+  // mismo criterio de acceso que puedeEditarPagos.
+  const puedeVerSumatorias = puedeEditarPagos;
 
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [sinTurno, setSinTurno] = useState(false);
@@ -59,6 +65,11 @@ export function CajaPage() {
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
   const [movimientoAEditarCompleto, setMovimientoAEditarCompleto] = useState<MovimientoCaja | null>(null);
   const [imprimirResumenTurno, setImprimirResumenTurno] = useState(false);
+  // Congela el resumen con el que se abrió "Cerrar turno": una vez el cierre
+  // se confirma, cargarResumenDeTurnoActual() deja `resumen` en null (ya no
+  // hay turno abierto) — sin esta copia aparte, el modal se desmontaría solo
+  // y nunca se vería la pantalla de "Turno cerrado, ¿imprimir?".
+  const [resumenParaCierre, setResumenParaCierre] = useState<ResumenTurno | null>(null);
 
   const turnoIdRef = useRef<string | null>(null);
   turnoIdRef.current = resumen?.turno.id ?? null;
@@ -197,6 +208,7 @@ export function CajaPage() {
         </form>
       ) : (
         <>
+          {puedeVerSumatorias && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-brand-vanilla-dark p-4 text-center dark:border-brand-green-700">
               <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -250,9 +262,11 @@ export function CajaPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Aparte del cuadre de arriba (esta plata nunca cuenta para Caja
               General) — cuánto entró HOY en propina, efectivo y banco. */}
+          {puedeVerSumatorias && (
           <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/20">
             <div className="text-center text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
               💵 Propinas de hoy
@@ -287,6 +301,7 @@ export function CajaPage() {
               </div>
             </div>
           </div>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
@@ -306,7 +321,7 @@ export function CajaPage() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
-              {resumen.movimientos.length > 0 && (
+              {puedeVerSumatorias && resumen.movimientos.length > 0 && (
                 <button
                   onClick={() => setImprimirResumenTurno(true)}
                   className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
@@ -342,6 +357,7 @@ export function CajaPage() {
                       <div key={fecha} className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
                         <div className="mb-4 flex items-center justify-between border-b border-brand-vanilla-dark pb-3 dark:border-brand-green-700">
                           <h3 className="font-semibold text-brand-green-700 dark:text-brand-vanilla">{fecha}</h3>
+                          {puedeVerSumatorias && (
                           <div className="flex gap-4">
                             <div className="text-right">
                               <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</div>
@@ -360,6 +376,7 @@ export function CajaPage() {
                               </div>
                             </div>
                           </div>
+                          )}
                         </div>
 
                         <ul className="flex flex-col gap-2">
@@ -483,7 +500,10 @@ export function CajaPage() {
           </div>
 
           <button
-            onClick={() => setModalAbierto("cierre")}
+            onClick={() => {
+              setResumenParaCierre(resumen);
+              setModalAbierto("cierre");
+            }}
             className="w-full max-w-xs rounded-md border border-red-300 px-4 py-2 font-medium text-red-600 hover:bg-red-50"
           >
             Cerrar turno
@@ -519,10 +539,13 @@ export function CajaPage() {
         />
       )}
 
-      {modalAbierto === "cierre" && resumen && (
+      {modalAbierto === "cierre" && resumenParaCierre && (
         <CerrarTurnoModal
-          resumen={resumen}
-          onCerrar={() => setModalAbierto(null)}
+          resumen={resumenParaCierre}
+          onCerrar={() => {
+            setModalAbierto(null);
+            setResumenParaCierre(null);
+          }}
           onCerrado={async (mensajeCierre) => {
             setMensaje(mensajeCierre);
             await cargarResumenDeTurnoActual();

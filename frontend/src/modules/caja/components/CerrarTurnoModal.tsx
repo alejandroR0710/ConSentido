@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { cajaApi, type ResumenTurno } from "../api";
-import { LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
+import { resumenAReciboProps } from "../factura";
+import { LABEL_POR_MODULO_SLUG, agruparPorEtiqueta } from "../moduloOrigen";
 
 interface CerrarTurnoModalProps {
   resumen: ResumenTurno;
@@ -16,6 +18,10 @@ export function CerrarTurnoModal({ resumen, onCerrar, onCerrado }: CerrarTurnoMo
   const [montoDeclarado, setMontoDeclarado] = useState(0);
   const [cerrando, setCerrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Una vez cerrado, esta misma ventana pasa a ofrecer imprimir el resumen —
+  // única forma de verlo/imprimirlo para Cajero (ver CajaPage::puedeVerSumatorias).
+  const [cerrado, setCerrado] = useState<{ mensaje: string; diferencia: number } | null>(null);
+  const [imprimir, setImprimir] = useState(false);
 
   const totalIngresos = resumen.ingresosEfectivo + resumen.ingresosBanco;
   const totalEgresos = resumen.egresosEfectivo + resumen.egresosBanco;
@@ -32,12 +38,66 @@ export function CerrarTurnoModal({ resumen, onCerrar, onCerrado }: CerrarTurnoMo
           ? "Turno cerrado. El efectivo cuadra exacto."
           : `Turno cerrado. Diferencia en efectivo: ${diferencia > 0 ? "sobran" : "faltan"} ${formatMoney(Math.abs(diferencia))}.`;
       await onCerrado(mensaje);
-      onCerrar();
+      setCerrado({ mensaje, diferencia });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cerrar el turno");
     } finally {
       setCerrando(false);
     }
+  }
+
+  if (cerrado) {
+    return (
+      <>
+        <Modal titulo="Turno cerrado" onCerrar={onCerrar}>
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">{cerrado.mensaje}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={onCerrar}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-2.5 text-sm font-medium text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+            >
+              Cerrar
+            </button>
+            <button
+              onClick={() => setImprimir(true)}
+              className="flex-1 rounded-md bg-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+            >
+              🖨️ Imprimir resumen
+            </button>
+          </div>
+        </Modal>
+        {imprimir && (
+          <ModalImprimir
+            {...resumenAReciboProps({
+              fecha: new Date().toISOString(),
+              camposEncabezado: [
+                { etiqueta: "Turno abierto", valor: new Date(resumen.turno.abiertoEn).toLocaleString("es") },
+                { etiqueta: "Base inicial", valor: formatMoney(baseInicial) },
+                { etiqueta: "Efectivo contado por el cajero", valor: formatMoney(montoDeclarado) },
+                { etiqueta: "Banco", valor: formatMoney(resumen.saldos.banco) },
+                {
+                  etiqueta: "Diferencia en efectivo",
+                  valor:
+                    cerrado.diferencia === 0
+                      ? "Cuadra exacto"
+                      : `${cerrado.diferencia > 0 ? "Sobran" : "Faltan"} ${formatMoney(Math.abs(cerrado.diferencia))}`,
+                },
+              ],
+              movimientos: resumen.movimientos,
+              ingresos: agruparPorEtiqueta(resumen.movimientos, "ingreso").map(([etiqueta, monto]) => ({
+                etiqueta,
+                monto,
+              })),
+              egresos: agruparPorEtiqueta(resumen.movimientos, "egreso").map(([etiqueta, monto]) => ({
+                etiqueta,
+                monto,
+              })),
+            })}
+            onCerrar={() => setImprimir(false)}
+          />
+        )}
+      </>
+    );
   }
 
   return (

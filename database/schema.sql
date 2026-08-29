@@ -115,9 +115,14 @@ CREATE INDEX idx_alertas_usuario_leida ON alertas(usuario_id, leida);
 -- porque banco es un registro electrónico sin billetes que contar.
 
 CREATE TABLE categorias_gasto (
-  id     SERIAL PRIMARY KEY,
-  nombre VARCHAR(80) UNIQUE NOT NULL,
-  activo BOOLEAN NOT NULL DEFAULT true
+  id        SERIAL PRIMARY KEY,
+  nombre    VARCHAR(80) UNIQUE NOT NULL,
+  activo    BOOLEAN NOT NULL DEFAULT true,
+  -- Área a la que por defecto pertenecen los egresos de esta categoría
+  -- (opcional: gastos generales como arriendo/nómina no son de ninguna área
+  -- puntual) — un egreso puede además fijar su propio modulo_origen_id caso
+  -- por caso (ver movimientos_caja), que manda por encima de este default.
+  modulo_id INT REFERENCES modulos(id)
 );
 
 CREATE TABLE turnos_caja (

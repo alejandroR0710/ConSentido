@@ -95,6 +95,10 @@ export interface CategoriaGasto {
   id: number;
   nombre: string;
   activo: boolean;
+  // Área por defecto de esta categoría (opcional) — ver
+  // caja.repository.ts::crearCategoriaGasto.
+  modulo_origen_slug?: ModuloOrigenSlug | null;
+  modulo_nombre?: string | null;
 }
 
 /** Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día. */
@@ -272,10 +276,13 @@ export const cajaApi = {
       body: input,
     }),
   listarCategoriasGasto: () => apiFetch<CategoriaGasto[]>("/caja/categorias-gasto"),
-  crearCategoriaGasto: (nombre: string) =>
-    apiFetch<CategoriaGasto>("/caja/categorias-gasto", { method: "POST", body: { nombre } }),
-  actualizarCategoriaGasto: (id: number, nombre: string) =>
-    apiFetch<CategoriaGasto>(`/caja/categorias-gasto/${id}`, { method: "PATCH", body: { nombre } }),
+  crearCategoriaGasto: (nombre: string, moduloOrigenSlug?: ModuloOrigenSlug) =>
+    apiFetch<CategoriaGasto>("/caja/categorias-gasto", { method: "POST", body: { nombre, moduloOrigenSlug } }),
+  actualizarCategoriaGasto: (id: number, nombre: string, moduloOrigenSlug?: ModuloOrigenSlug) =>
+    apiFetch<CategoriaGasto>(`/caja/categorias-gasto/${id}`, {
+      method: "PATCH",
+      body: { nombre, moduloOrigenSlug },
+    }),
   obtenerHistorialAnual: (anio: number) => apiFetch<DiaHistorialCaja[]>(`/caja/historial?anio=${anio}`),
   resetear: () =>
     apiFetch<ResetearCajaResultado>("/caja/reset", {

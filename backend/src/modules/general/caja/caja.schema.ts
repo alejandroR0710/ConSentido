@@ -89,6 +89,10 @@ export type RegistrarEgresoAcumuladoInput = z.infer<typeof registrarEgresoAcumul
 
 export const crearCategoriaGastoSchema = z.object({
   nombre: z.string().trim().min(2).max(80),
+  // Área por defecto de esta categoría (opcional) — todo egreso que caiga
+  // acá cuenta para esa área en el Dashboard, a menos que el egreso mismo
+  // traiga su propio moduloOrigenSlug (ver camposEgreso).
+  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
 });
 export type CrearCategoriaGastoInput = z.infer<typeof crearCategoriaGastoSchema>;
 

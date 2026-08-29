@@ -931,6 +931,20 @@ WHERE r.nombre IN ('Super Root', 'Root', 'Cajero', 'Mesero')
 
 
 -- ========================================================================
+-- SECCIÓN 20: ÁREA (OPCIONAL) EN CATEGORÍAS DE GASTO Y EGRESOS
+-- ========================================================================
+-- El "Detalle por área" del Dashboard sumaba egresos por movimientos_caja.
+-- modulo_origen_id, pero ningún egreso lo llenaba (solo los ingresos) — por
+-- eso esa columna siempre salía vacía. Ahora:
+-- 1. Un egreso puede fijar su propio modulo_origen_id caso por caso
+--    (columna ya existía, solo faltaba que el formulario la llenara).
+-- 2. Una categoría de gasto puede tener un área POR DEFECTO (modulo_id) que
+--    aplica a todos sus egresos ya registrados y futuros que no traigan su
+--    propio modulo_origen_id — así no hay que editar egreso por egreso.
+ALTER TABLE categorias_gasto ADD COLUMN IF NOT EXISTS modulo_id INT REFERENCES modulos(id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

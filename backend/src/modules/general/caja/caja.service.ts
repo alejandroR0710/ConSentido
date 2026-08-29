@@ -410,12 +410,12 @@ export async function listarCategoriasGasto() {
   return repo.listCategoriasGasto();
 }
 
-export async function crearCategoriaGasto(nombre: string) {
-  return repo.crearCategoriaGasto(nombre);
+export async function crearCategoriaGasto(nombre: string, moduloOrigenSlug?: string) {
+  return repo.crearCategoriaGasto(nombre, moduloOrigenSlug);
 }
 
-export async function actualizarCategoriaGasto(id: number, nombre: string) {
-  return repo.actualizarCategoriaGasto(id, nombre);
+export async function actualizarCategoriaGasto(id: number, nombre: string, moduloOrigenSlug?: string) {
+  return repo.actualizarCategoriaGasto(id, nombre, moduloOrigenSlug);
 }
 
 export async function listarProveedores() {

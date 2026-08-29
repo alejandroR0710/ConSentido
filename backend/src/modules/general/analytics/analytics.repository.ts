@@ -14,16 +14,27 @@ const BOGOTA = "AT TIME ZONE 'America/Bogota'";
 
 export async function getMovimientosPorModulo(desde: string, hasta: string) {
   const result = await pool.query(
-    `SELECT
+    `WITH mov AS (
+       SELECT mc.tipo, mc.monto, mc.metodo_pago,
+              -- El área de un egreso es la que fije el movimiento mismo, y si
+              -- no trae una (la mayoría, hoy), la que tenga por defecto su
+              -- categoría de gasto (ver categorias_gasto.modulo_id) — un
+              -- ingreso siempre trae la suya propia, nunca hace falta el
+              -- respaldo. Ver caja.repository.ts::insertEgreso/crearCategoriaGasto.
+              COALESCE(mc.modulo_origen_id, cg.modulo_id) AS modulo_efectivo
+         FROM movimientos_caja mc
+         LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+        WHERE to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     )
+     SELECT
        m.id as modulo_id,
        m.nombre as modulo_nombre,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso'), 0) AS ingresos,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'egreso'), 0) AS egresos,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso' AND mc.metodo_pago = 'efectivo'), 0) AS efectivo,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'ingreso' AND mc.metodo_pago = 'banco'), 0) AS banco
+       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso'), 0) AS ingresos,
+       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'egreso'), 0) AS egresos,
+       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso' AND mov.metodo_pago = 'efectivo'), 0) AS efectivo,
+       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso' AND mov.metodo_pago = 'banco'), 0) AS banco
      FROM modulos m
-     LEFT JOIN movimientos_caja mc ON m.id = mc.modulo_origen_id
-       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     LEFT JOIN mov ON mov.modulo_efectivo = m.id
      WHERE m.id != 1
      GROUP BY m.id, m.nombre
      ORDER BY ingresos DESC`,

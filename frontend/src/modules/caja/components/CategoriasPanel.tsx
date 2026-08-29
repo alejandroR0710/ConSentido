@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
-import { cajaApi, type CategoriaGasto } from "../api";
+import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug } from "../api";
+import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface CategoriasPanelProps {
   onActualizar: () => void;
@@ -11,6 +12,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [nuevaArea, setNuevaArea] = useState<ModuloOrigenSlug | "">("");
   const [editando, setEditando] = useState<number | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -34,6 +36,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
   function cancelar() {
     setEditando(null);
     setNuevaCategoria("");
+    setNuevaArea("");
     setFormularioAbierto(false);
   }
 
@@ -43,9 +46,9 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
     setError(null);
     try {
       if (editando) {
-        await cajaApi.actualizarCategoriaGasto(editando, nuevaCategoria.trim());
+        await cajaApi.actualizarCategoriaGasto(editando, nuevaCategoria.trim(), nuevaArea || undefined);
       } else {
-        await cajaApi.crearCategoriaGasto(nuevaCategoria.trim());
+        await cajaApi.crearCategoriaGasto(nuevaCategoria.trim(), nuevaArea || undefined);
       }
       cancelar();
       await cargarCategorias();
@@ -103,7 +106,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
           </div>
 
           <label className="mb-1 block text-[11px] font-medium text-brand-ink/70 dark:text-brand-vanilla/70">Nombre *</label>
-          <div className="flex gap-2">
+          <div className="mb-2 flex gap-2">
             <input
               autoFocus
               type="text"
@@ -121,6 +124,25 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
               {guardando ? "Guardando..." : editando ? "Guardar" : "Agregar"}
             </button>
           </div>
+
+          <label className="mb-1 block text-[11px] font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+            Área por defecto (opcional)
+          </label>
+          <select
+            value={nuevaArea}
+            onChange={(e) => setNuevaArea(e.target.value as ModuloOrigenSlug | "")}
+            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          >
+            <option value="">Sin área específica</option>
+            {MODULOS_ORIGEN.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.icon} {m.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">
+            Todo egreso de esta categoría cuenta para esa área en el Dashboard, salvo que el egreso mismo elija otra.
+          </p>
         </div>
       )}
 
@@ -140,11 +162,19 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
                   : "bg-brand-green-50 dark:bg-brand-green-700/20"
               }`}
             >
-              <span className="truncate text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">{c.nombre}</span>
+              <div className="min-w-0 truncate">
+                <span className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">{c.nombre}</span>
+                {c.modulo_nombre && (
+                  <span className="ml-2 text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">
+                    · {c.modulo_nombre}
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => {
                   setEditando(c.id);
                   setNuevaCategoria(c.nombre);
+                  setNuevaArea(c.modulo_origen_slug ?? "");
                   setFormularioAbierto(true);
                 }}
                 aria-label="Editar categoría"

@@ -76,14 +76,14 @@ export async function listarCategoriasGastoController(_req: Request, res: Respon
 }
 
 export async function crearCategoriaGastoController(req: Request, res: Response) {
-  const { nombre } = crearCategoriaGastoSchema.parse(req.body);
-  const categoria = await service.crearCategoriaGasto(nombre);
+  const { nombre, moduloOrigenSlug } = crearCategoriaGastoSchema.parse(req.body);
+  const categoria = await service.crearCategoriaGasto(nombre, moduloOrigenSlug);
   return created(res, categoria);
 }
 
 export async function actualizarCategoriaGastoController(req: Request, res: Response) {
-  const { nombre } = crearCategoriaGastoSchema.parse(req.body);
-  const categoria = await service.actualizarCategoriaGasto(Number(req.params.id), nombre);
+  const { nombre, moduloOrigenSlug } = crearCategoriaGastoSchema.parse(req.body);
+  const categoria = await service.actualizarCategoriaGasto(Number(req.params.id), nombre, moduloOrigenSlug);
   return ok(res, categoria);
 }
 

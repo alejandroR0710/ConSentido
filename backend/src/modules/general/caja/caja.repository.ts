@@ -822,23 +822,35 @@ export async function getHistorialDiario(anio: number) {
 
 export async function listCategoriasGasto() {
   const result = await pool.query(
-    `SELECT id, nombre, activo FROM categorias_gasto WHERE activo = true ORDER BY nombre ASC`,
+    `SELECT cg.id, cg.nombre, cg.activo, m.slug AS modulo_origen_slug, m.nombre AS modulo_nombre
+       FROM categorias_gasto cg
+       LEFT JOIN modulos m ON m.id = cg.modulo_id
+      WHERE cg.activo = true
+      ORDER BY cg.nombre ASC`,
   );
   return result.rows;
 }
 
-export async function crearCategoriaGasto(nombre: string) {
+export async function crearCategoriaGasto(nombre: string, moduloOrigenSlug?: string) {
   const result = await pool.query(
-    `INSERT INTO categorias_gasto (nombre) VALUES ($1) RETURNING id, nombre, activo`,
-    [nombre],
+    `INSERT INTO categorias_gasto (nombre, modulo_id)
+     VALUES ($1, (SELECT id FROM modulos WHERE slug = $2))
+     RETURNING id, nombre, activo`,
+    [nombre, moduloOrigenSlug ?? null],
   );
   return result.rows[0];
 }
 
-export async function actualizarCategoriaGasto(id: number, nombre: string) {
+/** Reemplazo completo (no parche): el área que venga acá queda como la
+ *  nueva, incluyendo "quitarla" si se manda vacía — igual que el resto de
+ *  formularios de edición de esta app (no PATCH parcial de un campo suelto). */
+export async function actualizarCategoriaGasto(id: number, nombre: string, moduloOrigenSlug?: string) {
   const result = await pool.query(
-    `UPDATE categorias_gasto SET nombre = $2 WHERE id = $1 RETURNING id, nombre, activo`,
-    [id, nombre],
+    `UPDATE categorias_gasto
+        SET nombre = $2, modulo_id = (SELECT id FROM modulos WHERE slug = $3)
+      WHERE id = $1
+      RETURNING id, nombre, activo`,
+    [id, nombre, moduloOrigenSlug ?? null],
   );
   return result.rows[0];
 }

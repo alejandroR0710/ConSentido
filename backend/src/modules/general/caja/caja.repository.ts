@@ -500,13 +500,23 @@ export async function insertEgreso(params: {
   motivo: string;
   usuarioId: string;
   proveedorId?: string;
+  moduloOrigenSlug?: string;
 }) {
   const result = await pool.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id)
-     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7)
+       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id, modulo_origen_id)
+     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7, (SELECT id FROM modulos WHERE slug = $8))
      RETURNING *`,
-    [params.turnoId, params.categoriaGastoId, params.monto, params.metodoPago, params.motivo, params.usuarioId, params.proveedorId || null],
+    [
+      params.turnoId,
+      params.categoriaGastoId,
+      params.monto,
+      params.metodoPago,
+      params.motivo,
+      params.usuarioId,
+      params.proveedorId || null,
+      params.moduloOrigenSlug ?? null,
+    ],
   );
   return result.rows[0];
 }

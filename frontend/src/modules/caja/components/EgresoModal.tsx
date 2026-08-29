@@ -3,7 +3,8 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
-import { cajaApi, type CategoriaGasto, type Proveedor } from "../api";
+import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type Proveedor } from "../api";
+import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface EgresoModalProps {
   categorias: CategoriaGasto[];
@@ -13,6 +14,7 @@ interface EgresoModalProps {
 
 export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalProps) {
   const [categoriaId, setCategoriaId] = useState<number | "">("");
+  const [moduloOrigenSlug, setModuloOrigenSlug] = useState<ModuloOrigenSlug | "">("");
   const [proveedorId, setProveedorId] = useState<string>("");
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [monto, setMonto] = useState(0);
@@ -47,6 +49,7 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
         categoriaGastoId: Number(categoriaId),
         motivo: motivo.trim(),
         proveedorId: proveedorId || undefined,
+        moduloOrigenSlug: moduloOrigenSlug || undefined,
         ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto }),
       });
       await onRegistrado();
@@ -94,6 +97,20 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
           </select>
         </>
       )}
+
+      <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
+      <select
+        value={moduloOrigenSlug}
+        onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
+        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      >
+        <option value="">Sin área específica</option>
+        {MODULOS_ORIGEN.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.icon} {m.label}
+          </option>
+        ))}
+      </select>
 
       {pago.metodoPago !== "mixto" && (
         <div className="mb-1">

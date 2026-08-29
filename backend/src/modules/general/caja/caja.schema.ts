@@ -57,6 +57,12 @@ const camposEgreso = {
   categoriaGastoId: z.number().int().positive(),
   motivo: z.string().max(200),
   proveedorId: z.string().uuid().optional(),
+  // A diferencia del ingreso (obligatorio), el área de un egreso es opcional:
+  // muchos gastos (arriendo, nómina, servicios) no son de un área puntual —
+  // ver analytics.repository.ts::getMovimientosPorModulo, que ya sabía
+  // agrupar egresos por módulo pero nunca se le daba la oportunidad de
+  // guardarlo desde el formulario normal de "Registrar egreso".
+  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
 };
 export const registrarEgresoSchema = z.union([
   z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
@@ -160,6 +166,9 @@ export const agregarMovimientoHistoricoSchema = z.union([
     tipo: z.literal("egreso"),
     categoriaGastoId: z.number().int().positive(),
     proveedorId: z.string().uuid().optional(),
+    // Igual que en el egreso normal (ver camposEgreso): opcional, no todo
+    // gasto es de un área puntual.
+    moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
     monto: z.number().positive(),
     metodoPago: z.enum(METODOS_PAGO),
     motivo: z.string().max(200),

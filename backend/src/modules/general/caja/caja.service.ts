@@ -259,6 +259,7 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
         motivo: input.motivo,
         usuarioId,
         proveedorId: input.proveedorId,
+        moduloOrigenSlug: input.moduloOrigenSlug,
       }),
     );
   }
@@ -566,7 +567,7 @@ export async function agregarMovimientoHistorico(
   const movimiento = await repo.insertMovimientoHistorico({
     turnoId: turno.id,
     tipo: input.tipo,
-    moduloOrigenSlug: input.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
+    moduloOrigenSlug: input.moduloOrigenSlug,
     categoriaGastoId: input.tipo === "egreso" ? input.categoriaGastoId : undefined,
     proveedorId: input.tipo === "egreso" ? input.proveedorId : undefined,
     monto: input.monto,
@@ -631,7 +632,7 @@ export async function editarMovimientoHistorico(
     monto: input.monto,
     metodoPago: input.metodoPago,
     motivo: input.motivo,
-    moduloOrigenSlug: movimiento.tipo === "ingreso" ? input.moduloOrigenSlug : undefined,
+    moduloOrigenSlug: input.moduloOrigenSlug,
     categoriaGastoId: movimiento.tipo === "egreso" ? input.categoriaGastoId : undefined,
     proveedorId: movimiento.tipo === "egreso" ? input.proveedorId : undefined,
   });

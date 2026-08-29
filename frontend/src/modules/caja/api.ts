@@ -149,6 +149,7 @@ export type AgregarMovimientoHistoricoInput =
       tipo: "egreso";
       categoriaGastoId: number;
       proveedorId?: string;
+      moduloOrigenSlug?: ModuloOrigenSlug;
       monto: number;
       metodoPago: MetodoPago;
       motivo: string;
@@ -232,8 +233,14 @@ export const cajaApi = {
     } & PagoInput,
   ) => apiFetch<RegistrarIngresoResultado>("/caja/ingresos", { method: "POST", body: input }),
   obtenerFacturaVenta: (ventaId: string) => apiFetch<FacturaVentaManual>(`/caja/ventas/${ventaId}/factura`),
-  registrarEgreso: (input: { categoriaGastoId: number; motivo: string; proveedorId?: string } & PagoInput) =>
-    apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
+  registrarEgreso: (
+    input: {
+      categoriaGastoId: number;
+      motivo: string;
+      proveedorId?: string;
+      moduloOrigenSlug?: ModuloOrigenSlug;
+    } & PagoInput,
+  ) => apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
   // Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día, y no
   // requiere turno abierto (a diferencia de registrarEgreso de arriba).
   registrarEgresoAcumulado: (input: {

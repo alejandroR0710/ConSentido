@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { cajaApi, type CategoriaGasto, type MetodoPago, type Proveedor } from "../api";
+import { cajaApi, type CategoriaGasto, type MetodoPago, type ModuloOrigenSlug, type Proveedor } from "../api";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 const FRASE_CONFIRMACION = "AJUSTAR HISTORIAL";
@@ -27,7 +27,9 @@ export function AgregarMovimientoHistoricoModal({
   onAgregado,
 }: AgregarMovimientoHistoricoModalProps) {
   const [tipo, setTipo] = useState<"ingreso" | "egreso">("egreso");
-  const [moduloOrigenSlug, setModuloOrigenSlug] = useState(MODULOS_ORIGEN[0].value);
+  // Obligatorio para ingreso, opcional para egreso (no todo gasto es de un
+  // área puntual) — arranca vacío porque el tipo por defecto es "egreso".
+  const [moduloOrigenSlug, setModuloOrigenSlug] = useState<ModuloOrigenSlug | "">("");
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [proveedorId, setProveedorId] = useState<string>("");
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -52,7 +54,9 @@ export function AgregarMovimientoHistoricoModal({
     monto > 0 &&
     nota.trim().length >= 3 &&
     frase === FRASE_CONFIRMACION &&
-    (tipo === "ingreso" || (Boolean(categoriaId) && motivo.trim().length > 0));
+    (tipo === "ingreso"
+      ? Boolean(moduloOrigenSlug)
+      : Boolean(categoriaId) && motivo.trim().length > 0);
 
   async function guardar() {
     if (!puedeGuardar) return;
@@ -64,7 +68,7 @@ export function AgregarMovimientoHistoricoModal({
         tipo === "ingreso"
           ? {
               tipo: "ingreso",
-              moduloOrigenSlug,
+              moduloOrigenSlug: moduloOrigenSlug as ModuloOrigenSlug,
               monto,
               metodoPago,
               motivo: motivo.trim() || undefined,
@@ -75,6 +79,7 @@ export function AgregarMovimientoHistoricoModal({
               tipo: "egreso",
               categoriaGastoId: Number(categoriaId),
               proveedorId: proveedorId || undefined,
+              moduloOrigenSlug: moduloOrigenSlug || undefined,
               monto,
               metodoPago,
               motivo: motivo.trim(),
@@ -100,7 +105,10 @@ export function AgregarMovimientoHistoricoModal({
       <div className="mb-3 flex gap-2">
         <button
           type="button"
-          onClick={() => setTipo("ingreso")}
+          onClick={() => {
+            setTipo("ingreso");
+            if (!moduloOrigenSlug) setModuloOrigenSlug(MODULOS_ORIGEN[0].value);
+          }}
           className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium ${
             tipo === "ingreso"
               ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
@@ -172,6 +180,20 @@ export function AgregarMovimientoHistoricoModal({
               </select>
             </>
           )}
+
+          <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
+          <select
+            value={moduloOrigenSlug}
+            onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
+            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          >
+            <option value="">Sin área específica</option>
+            {MODULOS_ORIGEN.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.icon} {m.label}
+              </option>
+            ))}
+          </select>
         </>
       )}
 

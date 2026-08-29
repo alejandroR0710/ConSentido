@@ -40,7 +40,12 @@ export function EditarMovimientoHistoricoModal({
   const [categoriaId, setCategoriaId] = useState<number | "">(movimiento.categoria_gasto_id ?? "");
   const [proveedorId, setProveedorId] = useState<string>(movimiento.proveedor_id ?? "");
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [moduloOrigenSlug, setModuloOrigenSlug] = useState(movimiento.modulo_origen_slug ?? MODULOS_ORIGEN[0].value);
+  // Obligatorio en pantalla para ingreso (siempre trae uno ya asignado);
+  // opcional para egreso, donde "" significa que no se le asigna ninguna área.
+  const [moduloOrigenSlug, setModuloOrigenSlug] = useState<ModuloOrigenSlug | "">(
+    (movimiento.modulo_origen_slug as ModuloOrigenSlug | null) ??
+      (movimiento.tipo === "ingreso" ? MODULOS_ORIGEN[0].value : ""),
+  );
   const [nota, setNota] = useState("");
   const [frase, setFrase] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -70,7 +75,7 @@ export function EditarMovimientoHistoricoModal({
         monto,
         metodoPago,
         motivo: motivo.trim() || undefined,
-        moduloOrigenSlug: movimiento.tipo === "ingreso" ? (moduloOrigenSlug as ModuloOrigenSlug) : undefined,
+        moduloOrigenSlug: moduloOrigenSlug || undefined,
         categoriaGastoId: movimiento.tipo === "egreso" && categoriaId ? Number(categoriaId) : undefined,
         proveedorId: movimiento.tipo === "egreso" ? proveedorId || undefined : undefined,
         nota: nota.trim(),
@@ -100,7 +105,7 @@ export function EditarMovimientoHistoricoModal({
           <label className="mb-1 block text-xs font-medium">Viene de</label>
           <select
             value={moduloOrigenSlug}
-            onChange={(e) => setModuloOrigenSlug(e.target.value)}
+            onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug)}
             className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           >
             {MODULOS_ORIGEN.map((m) => (
@@ -142,6 +147,20 @@ export function EditarMovimientoHistoricoModal({
               </select>
             </>
           )}
+
+          <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
+          <select
+            value={moduloOrigenSlug}
+            onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
+            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          >
+            <option value="">Sin área específica</option>
+            {MODULOS_ORIGEN.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.icon} {m.label}
+              </option>
+            ))}
+          </select>
         </>
       )}
 

@@ -851,6 +851,15 @@ export const migaoApi = {
     nota?: string;
     items: { nombre: string; cantidad: number; precioUnitario: number }[];
   }) => apiFetch<CotizacionDetalle>("/migao/cotizaciones", { method: "POST", body: input }),
+  editarCotizacion: (
+    id: string,
+    input: {
+      clienteNombre?: string;
+      clienteTelefono?: string;
+      nota?: string;
+      items: { nombre: string; cantidad: number; precioUnitario: number }[];
+    },
+  ) => apiFetch<CotizacionDetalle>(`/migao/cotizaciones/${id}`, { method: "PATCH", body: input }),
   eliminarCotizacion: (id: string) =>
     apiFetch<{ eliminada: boolean }>(`/migao/cotizaciones/${id}`, { method: "DELETE" }),
 

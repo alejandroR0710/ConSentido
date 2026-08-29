@@ -1648,6 +1648,22 @@ export async function crearCotizacion(usuarioId: string, input: CrearCotizacionI
   return repo.getCotizacionPorId(cotizacion.id);
 }
 
+export async function editarCotizacion(id: string, input: CrearCotizacionInput) {
+  const existente = await repo.getCotizacionPorId(id);
+  if (!existente) throw Errors.notFound("Cotización no encontrada");
+
+  const subtotal = input.items.reduce((acc, i) => acc + i.cantidad * i.precioUnitario, 0);
+  await repo.actualizarCotizacion(id, {
+    clienteNombre: input.clienteNombre,
+    clienteTelefono: input.clienteTelefono,
+    nota: input.nota,
+    subtotal,
+    total: subtotal,
+  });
+  await repo.reemplazarCotizacionItems(id, input.items);
+  return repo.getCotizacionPorId(id);
+}
+
 export async function listarCotizaciones() {
   return repo.listCotizaciones();
 }

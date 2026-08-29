@@ -30,6 +30,7 @@ import {
   crearOrdenController,
   crearProductoController,
   editarItemController,
+  editarCotizacionController,
   editarMesaController,
   editarProductoController,
   eliminarCotizacionController,
@@ -345,6 +346,13 @@ migaoRouter.get(
   "/cotizaciones/:id",
   requirePermission("migao.cotizaciones.ver"),
   asyncHandler(obtenerCotizacionController),
+);
+// Editar reemplaza cliente/nota/ítems por completo — mismo permiso que crear,
+// no se justifica un permiso aparte para "modificar antes de imprimir/enviar".
+migaoRouter.patch(
+  "/cotizaciones/:id",
+  requirePermission("migao.cotizaciones.crear"),
+  asyncHandler(editarCotizacionController),
 );
 migaoRouter.delete(
   "/cotizaciones/:id",

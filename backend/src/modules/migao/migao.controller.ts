@@ -309,6 +309,12 @@ export async function crearCotizacionController(req: Request, res: Response) {
   return created(res, cotizacion);
 }
 
+export async function editarCotizacionController(req: Request, res: Response) {
+  const data = crearCotizacionSchema.parse(req.body);
+  const cotizacion = await service.editarCotizacion(req.params.id, data);
+  return ok(res, cotizacion);
+}
+
 export async function listarCotizacionesController(_req: Request, res: Response) {
   const cotizaciones = await service.listarCotizaciones();
   return ok(res, cotizaciones);

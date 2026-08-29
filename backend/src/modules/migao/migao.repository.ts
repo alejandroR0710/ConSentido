@@ -1432,6 +1432,30 @@ export async function crearCotizacionItems(
   }
 }
 
+export async function actualizarCotizacion(
+  id: string,
+  params: { clienteNombre?: string; clienteTelefono?: string; nota?: string; subtotal: number; total: number },
+) {
+  const result = await pool.query(
+    `UPDATE migao_cotizaciones
+        SET cliente_nombre = $2, cliente_telefono = $3, nota = $4, subtotal = $5, total = $6
+      WHERE id = $1
+      RETURNING *`,
+    [id, params.clienteNombre ?? null, params.clienteTelefono ?? null, params.nota ?? null, params.subtotal, params.total],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Reemplaza todos los ítems de una cotización por un set nuevo — igual que
+ *  "guardar de cero" pero conservando el mismo id/número/fecha de creación. */
+export async function reemplazarCotizacionItems(
+  cotizacionId: string,
+  items: { nombre: string; cantidad: number; precioUnitario: number }[],
+) {
+  await pool.query(`DELETE FROM migao_cotizacion_items WHERE cotizacion_id = $1`, [cotizacionId]);
+  await crearCotizacionItems(cotizacionId, items);
+}
+
 export async function listCotizaciones() {
   const result = await pool.query(
     `SELECT c.id, c.numero, c.cliente_nombre, c.cliente_telefono, c.nota, c.subtotal, c.total, c.created_at,

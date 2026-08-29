@@ -70,6 +70,13 @@ export function CotizacionesPage() {
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
+  // Cotización que se está editando (reemplaza sus datos por completo al
+  // guardar) — null significa que el formulario de arriba está creando una
+  // cotización nueva, igual que siempre.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoNumero, setEditandoNumero] = useState<string | null>(null);
+  const [cargandoEdicion, setCargandoEdicion] = useState<string | null>(null);
+
   const [recibo, setRecibo] = useState<ReturnType<typeof cotizacionAReciboProps> | null>(null);
   const [errorImprimir, setErrorImprimir] = useState<string | null>(null);
 
@@ -115,31 +122,72 @@ export function CotizacionesPage() {
     setLineas((actual) => (actual.length > 1 ? actual.filter((l) => l.key !== key) : actual));
   }
 
+  function limpiarFormulario() {
+    setClienteNombre("");
+    setClienteTelefono("");
+    setNota("");
+    setLineas([lineaVacia()]);
+    setEditandoId(null);
+    setEditandoNumero(null);
+  }
+
   async function guardarCotizacion() {
     if (!puedeGuardar) return;
     setGuardando(true);
     setErrorGuardar(null);
+    const datos = {
+      clienteNombre: clienteNombre.trim() || undefined,
+      clienteTelefono: clienteTelefono.trim() || undefined,
+      nota: nota.trim() || undefined,
+      items: lineasValidas.map((l) => ({
+        nombre: l.nombre.trim(),
+        cantidad: l.cantidad,
+        precioUnitario: l.precioUnitario,
+      })),
+    };
     try {
-      const creada = await migaoApi.crearCotizacion({
-        clienteNombre: clienteNombre.trim() || undefined,
-        clienteTelefono: clienteTelefono.trim() || undefined,
-        nota: nota.trim() || undefined,
-        items: lineasValidas.map((l) => ({
-          nombre: l.nombre.trim(),
-          cantidad: l.cantidad,
-          precioUnitario: l.precioUnitario,
-        })),
-      });
-      setClienteNombre("");
-      setClienteTelefono("");
-      setNota("");
-      setLineas([lineaVacia()]);
-      setRecibo(cotizacionAReciboProps(creada));
+      const guardada = editandoId
+        ? await migaoApi.editarCotizacion(editandoId, datos)
+        : await migaoApi.crearCotizacion(datos);
+      limpiarFormulario();
+      setRecibo(cotizacionAReciboProps(guardada));
       await cargarCotizaciones();
     } catch (err) {
       setErrorGuardar(err instanceof ApiError ? err.message : "No se pudo guardar la cotización");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  /** Carga una cotización guardada en el formulario de arriba para modificarla
+   *  (agregar/quitar/cambiar líneas, cliente o nota) — al guardar se reemplaza
+   *  por completo, conservando el mismo número y fecha de creación. */
+  async function empezarEdicion(id: string) {
+    setCargandoEdicion(id);
+    setErrorLista(null);
+    try {
+      const detalle = await migaoApi.obtenerCotizacion(id);
+      setClienteNombre(detalle.cliente_nombre ?? "");
+      setClienteTelefono(detalle.cliente_telefono ?? "");
+      setNota(detalle.nota ?? "");
+      setLineas(
+        detalle.items.length > 0
+          ? detalle.items.map((item) => ({
+              key: siguienteKey++,
+              nombre: item.nombre,
+              cantidad: Number(item.cantidad),
+              precioUnitario: Number(item.precio_unitario),
+            }))
+          : [lineaVacia()],
+      );
+      setEditandoId(detalle.id);
+      setEditandoNumero(detalle.numero);
+      setErrorGuardar(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setErrorLista(err instanceof ApiError ? err.message : "No se pudo abrir la cotización para editar");
+    } finally {
+      setCargandoEdicion(null);
     }
   }
 
@@ -156,6 +204,7 @@ export function CotizacionesPage() {
   async function eliminarCotizacion(id: string) {
     try {
       await migaoApi.eliminarCotizacion(id);
+      if (editandoId === id) limpiarFormulario();
       await cargarCotizaciones();
     } catch (err) {
       setErrorLista(err instanceof ApiError ? err.message : "No se pudo eliminar la cotización");
@@ -173,7 +222,20 @@ export function CotizacionesPage() {
       </div>
 
       <div className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
-        <h2 className="mb-3 font-medium text-brand-green-700 dark:text-brand-vanilla">Nueva cotización</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
+            {editandoId ? `Editando cotización Nº ${editandoNumero}` : "Nueva cotización"}
+          </h2>
+          {editandoId && (
+            <button
+              type="button"
+              onClick={limpiarFormulario}
+              className="text-sm text-brand-ink/60 hover:underline dark:text-brand-vanilla/60"
+            >
+              Cancelar edición
+            </button>
+          )}
+        </div>
 
         <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -269,7 +331,7 @@ export function CotizacionesPage() {
           disabled={!puedeGuardar}
           className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
         >
-          {guardando ? "Guardando..." : "Guardar cotización"}
+          {guardando ? "Guardando..." : editandoId ? "Guardar cambios" : "Guardar cotización"}
         </button>
       </div>
 
@@ -310,6 +372,13 @@ export function CotizacionesPage() {
                     <td className="px-3 py-2">{formatMoney(c.total)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => empezarEdicion(c.id)}
+                          disabled={cargandoEdicion === c.id}
+                          className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                        >
+                          {cargandoEdicion === c.id ? "..." : "Editar"}
+                        </button>
                         <button
                           onClick={() => imprimirCotizacion(c.id)}
                           className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"

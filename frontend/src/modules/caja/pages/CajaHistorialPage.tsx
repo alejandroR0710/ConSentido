@@ -27,7 +27,7 @@ import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoAcumuladoModal } from "../components/EgresoAcumuladoModal";
 import { resumenAReciboProps } from "../factura";
-import { agruparPorEtiqueta, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
+import { agruparPorEtiqueta, agruparPorEtiquetaConMetodo, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
   "Enero",
@@ -579,16 +579,21 @@ export function CajaHistorialPage() {
               movimientosDelDia.length > 0 && (
                 <>
                   <div className="mt-2 flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700 sm:flex-row">
-                    {agruparPorEtiqueta(movimientosDelDia, "ingreso").length > 0 && (
+                    {agruparPorEtiquetaConMetodo(movimientosDelDia, "ingreso").length > 0 && (
                       <div className="flex-1">
                         <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
                           Ingresos por área
                         </span>
-                        <div className="mt-1 flex flex-col gap-0.5">
-                          {agruparPorEtiqueta(movimientosDelDia, "ingreso").map(([etiqueta, monto]) => (
-                            <div key={etiqueta} className="flex justify-between text-xs">
-                              <span className="text-brand-ink/70 dark:text-brand-vanilla/70">{etiqueta}</span>
-                              <span className="text-brand-ink dark:text-brand-vanilla">{formatMoney(monto)}</span>
+                        <div className="mt-1 flex flex-col gap-1">
+                          {agruparPorEtiquetaConMetodo(movimientosDelDia, "ingreso").map((d) => (
+                            <div key={d.etiqueta}>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-brand-ink/70 dark:text-brand-vanilla/70">{d.etiqueta}</span>
+                                <span className="text-brand-ink dark:text-brand-vanilla">{formatMoney(d.total)}</span>
+                              </div>
+                              <div className="text-[10px] text-brand-ink/50 dark:text-brand-vanilla/50">
+                                Efectivo {formatMoney(d.efectivo)} · Banco {formatMoney(d.banco)}
+                              </div>
                             </div>
                           ))}
                         </div>

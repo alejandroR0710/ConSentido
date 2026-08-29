@@ -33,3 +33,27 @@ export function agruparPorEtiqueta(movimientos: MovimientoCaja[], tipo: "ingreso
   }
   return Array.from(porEtiqueta.entries()).sort((a, b) => b[1] - a[1]);
 }
+
+/** Igual que `agruparPorEtiqueta`, pero además desglosa cuánto de cada
+ *  etiqueta entró en efectivo vs. banco — usado en el resumen del día del
+ *  calendario de Historial de Caja, donde no basta con saber cuánto reunió
+ *  cada área sino en qué se recibió. */
+export function agruparPorEtiquetaConMetodo(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
+  const porEtiqueta = new Map<string, { total: number; efectivo: number; banco: number }>();
+  for (const m of movimientos) {
+    if (m.tipo !== tipo) continue;
+    const etiqueta =
+      tipo === "ingreso"
+        ? (m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Otro")
+        : (m.categoria_gasto_nombre ?? "Otro");
+    const actual = porEtiqueta.get(etiqueta) ?? { total: 0, efectivo: 0, banco: 0 };
+    const monto = Number(m.monto);
+    actual.total += monto;
+    if (m.metodo_pago === "efectivo") actual.efectivo += monto;
+    else actual.banco += monto;
+    porEtiqueta.set(etiqueta, actual);
+  }
+  return Array.from(porEtiqueta.entries())
+    .map(([etiqueta, datos]) => ({ etiqueta, ...datos }))
+    .sort((a, b) => b.total - a.total);
+}

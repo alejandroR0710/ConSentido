@@ -39,12 +39,14 @@ export function CajaPage() {
   // movimiento es una capacidad más general que "Root" también tiene.
   const esSuperRoot = usuario?.rol === "Super Root";
   const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
-  // Cajero ve una versión reducida de esta pantalla: nada de sumatorias
+  // La restricción es puntual para el rol Cajero (no "todo lo que no sea
+  // acceso total" — hoy da lo mismo porque es el único otro rol con acceso a
+  // esta pantalla, pero se deja explícito para no arrastrar un rol nuevo que
+  // en el futuro también tenga general.caja.ver): nada de sumatorias
   // (efectivo/banco/total general/propinas) mientras el turno sigue abierto
   // — el cuadre completo solo aparece al cerrar caja (CerrarTurnoModal), que
-  // ahí sí ofrece imprimirlo. Root/Super Root siguen viendo todo en vivo,
-  // mismo criterio de acceso que puedeEditarPagos.
-  const puedeVerSumatorias = puedeEditarPagos;
+  // ahí sí ofrece imprimirlo. Cualquier otro rol sigue viendo todo en vivo.
+  const puedeVerSumatorias = usuario?.rol !== "Cajero";
 
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [sinTurno, setSinTurno] = useState(false);

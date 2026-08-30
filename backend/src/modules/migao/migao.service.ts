@@ -1,3 +1,4 @@
+import { PoolClient } from "pg";
 import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
@@ -42,6 +43,43 @@ function notificarAlertasInventario(alertas: string[]) {
       .enviarATodosDeRol(rol, { titulo: "⚠ Stock de inventario", cuerpo, url: "/migao/inventario" })
       .catch(() => {});
   }
+}
+
+/**
+ * Consumo de inventario "de rescate": se llama justo antes de que una orden
+ * quede en estado 'cerrada' por CUALQUIERA de sus 3 caminos (cerrarOrden,
+ * pagarItems, registrarAbono). Cualquier ítem no cancelado que todavía no
+ * hubiera consumido su inventario (nunca llegó a "listo" en Cocina, y no es
+ * un cargo "para llevar" que ya se consume al agregarse) lo hace ahora — es
+ * el último momento posible: en cuanto la orden pase a 'cerrada', ese ítem
+ * desaparece para siempre de la cola de Cocina (ver
+ * migao.repository.ts::listItemsCocina, que excluye órdenes cerradas) y
+ * jamás podría volver a marcarse "listo". Sin este rescate, ese consumo
+ * simplemente nunca se registraba (fuga real encontrada en producción:
+ * inventario de queso/amasijos apareciendo con más stock del que en realidad
+ * quedaba).
+ */
+async function aplicarConsumoFaltanteAlCerrar(
+  client: PoolClient,
+  items: { id: number | string; producto_id: string; cantidad: string | number; estado: string; es_para_llevar: boolean }[],
+  usuarioId: string,
+): Promise<string[]> {
+  const alertas: string[] = [];
+  for (const item of items) {
+    if (item.estado === "cancelado") continue;
+    const yaConsumido = item.estado === "listo" || item.estado === "servido" || item.es_para_llevar;
+    if (yaConsumido) continue;
+    alertas.push(
+      ...(await inventarioService.aplicarConsumoPorProducto(
+        client,
+        item.producto_id,
+        Number(item.cantidad),
+        usuarioId,
+        Number(item.id),
+      )),
+    );
+  }
+  return alertas;
 }
 
 export async function listarCategorias() {
@@ -796,6 +834,10 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     if (items.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
     const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
 
+    // Rescate de consumo: todo lo que se está cobrando acá queda 'cerrada'
+    // al final de esta función — ver aplicarConsumoFaltanteAlCerrar.
+    const alertasInventario = await aplicarConsumoFaltanteAlCerrar(client, items, usuarioId);
+
     // Descuento y "administrativo" solo existen en el cobro SIMPLE (no
     // dividido) — ver comentario en migao.schema.ts::cerrarOrdenSchema.
     const descuentoPorcentaje = !input.dividir ? (input.descuentoPorcentaje ?? 0) : 0;
@@ -1020,7 +1062,8 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     await repo.cerrarOrdenEstado(client, ordenId);
 
     await client.query("COMMIT");
-    return { orden: { ...orden, estado: "cerrada" }, venta, total };
+    notificarAlertasInventario(alertasInventario);
+    return { orden: { ...orden, estado: "cerrada" }, venta, total, alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -1184,14 +1227,26 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
     // venía 'abierta', mismo badge que el motor de partes).
     const todosLosItems = await repo.getItemsPorOrden(ordenId, client);
     const quedaPendiente = todosLosItems.some((i) => i.estado !== "cancelado" && !i.venta_id);
+    let alertasInventario: string[] = [];
     if (!quedaPendiente) {
+      // Rescate de consumo: acá también puede haber ítems de un pago suelto
+      // anterior que se quedaron sin llegar a "listo" — ver
+      // aplicarConsumoFaltanteAlCerrar. Se revisan TODOS los no cancelados
+      // de la orden, no solo los de este pago, porque la orden se cierra
+      // completa.
+      alertasInventario = await aplicarConsumoFaltanteAlCerrar(
+        client,
+        todosLosItems.filter((i) => i.estado !== "cancelado"),
+        usuarioId,
+      );
       await repo.cerrarOrdenEstado(client, ordenId);
     } else if (orden.estado === "abierta") {
       await client.query(`UPDATE ordenes SET estado = 'pagando' WHERE id = $1`, [ordenId]);
     }
 
     await client.query("COMMIT");
-    return { venta, total, ordenCerrada: !quedaPendiente };
+    notificarAlertasInventario(alertasInventario);
+    return { venta, total, ordenCerrada: !quedaPendiente, alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -1459,14 +1514,24 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     );
     const todasPagadas = todasPartesResult.rows.every((r) => Number(r.monto_debido) - Number(r.pagado) <= 0.01);
 
+    let alertasInventario: string[] = [];
     if (todasPagadas) {
+      // Rescate de consumo — ver aplicarConsumoFaltanteAlCerrar. Puede haber
+      // ítems de partes/abonos anteriores que nunca llegaron a "listo".
+      const itemsDeLaOrden = await repo.getItemsPorOrden(parte.orden_id, client);
+      alertasInventario = await aplicarConsumoFaltanteAlCerrar(
+        client,
+        itemsDeLaOrden.filter((i) => i.estado !== "cancelado"),
+        usuarioId,
+      );
       await repo.cerrarOrdenEstado(client, parte.orden_id);
     } else if (orden.estado === "abierta") {
       await client.query(`UPDATE ordenes SET estado = 'pagando' WHERE id = $1`, [parte.orden_id]);
     }
 
     await client.query("COMMIT");
-    return repo.getCuentaPorOrden(parte.orden_id);
+    notificarAlertasInventario(alertasInventario);
+    return { ...(await repo.getCuentaPorOrden(parte.orden_id)), alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -1502,8 +1567,16 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
     }
 
     const items = await repo.getItemsPorOrden(ordenId, client);
+    const alertasInventario: string[] = [];
     for (const item of items) {
       if (item.estado === "cancelado" || item.estado === "servido") continue;
+      // Igual que al cancelar un ítem suelto (ver editarItem): si ya había
+      // consumido inventario (llegó a "listo" en Cocina, o es un cargo "para
+      // llevar" que se consume al agregarse) hay que devolverlo, o el stock
+      // queda descontado para siempre por algo que nunca se vendió — fuga
+      // real encontrada en producción (ej. queso consumido por una orden que
+      // terminó cancelada por completo).
+      const yaConsumido = item.estado === "listo" || item.es_para_llevar;
       await repo.updateItemEstado(item.id, "cancelado", client);
       await repo.insertHistorial(client, {
         ordenId,
@@ -1512,12 +1585,24 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
         detalle: { cantidadAnterior: item.cantidad, estadoAnterior: item.estado },
         usuarioId,
       });
+      if (yaConsumido) {
+        alertasInventario.push(
+          ...(await inventarioService.aplicarConsumoPorProducto(
+            client,
+            item.producto_id,
+            -Number(item.cantidad),
+            usuarioId,
+            Number(item.id),
+          )),
+        );
+      }
     }
 
     await repo.cancelarOrdenEstado(client, ordenId);
 
     await client.query("COMMIT");
-    return { ...orden, estado: "cancelada" };
+    notificarAlertasInventario(alertasInventario);
+    return { ...orden, estado: "cancelada", alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

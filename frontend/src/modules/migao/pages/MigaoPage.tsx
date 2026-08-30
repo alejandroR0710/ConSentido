@@ -295,10 +295,11 @@ export function MigaoPage() {
       });
       setModalPagarItemsAbierto(false);
       setItemsSeleccionados(new Set());
+      const sufijoAlertas = resultado.alertasInventario.length > 0 ? ` ${resultado.alertasInventario.join(" ")}` : "";
       setMensaje(
-        resultado.ordenCerrada
+        (resultado.ordenCerrada
           ? `Productos cobrados. Total: ${formatMoney(resultado.total)} — la cuenta quedó cerrada.`
-          : `Productos cobrados. Total: ${formatMoney(resultado.total)} — la mesa sigue abierta.`,
+          : `Productos cobrados. Total: ${formatMoney(resultado.total)} — la mesa sigue abierta.`) + sufijoAlertas,
       );
       setPreguntaFacturaOrdenId(ordenSeleccionadaId);
       if (resultado.ordenCerrada) {
@@ -367,7 +368,9 @@ export function MigaoPage() {
         descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
-      setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}`);
+      const sufijoAlertas =
+        resultado.alertasInventario.length > 0 ? ` ${resultado.alertasInventario.join(" ")}` : "";
+      setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(resultado.total)}${sufijoAlertas}`);
       setPreguntaFacturaOrdenId(ordenSeleccionadaId);
       setDetalle(null);
       setOrdenSeleccionadaId(null);
@@ -575,7 +578,9 @@ export function MigaoPage() {
       }
       setCuenta(cuentaActual);
       if (cuentaActual.ordenEstado === "cerrada") {
-        setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(Number(cuentaActual.venta.total))}`);
+        const alertas = cuentaActual.alertasInventario ?? [];
+        const sufijoAlertas = alertas.length > 0 ? ` ${alertas.join(" ")}` : "";
+        setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(Number(cuentaActual.venta.total))}${sufijoAlertas}`);
         setPreguntaFacturaOrdenId(ordenSeleccionadaId);
         setDetalle(null);
         setOrdenSeleccionadaId(null);

@@ -348,6 +348,7 @@ export interface PagarItemsResultado {
   venta: { id: string };
   total: number;
   ordenCerrada: boolean;
+  alertasInventario: string[];
 }
 
 // Motor NUEVO y aparte de PagoInput/PropinaInput de arriba: cómo queda
@@ -402,6 +403,9 @@ export interface CuentaDetalle {
   partes: CuentaParte[];
   pagos: CuentaAbono[];
   propinas: CuentaAbono[];
+  // Solo viene tras registrarAbono (nunca en obtenerCuenta, un simple GET) —
+  // ver migao.service.ts::aplicarConsumoFaltanteAlCerrar.
+  alertasInventario?: string[];
 }
 
 /** Reparto (liquidación) de las propinas pendientes — un solo reparto puede
@@ -593,10 +597,13 @@ export const migaoApi = {
     apiFetch<ResumenDiarioIngreso[]>("/migao/ordenes/historial-resumen-diario"),
   obtenerDetalle: (ordenId: string) => apiFetch<OrdenDetalle>(`/migao/ordenes/${ordenId}`),
   cerrarOrden: (ordenId: string, pago: PagoInput, descuentoPorcentaje?: number, propina?: PropinaInput) =>
-    apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
-      method: "POST",
-      body: { dividir: false, ...pago, descuentoPorcentaje, ...propina },
-    }),
+    apiFetch<{ orden: unknown; venta: unknown; total: number; alertasInventario: string[] }>(
+      `/migao/ordenes/${ordenId}/cerrar`,
+      {
+        method: "POST",
+        body: { dividir: false, ...pago, descuentoPorcentaje, ...propina },
+      },
+    ),
   // Cuenta dividida: cada parte trae su propio método de pago (simple o mixto)
   // y las UNIDADES de producto que le corresponden — un ítem con cantidad 2
   // puede repartirse 1 unidad a cada parte (todas las unidades de la orden
@@ -607,10 +614,13 @@ export const migaoApi = {
     partes: (PagoInput & { unidades: { itemId: number; cantidad: number }[] })[],
     propina?: PropinaInput,
   ) =>
-    apiFetch<{ orden: unknown; venta: unknown; total: number }>(`/migao/ordenes/${ordenId}/cerrar`, {
-      method: "POST",
-      body: { dividir: true, partes, ...propina },
-    }),
+    apiFetch<{ orden: unknown; venta: unknown; total: number; alertasInventario: string[] }>(
+      `/migao/ordenes/${ordenId}/cerrar`,
+      {
+        method: "POST",
+        body: { dividir: true, partes, ...propina },
+      },
+    ),
   // Motor nuevo, aparte de cerrarOrden/cerrarOrdenDividida de arriba: pagos
   // parciales y/o cuenta dividida por igual (no solo por producto). Una
   // cuenta sin dividir es, acá, una división de 1 sola parte.
@@ -634,7 +644,9 @@ export const migaoApi = {
   pagarItems: (ordenId: string, input: PagarItemsInput) =>
     apiFetch<PagarItemsResultado>(`/migao/ordenes/${ordenId}/pagar-items`, { method: "POST", body: input }),
   cancelarOrden: (ordenId: string) =>
-    apiFetch<{ id: string; estado: string }>(`/migao/ordenes/${ordenId}/cancelar`, { method: "POST" }),
+    apiFetch<{ id: string; estado: string; alertasInventario: string[] }>(`/migao/ordenes/${ordenId}/cancelar`, {
+      method: "POST",
+    }),
   // El mesero cambia la mesa de una orden abierta (ej. los comensales se
   // cambiaron de mesa a mitad del pedido). La mesa se resuelve/crea por
   // número, igual que al crear la orden.

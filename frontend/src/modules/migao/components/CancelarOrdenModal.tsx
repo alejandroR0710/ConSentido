@@ -20,8 +20,9 @@ export function CancelarOrdenModal({ ordenId, onCerrar, onCancelada }: CancelarO
     setCancelando(true);
     setError(null);
     try {
-      await migaoApi.cancelarOrden(ordenId);
-      await onCancelada("Orden cancelada.");
+      const resultado = await migaoApi.cancelarOrden(ordenId);
+      const sufijoAlertas = resultado.alertasInventario.length > 0 ? ` ${resultado.alertasInventario.join(" ")}` : "";
+      await onCancelada(`Orden cancelada.${sufijoAlertas}`);
       onCerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cancelar la orden");

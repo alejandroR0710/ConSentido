@@ -27,7 +27,7 @@ import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoAcumuladoModal } from "../components/EgresoAcumuladoModal";
 import { resumenAReciboProps } from "../factura";
-import { agruparPorEtiqueta, agruparPorEtiquetaConMetodo, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
+import { agruparPorEtiqueta, agruparPorEtiquetaConMetodo, labelMetodoPago, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
   "Enero",
@@ -663,7 +663,7 @@ export function CajaHistorialPage() {
                                 {m.motivo && <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> · {m.motivo}</span>}
                               </div>
                               <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
-                                {formatearHora(m.created_at)} · {m.metodo_pago}
+                                {formatearHora(m.created_at)} · {labelMetodoPago(m)}
                                 {m.numero_factura && (
                                   <span className="font-mono text-brand-ink/70 dark:text-brand-vanilla/70">
                                     {" "}

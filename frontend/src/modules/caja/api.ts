@@ -62,6 +62,10 @@ export interface MovimientoCaja {
   monto_sin_descuento: string | null;
   descuento_porcentaje: string | null;
   metodo_pago: MetodoPago;
+  // true en LAS DOS líneas (efectivo + banco) de un pago mixto — nunca en un
+  // pago puro. metodo_pago sigue siendo puro, esto es solo para mostrar
+  // "Mixta · efectivo"/"Mixta · banco" en vez de solo el método.
+  es_pago_mixto: boolean;
   motivo: string | null;
   usuario_id: string | null;
   created_at: string;

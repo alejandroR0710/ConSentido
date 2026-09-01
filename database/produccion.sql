@@ -955,6 +955,17 @@ ALTER TABLE pagos ADD COLUMN IF NOT EXISTS vuelto_efectivo NUMERIC(12,2);
 
 
 -- ========================================================================
+-- SECCIÓN 22: MARCAR PAGOS MIXTOS EN movimientos_caja (Caja General)
+-- ========================================================================
+-- 'mixto' nunca es un método real (metodo_pago sigue 'efectivo'/'banco'
+-- puro) — un pago mixto se descompone en 1 fila de cada uno; esta columna
+-- marca ambas como parte del mismo pago mixto solo para mostrarlo así en
+-- los historiales ("Mixta · efectivo" / "Mixta · banco"), sin tocar ningún
+-- cálculo existente (esos siguen filtrando por metodo_pago tal cual).
+ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS es_pago_mixto BOOLEAN NOT NULL DEFAULT false;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

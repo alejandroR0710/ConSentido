@@ -1,5 +1,13 @@
 import type { ModuloOrigenSlug, MovimientoCaja } from "./api";
 
+/** Un pago mixto se guarda como 2 movimientos ya con método puro (ver
+ *  backend caja.service.ts::insertarMovimientosIngreso) — esto reconstruye
+ *  la etiqueta "Mixta · efectivo"/"Mixta · banco" para mostrarlo en los
+ *  historiales, sin que ningún cálculo tenga que dejar de usar el método puro. */
+export function labelMetodoPago(m: Pick<MovimientoCaja, "metodo_pago" | "es_pago_mixto">): string {
+  return m.es_pago_mixto ? `Mixta · ${m.metodo_pago}` : m.metodo_pago;
+}
+
 // Con Sentido primero a propósito: es el origen más común de un ingreso
 // registrado a mano desde acá (Migao casi siempre cobra desde su propia
 // pantalla) — varios formularios usan MODULOS_ORIGEN[0] como valor por

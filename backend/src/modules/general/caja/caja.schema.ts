@@ -39,6 +39,12 @@ const camposIngreso = {
   // (y se suma al turno) ya es el monto neto — ver caja.service.ts::registrarIngreso.
   descuentoPorcentaje: z.number().min(0).max(100).optional(),
   items: z.array(itemIngresoSchema).optional(),
+  // Nunca lo manda el formulario de "Registrar ingreso" (ahí se autodetecta
+  // por metodoPago:"mixto" con las 2 partes > 0, ver insertarMovimientosIngreso)
+  // — solo lo pasan las llamadas internas de Migao (cerrarOrden/pagarItems/
+  // registrarAbono), que ya le mandan cada línea con su método puro y por eso
+  // necesitan decir aparte que ese pago, en conjunto, sí fue mixto.
+  esPagoMixto: z.boolean().optional(),
 };
 export const registrarIngresoSchema = z.union([
   z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

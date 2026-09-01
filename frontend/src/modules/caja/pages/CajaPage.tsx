@@ -19,7 +19,7 @@ import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHi
 import { EgresoModal } from "../components/EgresoModal";
 import { resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
-import { agruparPorEtiqueta } from "../moduloOrigen";
+import { agruparPorEtiqueta, labelMetodoPago } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
 
 const POLL_MS = 10000;
@@ -420,7 +420,7 @@ export function CajaPage() {
                                     <div className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
                                       {m.modulo_origen_slug ?? m.categoria_gasto_nombre ?? "—"}
                                     </div>
-                                    <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">{m.metodo_pago}</span>
+                                    <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">{labelMetodoPago(m)}</span>
                                   </div>
                                   {m.motivo && (
                                     <div className="mt-1 text-xs text-brand-ink/70 dark:text-brand-vanilla/70 italic">

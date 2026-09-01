@@ -158,6 +158,12 @@ CREATE TABLE movimientos_caja (
   monto_sin_descuento NUMERIC(12,2),
   descuento_porcentaje NUMERIC(5,2),
   metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco')),
+  -- 'mixto' nunca es un método real acá (metodo_pago sigue puro) — un pago
+  -- mixto se descompone en 1 fila 'efectivo' + 1 fila 'banco', esta marca
+  -- ambas como parte del mismo pago mixto, solo para mostrarlo así en los
+  -- historiales ("Mixta · efectivo" / "Mixta · banco") sin afectar ningún
+  -- cálculo (esos siguen filtrando por metodo_pago tal cual).
+  es_pago_mixto      BOOLEAN NOT NULL DEFAULT false,
   motivo             VARCHAR(200),
   usuario_id         UUID NOT NULL REFERENCES usuarios(id), -- quien registra/retira
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),

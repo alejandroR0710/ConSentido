@@ -109,6 +109,11 @@ async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioI
   const turno = await turnoAbiertoOrThrow(executor);
   const partes = descomponerPago(input);
   const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
+  // Autodetectado (2 líneas = de verdad fue mixto, no un "mixto" con un lado
+  // en $0 que ya quedó reducido a 1 sola línea) salvo que el llamador ya lo
+  // sepa de antemano (ver camposIngreso.esPagoMixto — llamadas internas de
+  // Migao, que llegan con cada línea ya decompuesta en método puro).
+  const esPagoMixto = input.esPagoMixto ?? partes.length > 1;
   const movimientos = [];
   for (const parte of partes) {
     // Si hubo descuento, se guarda también cuánto habría sido esta línea sin
@@ -128,6 +133,7 @@ async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioI
         usuarioId,
         montoSinDescuento,
         descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+        esPagoMixto,
       }),
     );
   }
@@ -160,6 +166,9 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       input.items && input.items.length > 0
         ? input.items
         : [{ nombre: input.motivo?.trim() || "Ingreso registrado", cantidad: 1, precioUnitario: totalBruto }];
+    // Autodetectado igual que en insertarMovimientosIngreso: 2 líneas = de
+    // verdad fue mixto (no un "mixto" con un lado en $0, ya reducido a 1 sola).
+    const esPagoMixto = partes.length > 1;
 
     const venta = await repo.crearVentaManual(client, {
       moduloOrigenSlug: input.moduloOrigenSlug,
@@ -195,6 +204,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
           usuarioId,
           montoSinDescuento,
           descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+          esPagoMixto,
         }),
       );
     }

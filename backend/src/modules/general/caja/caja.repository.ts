@@ -468,13 +468,17 @@ export async function insertIngreso(
     usuarioId: string;
     montoSinDescuento?: number;
     descuentoPorcentaje?: number;
+    // true en LAS DOS líneas de un pago mixto (nunca en un pago puro) — solo
+    // para mostrarlo así en los historiales, metodoPago sigue puro y todos
+    // los cálculos existentes lo siguen usando tal cual.
+    esPagoMixto?: boolean;
   },
 ) {
   const result = await executor.query(
     `INSERT INTO movimientos_caja
        (turno_id, tipo, modulo_origen_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id,
-        monto_sin_descuento, descuento_porcentaje)
-     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8, $9, $10)
+        monto_sin_descuento, descuento_porcentaje, es_pago_mixto)
+     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       params.turnoId,
@@ -487,6 +491,7 @@ export async function insertIngreso(
       params.usuarioId,
       params.montoSinDescuento ?? null,
       params.descuentoPorcentaje ?? null,
+      params.esPagoMixto ?? false,
     ],
   );
   return result.rows[0];

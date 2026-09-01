@@ -1,7 +1,7 @@
 import { Pool, PoolClient } from "pg";
 import { pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
-import { descomponerPago } from "../../../shared/utils/pago-mixto";
+import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
@@ -169,6 +169,11 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
     // Autodetectado igual que en insertarMovimientosIngreso: 2 líneas = de
     // verdad fue mixto (no un "mixto" con un lado en $0, ya reducido a 1 sola).
     const esPagoMixto = partes.length > 1;
+    // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
+    const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
+      partes.find((p) => p.metodoPago === "efectivo")?.monto ?? 0,
+      input.montoRecibidoEfectivo,
+    );
 
     const venta = await repo.crearVentaManual(client, {
       moduloOrigenSlug: input.moduloOrigenSlug,
@@ -191,6 +196,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
         monto: parte.monto,
         referencia: input.motivo ?? null,
         usuarioId,
+        montoRecibidoEfectivo: parte.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
       });
       movimientos.push(
         await repo.insertIngreso(client, {

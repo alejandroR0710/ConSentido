@@ -318,11 +318,26 @@ export async function crearPagoParaVenta(
     monto: number;
     referencia: string | null;
     usuarioId: string;
+    // Solo tiene sentido cuando metodoPago = 'efectivo' — mismo criterio que
+    // migao.repository.ts::crearPago (vuelto se calcula acá mismo).
+    montoRecibidoEfectivo?: number;
   },
 ) {
+  const vueltoEfectivo = params.montoRecibidoEfectivo != null ? params.montoRecibidoEfectivo - params.monto : null;
   await client.query(
-    `INSERT INTO pagos (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-    [params.ordenId, params.ventaId, params.metodoPago, params.monto, params.referencia, params.usuarioId],
+    `INSERT INTO pagos
+       (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id, monto_recibido_efectivo, vuelto_efectivo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      params.ordenId,
+      params.ventaId,
+      params.metodoPago,
+      params.monto,
+      params.referencia,
+      params.usuarioId,
+      params.montoRecibidoEfectivo ?? null,
+      vueltoEfectivo,
+    ],
   );
 }
 

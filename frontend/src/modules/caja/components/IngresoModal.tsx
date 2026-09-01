@@ -61,8 +61,13 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
   const montoNeto = montoBruto * (1 - descuentoPorcentaje / 100);
   const mixtoInvalido =
     pago.metodoPago === "mixto" && Math.abs(pago.montoEfectivo + pago.montoBanco - montoNeto) > 0.01;
+  // Cuánto de este ingreso va en efectivo de verdad — obligatorio indicar
+  // cuánto entregó el cliente para calcular la vuelta (backend también lo
+  // valida, ver caja.service.ts::exigirMontoRecibidoEfectivo).
+  const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? montoNeto : 0;
+  const faltaMontoRecibido = montoEnEfectivo > 0 && montoRecibido < montoEnEfectivo;
   const puedeRegistrar =
-    montoNeto > 0 && !mixtoInvalido && (modoMonto === "unico" || lineasValidas.length > 0);
+    montoNeto > 0 && !mixtoInvalido && !faltaMontoRecibido && (modoMonto === "unico" || lineasValidas.length > 0);
 
   function actualizarLinea(key: number, cambios: Partial<LineaIngreso>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -81,12 +86,15 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
         modoMonto === "productos"
           ? lineasValidas.map((l) => ({ nombre: l.nombre.trim(), cantidad: l.cantidad, precioUnitario: l.precioUnitario }))
           : undefined;
+      const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
       const creado = await cajaApi.registrarIngreso({
         moduloOrigenSlug: modulo,
         motivo: motivo.trim() || undefined,
         descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         items,
-        ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto: montoNeto }),
+        ...(pago.metodoPago === "mixto"
+          ? { ...pago, montoRecibidoEfectivo }
+          : { metodoPago: pago.metodoPago, monto: montoNeto, montoRecibidoEfectivo }),
       });
       await onRegistrado();
       setResultado(creado);
@@ -271,9 +279,12 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
         <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={montoNeto} />
       </div>
 
-      {pago.metodoPago === "efectivo" && (
+      {pago.metodoPago !== "banco" && (
         <div className="mb-3">
-          <CalculadoraVuelta aPagar={montoNeto} recibido={montoRecibido} onChange={setMontoRecibido} />
+          <CalculadoraVuelta aPagar={montoEnEfectivo} recibido={montoRecibido} onChange={setMontoRecibido} />
+          {faltaMontoRecibido && (
+            <p className="mt-1 text-xs text-red-600">Escribe cuánto te dio el cliente en efectivo para poder registrar el ingreso.</p>
+          )}
         </div>
       )}
 

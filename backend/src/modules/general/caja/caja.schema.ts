@@ -45,6 +45,10 @@ const camposIngreso = {
   // registrarAbono), que ya le mandan cada línea con su método puro y por eso
   // necesitan decir aparte que ese pago, en conjunto, sí fue mixto.
   esPagoMixto: z.boolean().optional(),
+  // Obligatorio cuando el ingreso mueve efectivo (validado en el service, ver
+  // exigirMontoRecibidoEfectivo): cuánto entregó el cliente, para calcular y
+  // dejar registrada la vuelta — mismo criterio que en Migao.
+  montoRecibidoEfectivo: z.number().nonnegative().optional(),
 };
 export const registrarIngresoSchema = z.union([
   z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

@@ -2,7 +2,7 @@ import { PoolClient } from "pg";
 import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
-import { descomponerPago } from "../../shared/utils/pago-mixto";
+import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as inventarioService from "./inventario.service";
@@ -59,27 +59,9 @@ function notificarAlertasInventario(alertas: string[]) {
  * inventario de queso/amasijos apareciendo con más stock del que en realidad
  * quedaba).
  */
-/**
- * Exige y valida "cuánto entregó el cliente en efectivo" siempre que un pago
- * mueva plata física — obligatorio para poder calcular y dejar registrado
- * (ver repo.crearPago) cuánto se le devolvió de vuelta. `montoEnEfectivo` es
- * la parte del cobro que de verdad va en efectivo (el total si el método es
- * 'efectivo' puro, o `montoEfectivo` si es mixto); si es 0 (pago 100% banco,
- * o mixto sin nada en efectivo) no hay nada que exigir. Devuelve el valor ya
- * validado, listo para pasarle a crearPago en la línea 'efectivo'.
- */
-function exigirMontoRecibidoEfectivo(
-  montoEnEfectivo: number,
-  montoRecibidoEfectivo: number | undefined,
-): number | undefined {
-  if (montoEnEfectivo <= 0) return undefined;
-  if (montoRecibidoEfectivo == null || montoRecibidoEfectivo < montoEnEfectivo - 0.01) {
-    throw Errors.badRequest(
-      `Indica cuánto te entregó el cliente en efectivo (al menos ${montoEnEfectivo}) para calcular la vuelta`,
-    );
-  }
-  return montoRecibidoEfectivo;
-}
+// exigirMontoRecibidoEfectivo ahora vive en shared/utils/pago-mixto.ts —
+// también lo usa caja.service.ts::registrarIngresoManual (ingreso manual de
+// Caja General), que tiene la misma regla.
 
 async function aplicarConsumoFaltanteAlCerrar(
   client: PoolClient,

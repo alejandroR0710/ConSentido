@@ -5,9 +5,13 @@ export type ModuloOrigenSlug = "insumos" | "talleres" | "con_sentido" | "migao" 
 
 // "mixto" no es un método real (ver backend shared/utils/pago-mixto.ts): el
 // backend lo descompone en 1-2 movimientos ya con método puro.
+// montoRecibidoEfectivo: obligatorio en un INGRESO cuando hay efectivo de por
+// medio (ver caja.service.ts::exigirMontoRecibidoEfectivo) — cuánto entregó
+// el cliente, para calcular y dejar registrada la vuelta. No aplica a egresos
+// (el campo va en el tipo compartido, pero el backend lo ignora ahí).
 export type PagoInput =
-  | { metodoPago: "efectivo" | "banco"; monto: number }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+  | { metodoPago: "efectivo" | "banco"; monto: number; montoRecibidoEfectivo?: number }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number };
 
 // Ítem libre (modo "Agregar productos" del ingreso manual) — nombre en vez
 // de producto_id, no hay catálogo detrás (ver caja_ingreso_items en schema.sql).

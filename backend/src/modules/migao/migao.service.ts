@@ -59,6 +59,28 @@ function notificarAlertasInventario(alertas: string[]) {
  * inventario de queso/amasijos apareciendo con más stock del que en realidad
  * quedaba).
  */
+/**
+ * Exige y valida "cuánto entregó el cliente en efectivo" siempre que un pago
+ * mueva plata física — obligatorio para poder calcular y dejar registrado
+ * (ver repo.crearPago) cuánto se le devolvió de vuelta. `montoEnEfectivo` es
+ * la parte del cobro que de verdad va en efectivo (el total si el método es
+ * 'efectivo' puro, o `montoEfectivo` si es mixto); si es 0 (pago 100% banco,
+ * o mixto sin nada en efectivo) no hay nada que exigir. Devuelve el valor ya
+ * validado, listo para pasarle a crearPago en la línea 'efectivo'.
+ */
+function exigirMontoRecibidoEfectivo(
+  montoEnEfectivo: number,
+  montoRecibidoEfectivo: number | undefined,
+): number | undefined {
+  if (montoEnEfectivo <= 0) return undefined;
+  if (montoRecibidoEfectivo == null || montoRecibidoEfectivo < montoEnEfectivo - 0.01) {
+    throw Errors.badRequest(
+      `Indica cuánto te entregó el cliente en efectivo (al menos ${montoEnEfectivo}) para calcular la vuelta`,
+    );
+  }
+  return montoRecibidoEfectivo;
+}
+
 async function aplicarConsumoFaltanteAlCerrar(
   client: PoolClient,
   items: { id: number | string; producto_id: string; cantidad: string | number; estado: string; es_para_llevar: boolean }[],
@@ -1032,6 +1054,12 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
             })()
           : descomponerPago({ metodoPago: input.metodoPago, monto: total });
 
+      // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
+      const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
+        lineas.find((l) => l.metodoPago === "efectivo")?.monto ?? 0,
+        input.montoRecibidoEfectivo,
+      );
+
       for (const linea of lineas) {
         await repo.crearPago(client, {
           ordenId,
@@ -1040,6 +1068,7 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
           monto: linea.monto,
           referencia: input.referencia,
           usuarioId,
+          montoRecibidoEfectivo: linea.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
         });
 
         // El % de descuento se pasa tal cual: registrarIngreso ya calcula el
@@ -1200,6 +1229,12 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
         ? descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivoRecibido, montoBanco: bancoRecibido })
         : descomponerPago({ metodoPago: input.metodoPago, monto: total });
 
+    // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
+    const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
+      lineas.find((l) => l.metodoPago === "efectivo")?.monto ?? 0,
+      input.montoRecibidoEfectivo,
+    );
+
     for (const linea of lineas) {
       await repo.crearPago(client, {
         ordenId,
@@ -1207,6 +1242,7 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
         metodoPago: linea.metodoPago,
         monto: linea.monto,
         usuarioId,
+        montoRecibidoEfectivo: linea.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
       });
       await cajaService.registrarIngreso(
         {
@@ -1450,6 +1486,12 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
           })()
         : descomponerPago({ metodoPago: input.metodoPago, monto: montoAbono });
 
+    // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
+    const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
+      lineas.find((l) => l.metodoPago === "efectivo")?.monto ?? 0,
+      input.montoRecibidoEfectivo,
+    );
+
     for (const linea of lineas) {
       await repo.crearPago(client, {
         ordenId: parte.orden_id,
@@ -1459,6 +1501,7 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
         referencia: `Abono parte ${parte.indice}`,
         usuarioId,
         parteId,
+        montoRecibidoEfectivo: linea.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
       });
       await cajaService.registrarIngreso(
         {

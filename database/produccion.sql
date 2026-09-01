@@ -945,6 +945,16 @@ ALTER TABLE categorias_gasto ADD COLUMN IF NOT EXISTS modulo_id INT REFERENCES m
 
 
 -- ========================================================================
+-- SECCIÓN 21: MONTO RECIBIDO Y VUELTA EN EFECTIVO (Migao, obligatorio al cobrar)
+-- ========================================================================
+-- Solo se llenan en la línea 'efectivo' de un pago (nunca 'banco' ni
+-- 'administrativo'): cuánto entregó el cliente en efectivo y cuánto se le
+-- devolvió — registro para auditoría en el historial, nunca en la factura.
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS monto_recibido_efectivo NUMERIC(12,2);
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS vuelto_efectivo NUMERIC(12,2);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

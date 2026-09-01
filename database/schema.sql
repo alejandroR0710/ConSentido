@@ -879,6 +879,13 @@ CREATE TABLE pagos (
   parte_id    UUID REFERENCES migao_cuenta_partes(id),
   usuario_id  UUID REFERENCES usuarios(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Solo se llenan en la línea 'efectivo' de un pago (nunca en 'banco' ni
+  -- 'administrativo', ahí no hay plata física de por medio): cuánto entregó
+  -- el cliente en efectivo y cuánto se le devolvió de vuelta. Obligatorio en
+  -- pantalla al cobrar en efectivo (ver migao.service.ts) — registro para
+  -- auditoría en el historial, nunca aparece en la factura impresa.
+  monto_recibido_efectivo NUMERIC(12,2),
+  vuelto_efectivo         NUMERIC(12,2),
   CHECK (orden_id IS NOT NULL OR venta_id IS NOT NULL)
 );
 

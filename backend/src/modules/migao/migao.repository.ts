@@ -141,7 +141,8 @@ export async function listOrdenesHistorial(meseroId?: string) {
             u.nombre AS mesero_nombre, MAX(mc.movimiento_id) AS movimiento_id, MAX(mc.metodo_pago) AS metodo_pago,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
             MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
-            MAX(f.numero) AS numero_factura
+            MAX(f.numero) AS numero_factura,
+            MAX(pe.monto_recibido_efectivo) AS monto_recibido_efectivo, MAX(pe.vuelto_efectivo) AS vuelto_efectivo
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -165,6 +166,16 @@ export async function listOrdenesHistorial(meseroId?: string) {
          FROM movimientos_caja inner_mc
          WHERE inner_mc.referencia_entidad = 'ventas' AND inner_mc.referencia_id = v.id::text
        ) mc ON true
+       -- Solo para auditoría en este historial (nunca en la factura, ver
+       -- factura.ts): cuánto entregó el cliente en efectivo y cuánto se le
+       -- devolvió — suma todas las líneas 'efectivo' de la venta (una cuenta
+       -- dividida/con abonos puede tener más de una).
+       LEFT JOIN LATERAL (
+         SELECT SUM(inner_p.monto_recibido_efectivo) AS monto_recibido_efectivo,
+                SUM(inner_p.vuelto_efectivo) AS vuelto_efectivo
+         FROM pagos inner_p
+         WHERE inner_p.venta_id = v.id AND inner_p.monto_recibido_efectivo IS NOT NULL
+       ) pe ON true
       -- Cajero ($1 = NULL): solo cobradas — las canceladas viven en su propio
       -- historial aparte (ver listOrdenesHistorialCancelado), no tiene sentido
       -- mezclar cuentas que nunca generaron un peso con el pago diario real.
@@ -821,11 +832,18 @@ export async function crearPago(
     // viene de un abono del motor nuevo de pagos parciales/cuenta dividida
     // por igual (ver migao_cuenta_partes).
     parteId?: string;
+    // Solo tiene sentido cuando metodoPago = 'efectivo' — cuánto entregó el
+    // cliente físicamente; el llamador ya validó que alcance (ver
+    // migao.service.ts::exigirMontoRecibidoEfectivo). vuelto se calcula acá
+    // mismo para no repetir la resta en cada llamador.
+    montoRecibidoEfectivo?: number;
   },
 ) {
+  const vueltoEfectivo = params.montoRecibidoEfectivo != null ? params.montoRecibidoEfectivo - params.monto : null;
   const result = await client.query(
-    `INSERT INTO pagos (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id, parte_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO pagos
+       (orden_id, venta_id, metodo_pago, monto, referencia, usuario_id, parte_id, monto_recibido_efectivo, vuelto_efectivo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
     [
       params.ordenId,
       params.ventaId,
@@ -834,6 +852,8 @@ export async function crearPago(
       params.referencia ?? null,
       params.usuarioId,
       params.parteId ?? null,
+      params.montoRecibidoEfectivo ?? null,
+      vueltoEfectivo,
     ],
   );
   return result.rows[0];

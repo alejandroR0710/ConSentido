@@ -303,7 +303,14 @@ export function MigaoHistorialPage() {
                         {h.estado === "cerrada" ? "Cobrada" : "Cancelada"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{h.metodo_pago ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      {h.metodo_pago ?? "—"}
+                      {h.monto_recibido_efectivo != null && (
+                        <div className="text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                          Recibí {formatMoney(h.monto_recibido_efectivo)} · Vuelta {formatMoney(h.vuelto_efectivo ?? 0)}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{formatearFechaHora(h.closed_at)}</td>
                     <td className="px-3 py-2">
                       {h.descuento_porcentaje > 0 ? (

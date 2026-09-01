@@ -274,8 +274,16 @@ export function MigaoPage() {
     setModalPagarItemsAbierto(true);
   }
 
+  const montoEnEfectivoItems =
+    pagoItems.metodoPago === "mixto"
+      ? pagoItems.montoEfectivo
+      : pagoItems.metodoPago === "efectivo"
+        ? totalSeleccionados + propinaItemsMonto
+        : 0;
+  const faltaMontoRecibidoItems = montoEnEfectivoItems > 0 && montoRecibidoItems < montoEnEfectivoItems;
+
   async function confirmarPagarItems() {
-    if (!ordenSeleccionadaId || itemsSeleccionados.size === 0) return;
+    if (!ordenSeleccionadaId || itemsSeleccionados.size === 0 || faltaMontoRecibidoItems) return;
     if (
       pagoItems.metodoPago === "mixto" &&
       Math.abs(pagoItems.montoEfectivo + pagoItems.montoBanco - (totalSeleccionados + propinaItemsMonto)) > 0.01
@@ -291,6 +299,7 @@ export function MigaoPage() {
       const resultado = await migaoApi.pagarItems(ordenSeleccionadaId, {
         itemIds: Array.from(itemsSeleccionados),
         ...pagoItems,
+        montoRecibidoEfectivo: montoEnEfectivoItems > 0 ? montoRecibidoItems : undefined,
         ...(propinaItemsMonto > 0 ? { propina: propinaItemsMonto } : {}),
       });
       setModalPagarItemsAbierto(false);
@@ -344,6 +353,17 @@ export function MigaoPage() {
     detalle !== null &&
     Math.abs(pago.montoEfectivo + pago.montoBanco - (totalConDescuento + propinaMonto)) > 0.01;
 
+  // Cuánto de este cobro va en efectivo de verdad — mismo cálculo que el
+  // `aPagar` de la CalculadoraVuelta de abajo, reutilizado acá para poder
+  // exigir "Recibí" antes de dejar cobrar (backend también lo valida, ver
+  // migao.service.ts::exigirMontoRecibidoEfectivo).
+  const montoEnEfectivoSimple = esAdministrativo
+    ? 0
+    : pago.metodoPago === "mixto"
+      ? pago.montoEfectivo
+      : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto;
+  const faltaMontoRecibido = montoEnEfectivoSimple > 0 && montoRecibido < montoEnEfectivoSimple;
+
   /** Trae la factura recién generada y la ofrece para imprimir de una vez —
    *  si falla, solo se avisa aparte, nunca deshace el cobro (ya se cerró). */
   async function abrirFacturaTrasCobro(ordenId: string) {
@@ -357,14 +377,17 @@ export function MigaoPage() {
   }
 
   async function cerrarYCobrar() {
-    if (!ordenSeleccionadaId || pagoMixtoInvalido) return;
+    if (!ordenSeleccionadaId || pagoMixtoInvalido || faltaMontoRecibido) return;
     setCobrando(true);
     setError(null);
     setMensaje(null);
     try {
+      const pagoConRecibido = esAdministrativo
+        ? ({ metodoPago: "administrativo" } as const)
+        : { ...pago, montoRecibidoEfectivo: montoEnEfectivoSimple > 0 ? montoRecibido : undefined };
       const resultado = await migaoApi.cerrarOrden(
         ordenSeleccionadaId,
-        esAdministrativo ? { metodoPago: "administrativo" } : pago,
+        pagoConRecibido,
         descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         propinaMonto > 0 ? { propina: propinaMonto, propinaPorcentaje, propinaMetodoPago } : undefined,
       );
@@ -556,11 +579,26 @@ export function MigaoPage() {
     : false;
   const totalAPagarAhora = Object.values(abonoForms).reduce((acc, f) => acc + f.montoPagarAhora, 0);
 
+  // Mismo cálculo que el `aPagar` de la CalculadoraVuelta de cada parte, para
+  // poder exigir "Recibí" antes de dejar registrar el/los abono(s).
+  function montoEnEfectivoDeAbono(form: { pago: MetodoPagoValor; montoPagarAhora: number; propina: number }) {
+    if (form.pago.metodoPago === "mixto") return form.pago.montoEfectivo;
+    return montoEfectivoRequerido(form.pago, form.montoPagarAhora) + form.propina;
+  }
+  const algunAbonoSinMontoRecibido = cuenta
+    ? cuenta.partes.some((parte) => {
+        const form = abonoForms[parte.id];
+        if (!form || form.montoPagarAhora <= 0) return false;
+        const montoEnEfectivo = montoEnEfectivoDeAbono(form);
+        return montoEnEfectivo > 0 && form.montoRecibido < montoEnEfectivo;
+      })
+    : false;
+
   /** Registra un abono por cada parte que tenga algo que pagar ahora — puede
    *  ser el pago completo de todas (cierra la orden) o parcial de alguna(s)
    *  (la orden queda en 'pagando' hasta el próximo abono). */
   async function registrarPagos() {
-    if (!ordenSeleccionadaId || !cuenta) return;
+    if (!ordenSeleccionadaId || !cuenta || algunAbonoSinMontoRecibido) return;
     setCobrando(true);
     setError(null);
     setMensaje(null);
@@ -570,10 +608,18 @@ export function MigaoPage() {
         const form = abonoForms[parte.id];
         if (!form || form.montoPagarAhora <= 0) continue;
         const propinaInput = form.propina > 0 ? { monto: form.propina, porcentaje: propinaPorcentaje } : undefined;
+        const montoEnEfectivo = montoEnEfectivoDeAbono(form);
+        const montoRecibidoEfectivo = montoEnEfectivo > 0 ? form.montoRecibido : undefined;
         const input: RegistrarAbonoInput =
           form.pago.metodoPago === "mixto"
-            ? { metodoPago: "mixto", montoEfectivo: form.pago.montoEfectivo, montoBanco: form.pago.montoBanco, propina: propinaInput }
-            : { metodoPago: form.pago.metodoPago, monto: form.montoPagarAhora, propina: propinaInput };
+            ? {
+                metodoPago: "mixto",
+                montoEfectivo: form.pago.montoEfectivo,
+                montoBanco: form.pago.montoBanco,
+                propina: propinaInput,
+                montoRecibidoEfectivo,
+              }
+            : { metodoPago: form.pago.metodoPago, monto: form.montoPagarAhora, propina: propinaInput, montoRecibidoEfectivo };
         cuentaActual = await migaoApi.registrarAbono(parte.id, input);
       }
       setCuenta(cuentaActual);
@@ -1059,22 +1105,21 @@ export function MigaoPage() {
                       <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalConDescuento + propinaMonto} />
 
                       {pago.metodoPago !== "banco" && (
-                        <CalculadoraVuelta
-                          aPagar={
-                            pago.metodoPago === "mixto"
-                              ? pago.montoEfectivo // ya incluye su parte de la propina (ver validación de arriba)
-                              : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto
-                          }
-                          recibido={montoRecibido}
-                          onChange={setMontoRecibido}
-                        />
+                        <>
+                          <CalculadoraVuelta aPagar={montoEnEfectivoSimple} recibido={montoRecibido} onChange={setMontoRecibido} />
+                          {faltaMontoRecibido && (
+                            <p className="-mt-1 text-xs text-red-600">
+                              Escribe cuánto te dio el cliente en efectivo para poder cerrar la cuenta.
+                            </p>
+                          )}
+                        </>
                       )}
                     </>
                   )}
 
                   <button
                     onClick={cerrarYCobrar}
-                    disabled={cobrando || pagoMixtoInvalido}
+                    disabled={cobrando || pagoMixtoInvalido || faltaMontoRecibido}
                     className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                   >
                     {cobrando ? "Cobrando..." : "Cobrar y cerrar orden"}
@@ -1297,15 +1342,18 @@ export function MigaoPage() {
                                   totalFijo={form.montoPagarAhora + form.propina}
                                 />
                                 {form.pago.metodoPago !== "banco" && (
-                                  <CalculadoraVuelta
-                                    aPagar={
-                                      form.pago.metodoPago === "mixto"
-                                        ? form.pago.montoEfectivo
-                                        : montoEfectivoRequerido(form.pago, form.montoPagarAhora) + form.propina
-                                    }
-                                    recibido={form.montoRecibido}
-                                    onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
-                                  />
+                                  <>
+                                    <CalculadoraVuelta
+                                      aPagar={montoEnEfectivoDeAbono(form)}
+                                      recibido={form.montoRecibido}
+                                      onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                                    />
+                                    {montoEnEfectivoDeAbono(form) > 0 && form.montoRecibido < montoEnEfectivoDeAbono(form) && (
+                                      <p className="text-xs text-red-600">
+                                        Escribe cuánto te dio el cliente en efectivo para poder registrar este abono.
+                                      </p>
+                                    )}
+                                  </>
                                 )}
                               </>
                             )}
@@ -1319,7 +1367,7 @@ export function MigaoPage() {
 
                       <button
                         onClick={registrarPagos}
-                        disabled={cobrando || algunAbonoMixtoInvalido || totalAPagarAhora <= 0}
+                        disabled={cobrando || algunAbonoMixtoInvalido || algunAbonoSinMontoRecibido || totalAPagarAhora <= 0}
                         className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                       >
                         {cobrando ? "Cobrando..." : "Registrar pago(s)"}
@@ -1388,15 +1436,10 @@ export function MigaoPage() {
 
           {pagoItems.metodoPago !== "banco" && (
             <div className="mb-3">
-              <CalculadoraVuelta
-                aPagar={
-                  pagoItems.metodoPago === "mixto"
-                    ? pagoItems.montoEfectivo
-                    : totalSeleccionados + propinaItemsMonto
-                }
-                recibido={montoRecibidoItems}
-                onChange={setMontoRecibidoItems}
-              />
+              <CalculadoraVuelta aPagar={montoEnEfectivoItems} recibido={montoRecibidoItems} onChange={setMontoRecibidoItems} />
+              {faltaMontoRecibidoItems && (
+                <p className="mt-1 text-xs text-red-600">Escribe cuánto te dio el cliente en efectivo para poder cobrar.</p>
+              )}
             </div>
           )}
 
@@ -1404,7 +1447,7 @@ export function MigaoPage() {
 
           <button
             onClick={confirmarPagarItems}
-            disabled={cobrandoItems}
+            disabled={cobrandoItems || faltaMontoRecibidoItems}
             className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
           >
             {cobrandoItems ? "Cobrando..." : "Cobrar y generar factura"}

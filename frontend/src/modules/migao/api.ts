@@ -54,6 +54,10 @@ export interface HistorialEntradaOrden extends OrdenHistorialResumen {
   // Se genera solo al cobrar (ver migao.service.ts::cerrarOrden), así que
   // siempre debería venir poblado para toda venta ya cerrada.
   numero_factura: string | null;
+  // Solo para auditoría acá en el historial (nunca en la factura impresa) —
+  // null si no hubo nada de efectivo de por medio. Ver pagos.monto_recibido_efectivo.
+  monto_recibido_efectivo: string | null;
+  vuelto_efectivo: string | null;
 }
 
 /** Cuenta cerrada con pago "administrativo": no generó ingreso en Caja
@@ -170,9 +174,13 @@ export type MetodoPago = "efectivo" | "banco";
 // backend lo descompone en 1-2 pagos/movimientos ya con método puro.
 // "administrativo": exclusivo de Root/Super Root, no genera ingreso en Caja
 // General (ver migao.service.ts::cerrarOrden) y solo aplica al cobro simple.
+// montoRecibidoEfectivo: obligatorio cuando hay efectivo de por medio (ver
+// migao.service.ts::exigirMontoRecibidoEfectivo) — cuánto entregó el cliente,
+// para calcular y dejar registrada la vuelta (solo en el historial, nunca en
+// la factura).
 export type PagoInput =
-  | { metodoPago: "efectivo" | "banco" | "administrativo" }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+  | { metodoPago: "efectivo" | "banco" | "administrativo"; montoRecibidoEfectivo?: number }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number };
 
 // "servido" solo aparece en el historial de despachados (GET /cocina/historial);
 // la cola activa (GET /cocina/items) nunca devuelve pendiente/preparando/listo.
@@ -341,7 +349,10 @@ export interface PropinaInput {
 // aparte de PagoInput/cerrarOrden e iniciarCobro/dividir cuenta: no fija de
 // antemano cómo queda partida la cuenta, cada llamada cobra lo que el
 // cajero seleccione ahí mismo y genera su propia venta+factura.
-export type PagarItemsInput = ({ metodoPago: "efectivo" | "banco" } | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number }) &
+export type PagarItemsInput = (
+  | { metodoPago: "efectivo" | "banco"; montoRecibidoEfectivo?: number }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number }
+) &
   PropinaInput & { itemIds: number[] };
 
 export interface PagarItemsResultado {
@@ -366,8 +377,14 @@ export interface PropinaAbonoInput {
 }
 
 export type RegistrarAbonoInput =
-  | { metodoPago: "efectivo" | "banco"; monto: number; propina?: PropinaAbonoInput }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; propina?: PropinaAbonoInput };
+  | { metodoPago: "efectivo" | "banco"; monto: number; propina?: PropinaAbonoInput; montoRecibidoEfectivo?: number }
+  | {
+      metodoPago: "mixto";
+      montoEfectivo: number;
+      montoBanco: number;
+      propina?: PropinaAbonoInput;
+      montoRecibidoEfectivo?: number;
+    };
 
 /** Una unidad de producto asignada a una parte (modo 'producto') — solo
  *  informativo, para mostrar "Parte 2: 1x Americano". */

@@ -357,11 +357,12 @@ export function MigaoPage() {
   // `aPagar` de la CalculadoraVuelta de abajo, reutilizado acá para poder
   // exigir "Recibí" antes de dejar cobrar (backend también lo valida, ver
   // migao.service.ts::exigirMontoRecibidoEfectivo).
-  const montoEnEfectivoSimple = esAdministrativo
-    ? 0
-    : pago.metodoPago === "mixto"
-      ? pago.montoEfectivo
-      : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto;
+  const montoEnEfectivoSimple =
+    esAdministrativo || pago.metodoPago === "banco"
+      ? 0
+      : pago.metodoPago === "mixto"
+        ? pago.montoEfectivo
+        : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto;
   const faltaMontoRecibido = montoEnEfectivoSimple > 0 && montoRecibido < montoEnEfectivoSimple;
 
   /** Trae la factura recién generada y la ofrece para imprimir de una vez —
@@ -582,6 +583,7 @@ export function MigaoPage() {
   // Mismo cálculo que el `aPagar` de la CalculadoraVuelta de cada parte, para
   // poder exigir "Recibí" antes de dejar registrar el/los abono(s).
   function montoEnEfectivoDeAbono(form: { pago: MetodoPagoValor; montoPagarAhora: number; propina: number }) {
+    if (form.pago.metodoPago === "banco") return 0;
     if (form.pago.metodoPago === "mixto") return form.pago.montoEfectivo;
     return montoEfectivoRequerido(form.pago, form.montoPagarAhora) + form.propina;
   }

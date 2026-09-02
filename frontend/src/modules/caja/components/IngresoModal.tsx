@@ -279,6 +279,14 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
         <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={montoNeto} />
       </div>
 
+      <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
+      <textarea
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        rows={3}
+        className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      />
+
       {pago.metodoPago !== "banco" && (
         <div className="mb-3">
           <CalculadoraVuelta aPagar={montoEnEfectivo} recibido={montoRecibido} onChange={setMontoRecibido} />
@@ -287,14 +295,6 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
           )}
         </div>
       )}
-
-      <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
-      <textarea
-        value={motivo}
-        onChange={(e) => setMotivo(e.target.value)}
-        rows={3}
-        className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

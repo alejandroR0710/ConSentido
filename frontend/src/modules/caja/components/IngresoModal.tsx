@@ -289,10 +289,11 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
       )}
 
       <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
-      <input
+      <textarea
         value={motivo}
         onChange={(e) => setMotivo(e.target.value)}
-        className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        rows={3}
+        className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}

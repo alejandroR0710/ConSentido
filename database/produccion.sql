@@ -966,6 +966,19 @@ ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS es_pago_mixto BOOLEAN NOT 
 
 
 -- ========================================================================
+-- SECCIÓN 23: "MOTIVO" SIN LÍMITE DE CARACTERES (Registrar ingreso, Caja General)
+-- ========================================================================
+-- Antes VARCHAR(200)/VARCHAR(100) — el motivo del ingreso manual cae en las
+-- dos columnas (movimientos_caja.motivo y pagos.referencia), así que las dos
+-- se amplían a TEXT (sin límite). No afecta ningún dato existente.
+ALTER TABLE movimientos_caja ALTER COLUMN motivo TYPE TEXT;
+ALTER TABLE pagos ALTER COLUMN referencia TYPE TEXT;
+-- En modo "Monto único" el motivo se usa tal cual como nombre del único
+-- ítem del ingreso — sin ampliar esta también, un motivo largo revienta ahí.
+ALTER TABLE caja_ingreso_items ALTER COLUMN nombre TYPE TEXT;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

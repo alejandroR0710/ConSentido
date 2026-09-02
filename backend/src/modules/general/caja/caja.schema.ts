@@ -32,7 +32,8 @@ const itemIngresoSchema = z.object({
 
 const camposIngreso = {
   moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
-  motivo: z.string().max(200).optional(),
+  // Sin límite de caracteres a propósito (ver movimientos_caja.motivo / pagos.referencia, ambas TEXT).
+  motivo: z.string().optional(),
   referenciaEntidad: z.string().max(80).optional(),
   referenciaId: z.string().max(64).optional(),
   // Descuento (%) opcional sobre el monto bruto: lo que realmente se registra

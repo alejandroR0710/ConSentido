@@ -164,7 +164,7 @@ CREATE TABLE movimientos_caja (
   -- historiales ("Mixta · efectivo" / "Mixta · banco") sin afectar ningún
   -- cálculo (esos siguen filtrando por metodo_pago tal cual).
   es_pago_mixto      BOOLEAN NOT NULL DEFAULT false,
-  motivo             VARCHAR(200),
+  motivo             TEXT, -- sin límite de caracteres (ver "Registrar ingreso" en Caja General)
   usuario_id         UUID NOT NULL REFERENCES usuarios(id), -- quien registra/retira
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (tipo = 'ingreso' OR categoria_gasto_id IS NOT NULL)
@@ -729,7 +729,9 @@ CREATE INDEX idx_venta_items_venta ON venta_items(venta_id);
 CREATE TABLE caja_ingreso_items (
   id              BIGSERIAL PRIMARY KEY,
   venta_id        UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
-  nombre          VARCHAR(150) NOT NULL,
+  -- Sin límite: en modo "Monto único" el motivo del ingreso (sin límite de
+  -- caracteres) se usa tal cual como nombre de este ítem único.
+  nombre          TEXT NOT NULL,
   cantidad        NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
   precio_unitario NUMERIC(12,2) NOT NULL,
   subtotal        NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED
@@ -878,7 +880,7 @@ CREATE TABLE pagos (
   -- (ver migao.service.ts::cerrarOrden) — se lleva en un historial aparte.
   metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco','administrativo')),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
-  referencia  VARCHAR(100),
+  referencia  TEXT, -- sin límite (acá cae el motivo del "Registrar ingreso" de Caja General)
   -- Cada abono (pago parcial o total) de una cuenta con pagos parciales/
   -- divididos queda tageado a su parte — NULL en el cobro simple de un solo
   -- paso (ver migao.service.ts::cerrarOrden, que no usa partes).

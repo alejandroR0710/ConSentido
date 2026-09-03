@@ -125,12 +125,12 @@ export function ReciboImprimible({
   // Cotización: relleno sólido (no solo borde+texto de color) — un color
   // claro sobre blanco se convierte en un punteado casi invisible en la
   // impresora térmica (mismo problema que el peso de fuente, ver comentario
-  // más abajo); un bloque negro sólido con texto blanco SIEMPRE imprime oscuro.
-  const franjaClase = esCotizacion
-    ? "border-black bg-black text-white"
-    : esEgreso
-      ? "border-red-600 text-red-700"
-      : "border-black text-black";
+  // más abajo). Para cotización se probó fondo negro con texto blanco, pero
+  // muchos navegadores/impresoras no imprimen el color de fondo por defecto
+  // ("imprimir gráficos de fondo" desactivado) y el texto blanco quedaba
+  // invisible sobre la hoja — texto negro en negrilla siempre imprime, con o
+  // sin esa opción activada.
+  const franjaClase = esEgreso ? "border-red-600 text-red-700" : "border-black text-black";
 
   const tituloDocumento = esCotizacion
     ? "Cotización"

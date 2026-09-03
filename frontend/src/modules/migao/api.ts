@@ -346,14 +346,16 @@ export interface PropinaInput {
 }
 
 // Cobrar productos sueltos de una cuenta que sigue abierta — motor NUEVO y
-// aparte de PagoInput/cerrarOrden e iniciarCobro/dividir cuenta: no fija de
-// antemano cómo queda partida la cuenta, cada llamada cobra lo que el
-// cajero seleccione ahí mismo y genera su propia venta+factura.
+// aparte de PagoInput/cerrarOrden: no fija de antemano cómo queda partida la
+// cuenta, cada llamada cobra lo que el cajero seleccione ahí mismo y genera
+// su propia venta+factura. `unidades` (no `itemIds` planos): permite pedir
+// solo PARTE de la cantidad de un ítem — ej. cobrar 1 de 3 limonadas, el
+// backend parte esa fila en dos (ver migao.service.ts::pagarItems).
 export type PagarItemsInput = (
   | { metodoPago: "efectivo" | "banco"; montoRecibidoEfectivo?: number }
   | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number }
 ) &
-  PropinaInput & { itemIds: number[] };
+  PropinaInput & { unidades: { itemId: number; cantidad: number }[] };
 
 export interface PagarItemsResultado {
   venta: { id: string };

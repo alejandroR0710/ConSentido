@@ -210,16 +210,20 @@ export type RegistrarAbonoInput = z.infer<typeof registrarAbonoSchema>;
 // venta+factura independiente, aparte de cerrarOrden/iniciarCobro de arriba.
 // Mismo shape que el cobro simple (método + propina opcional), sin
 // descuento/administrativo (no tendría sentido para solo una parte de la cuenta).
+// `unidades` (no `itemIds`): permite pedir solo PARTE de la cantidad de un
+// ítem (ej. cobrar 1 de 3 limonadas) — si la cantidad pedida es menor a la
+// del ítem, el service lo parte en dos filas (lo que se cobra ahora + lo que
+// queda pendiente, ver migao.repository.ts::duplicarItemParaPago).
 export const pagarItemsSchema = z.union([
   z.object({
-    itemIds: z.array(z.coerce.number().int().positive()).min(1),
+    unidades: unidadesSchema,
     metodoPago: z.enum(["efectivo", "banco"]),
     ...propinaSchema,
     ...montoRecibidoEfectivoSchema,
   }),
   z
     .object({
-      itemIds: z.array(z.coerce.number().int().positive()).min(1),
+      unidades: unidadesSchema,
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),

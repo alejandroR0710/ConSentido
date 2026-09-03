@@ -1112,18 +1112,42 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
     }
 
     const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
-    const seleccionados = itemsRaw.filter((i) => input.itemIds.includes(Number(i.id)));
-    if (seleccionados.length !== input.itemIds.length) {
-      throw Errors.badRequest("Algún producto seleccionado no pertenece a esta orden");
-    }
-    if (seleccionados.some((i) => i.estado === "cancelado")) {
-      throw Errors.badRequest("No se puede cobrar un producto cancelado");
-    }
-    if (seleccionados.some((i) => i.venta_id)) {
-      throw Errors.conflict("Alguno de estos productos ya fue pagado");
+    const porId = new Map(itemsRaw.map((i) => [Number(i.id), i]));
+
+    // Resuelve cada unidad pedida a la fila que de verdad se va a cobrar: la
+    // misma fila si se pide toda su cantidad, o una fila NUEVA (con el resto
+    // reducido en el original) si se pide solo una parte — ver
+    // repo.duplicarItemParaPago. Así "3x Limonada" puede cobrarse de a 1.
+    const idsYaResueltos = new Set<number>();
+    const itemsAPagar: (typeof itemsRaw)[number][] = [];
+    for (const u of input.unidades) {
+      if (idsYaResueltos.has(u.itemId)) {
+        throw Errors.badRequest(`El producto ${u.itemId} aparece más de una vez en la selección`);
+      }
+      idsYaResueltos.add(u.itemId);
+
+      const original = porId.get(u.itemId);
+      if (!original) throw Errors.badRequest(`El producto ${u.itemId} no pertenece a esta orden`);
+      if (original.estado === "cancelado") throw Errors.badRequest("No se puede cobrar un producto cancelado");
+      if (original.venta_id) throw Errors.conflict("Alguno de estos productos ya fue pagado");
+
+      const cantidadDisponible = Number(original.cantidad);
+      if (u.cantidad <= 0 || u.cantidad - cantidadDisponible > 0.001) {
+        throw Errors.badRequest(
+          `Cantidad inválida para "${original.producto_nombre}" (pediste ${u.cantidad}, hay ${cantidadDisponible})`,
+        );
+      }
+
+      if (Math.abs(u.cantidad - cantidadDisponible) <= 0.001) {
+        itemsAPagar.push(original);
+      } else {
+        const restante = cantidadDisponible - u.cantidad;
+        await repo.reducirCantidadItem(original.id, restante, client);
+        itemsAPagar.push(await repo.duplicarItemParaPago(original, u.cantidad, client));
+      }
     }
 
-    const items = calcularItemsConSubtotal(seleccionados);
+    const items = calcularItemsConSubtotal(itemsAPagar);
     const total = items.reduce((acc, i) => acc + i.subtotal, 0);
 
     if (input.metodoPago === "mixto") {

@@ -12,7 +12,6 @@ import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
   migaoApi,
   type CuentaDetalle,
-  type DivisionInput,
   type ItemActivo,
   type Mesa,
   type OrdenDetalle,
@@ -78,21 +77,11 @@ export function MigaoPage() {
   // Cuánto dijo el cliente que entregaba en efectivo — solo para calcular la
   // vuelta en pantalla, no se envía al backend (ver CalculadoraVuelta).
   const [montoRecibido, setMontoRecibido] = useState(0);
-  const [dividirCuenta, setDividirCuenta] = useState(false);
-  const [numPartes, setNumPartes] = useState(2);
-  // itemId (de orden_items) -> índice de parte (0-based) a la que quedó asignado.
-  // Clave por UNIDAD de producto (no por ítem): un ítem con cantidad 2 genera
-  // dos claves asignables por separado, para poder repartir "2x Americano"
-  // entre dos personas en vez de mandarlo entero a una sola.
-  const [asignaciones, setAsignaciones] = useState<Record<string, number>>({});
-  // Motor NUEVO y aparte del cobro simple de arriba: pagos parciales y/o
-  // cuenta dividida por igual (no solo por producto). "Dividir cuenta" y
-  // "Pago parcial" se pueden combinar — cualquiera de los dos activa este
-  // motor, que trata una cuenta sin dividir como 1 sola "parte".
-  const [pagoParcial, setPagoParcial] = useState(false);
-  const [modoDivisionCuenta, setModoDivisionCuenta] = useState<"producto" | "igual">("producto");
+  // Motor de pagos parciales/cuenta dividida: ya no se puede iniciar desde
+  // acá (se quitó el botón "Dividir cuenta") — `cuenta` solo se llena si la
+  // orden ya traía uno en marcha de antes (ver seleccionarOrden), para poder
+  // terminar de cobrarlo sin dejarlo colgado.
   const [cuenta, setCuenta] = useState<CuentaDetalle | null>(null);
-  const [iniciandoCobro, setIniciandoCobro] = useState(false);
   // Formulario de abono por parte, clave = parte.id — se resincroniza cada
   // vez que cambia `cuenta` (nueva parte creada, o pendiente ya actualizado
   // tras un abono anterior), preservando lo que el cajero ya haya escrito si
@@ -113,12 +102,12 @@ export function MigaoPage() {
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
 
-  // Motor NUEVO y aparte de todo lo de arriba: cobrar solo ALGUNOS productos
-  // de la cuenta mientras sigue abierta (se puede seguir agregando) — cada
-  // cobro genera su propia venta+factura independiente, sin fijar de
-  // antemano cómo queda partida la cuenta (a diferencia de dividirCuenta/
-  // pagoParcial). No se puede combinar con ese otro motor para la misma orden.
-  const [itemsSeleccionados, setItemsSeleccionados] = useState<Set<number>>(new Set());
+  // Aparte del cobro simple de arriba: cobrar solo ALGUNOS productos de la
+  // cuenta mientras sigue abierta (se puede seguir agregando) — cada cobro
+  // genera su propia venta+factura independiente, sin fijar de antemano
+  // cómo queda partida la cuenta. Cantidad por ítem (no solo un checkbox):
+  // permite pagar solo PARTE de la cantidad pedida, ej. 1 de 3 limonadas.
+  const [cantidadesSeleccionadas, setCantidadesSeleccionadas] = useState<Record<number, number>>({});
   const [modalPagarItemsAbierto, setModalPagarItemsAbierto] = useState(false);
   const [pagoItems, setPagoItems] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [propinaItemsMonto, setPropinaItemsMonto] = useState(0);
@@ -197,11 +186,6 @@ export function MigaoPage() {
   });
 
   function reiniciarDivision() {
-    setDividirCuenta(false);
-    setNumPartes(2);
-    setAsignaciones({});
-    setModoDivisionCuenta("producto");
-    setPagoParcial(false);
     setCuenta(null);
     setAbonoForms({});
   }
@@ -220,20 +204,18 @@ export function MigaoPage() {
     setPropinaMetodoPago("efectivo");
     setEsAdministrativo(false);
     reiniciarDivision();
-    setItemsSeleccionados(new Set());
+    setCantidadesSeleccionadas({});
     try {
       const detalleData = await migaoApi.obtenerDetalle(ordenId);
       setDetalle(detalleData);
-      // La orden ya tenía un cobro en marcha con el motor de partes (dividir
-      // cuenta/pago parcial) — se reabre donde se quedó. 'pagando' también
-      // puede venir de pagarItems (productos sueltos) en vez de este motor;
-      // ahí simplemente no hay "cuenta" que cargar, se ignora el 404.
+      // Ya no se puede iniciar un cobro dividido/parcial desde acá, pero si la
+      // orden ya traía uno en marcha de antes, se reabre donde se quedó para
+      // poder terminar de cobrarlo. 'pagando' también puede venir de
+      // pagarItems (productos sueltos) en vez de este motor; ahí simplemente
+      // no hay "cuenta" que cargar, se ignora el 404.
       if (detalleData.orden.estado === "pagando") {
         try {
-          const cuentaCargada = await migaoApi.obtenerCuenta(ordenId);
-          setPagoParcial(true);
-          setCuenta(cuentaCargada);
-          if (cuentaCargada.partes.length > 1) setDividirCuenta(true);
+          setCuenta(await migaoApi.obtenerCuenta(ordenId));
         } catch {
           // 'pagando' por productos sueltos (pagarItems) — nada que reabrir acá.
         }
@@ -262,8 +244,13 @@ export function MigaoPage() {
     }
   }
 
+  const cantidadTotalSeleccionada = Object.values(cantidadesSeleccionadas).reduce((acc, c) => acc + c, 0);
   const totalSeleccionados = detalle
-    ? detalle.items.filter((i) => itemsSeleccionados.has(i.id)).reduce((acc, i) => acc + i.subtotal, 0)
+    ? detalle.items.reduce((acc, i) => {
+        const cantidad = cantidadesSeleccionadas[i.id] ?? 0;
+        if (cantidad <= 0) return acc;
+        return acc + Number(i.precio_unitario) * cantidad;
+      }, 0)
     : 0;
 
   function abrirModalPagarItems() {
@@ -283,7 +270,7 @@ export function MigaoPage() {
   const faltaMontoRecibidoItems = montoEnEfectivoItems > 0 && montoRecibidoItems < montoEnEfectivoItems;
 
   async function confirmarPagarItems() {
-    if (!ordenSeleccionadaId || itemsSeleccionados.size === 0 || faltaMontoRecibidoItems) return;
+    if (!ordenSeleccionadaId || cantidadTotalSeleccionada <= 0 || faltaMontoRecibidoItems) return;
     if (
       pagoItems.metodoPago === "mixto" &&
       Math.abs(pagoItems.montoEfectivo + pagoItems.montoBanco - (totalSeleccionados + propinaItemsMonto)) > 0.01
@@ -297,13 +284,15 @@ export function MigaoPage() {
     setErrorItems(null);
     try {
       const resultado = await migaoApi.pagarItems(ordenSeleccionadaId, {
-        itemIds: Array.from(itemsSeleccionados),
+        unidades: Object.entries(cantidadesSeleccionadas)
+          .filter(([, cantidad]) => cantidad > 0)
+          .map(([itemId, cantidad]) => ({ itemId: Number(itemId), cantidad })),
         ...pagoItems,
         montoRecibidoEfectivo: montoEnEfectivoItems > 0 ? montoRecibidoItems : undefined,
         ...(propinaItemsMonto > 0 ? { propina: propinaItemsMonto } : {}),
       });
       setModalPagarItemsAbierto(false);
-      setItemsSeleccionados(new Set());
+      setCantidadesSeleccionadas({});
       const sufijoAlertas = resultado.alertasInventario.length > 0 ? ` ${resultado.alertasInventario.join(" ")}` : "";
       setMensaje(
         (resultado.ordenCerrada
@@ -406,119 +395,10 @@ export function MigaoPage() {
     }
   }
 
-  // Una unidad por cada unidad física del producto: "2x Americano" (cantidad
-  // entera > 1) se parte en 2 filas de 1 unidad cada una, asignables por
-  // separado. Cantidades no enteras (poco comunes en Migao) se dejan como una
-  // sola fila — no tiene sentido partir "1.5" en unidades discretas.
-  const unidadesCobrables = detalle
-    ? detalle.items
-        .filter((i) => i.estado !== "cancelado")
-        .flatMap((item) => {
-          const cantidad = Number(item.cantidad);
-          const precioUnitario = Number(item.precio_unitario);
-          if (Number.isInteger(cantidad) && cantidad > 1) {
-            return Array.from({ length: cantidad }, (_, idx) => ({
-              key: `${item.id}-${idx}`,
-              itemId: item.id,
-              productoNombre: item.producto_nombre,
-              cantidadUnidad: 1,
-              subtotalUnidad: precioUnitario,
-            }));
-          }
-          return [
-            {
-              key: `${item.id}-0`,
-              itemId: item.id,
-              productoNombre: item.producto_nombre,
-              cantidadUnidad: cantidad,
-              subtotalUnidad: item.subtotal,
-            },
-          ];
-        })
-    : [];
-  const todosAsignados =
-    unidadesCobrables.length > 0 && unidadesCobrables.every((u) => asignaciones[u.key] !== undefined);
-
-  // Por producto, no tiene sentido tener más partes que unidades cobrables
-  // (cada parte necesita al menos 1 unidad); por igual no hay esa relación,
-  // el tope es solo el que ya valida el backend (iniciarCobroSchema).
-  const MAX_PARTES_IGUAL = 20;
-  function topeNumPartes() {
-    return modoDivisionCuenta === "igual" ? MAX_PARTES_IGUAL : Math.max(2, unidadesCobrables.length);
-  }
-
-  function cambiarNumPartes(n: number) {
-    const nuevo = Math.min(topeNumPartes(), Math.max(2, n));
-    setNumPartes(nuevo);
-    // Las unidades que quedaron asignadas a una parte que ya no existe vuelven a quedar sin asignar.
-    setAsignaciones((actual) => {
-      const copia: Record<string, number> = {};
-      for (const [key, parteIdx] of Object.entries(actual)) {
-        if (parteIdx < nuevo) copia[key] = parteIdx;
-      }
-      return copia;
-    });
-  }
-
-  /** Al activar "Dividir cuenta", arranca en tantas partes como comensales se
-   *  registraron al crear la orden (numero_personas) — no siempre en 2 —
-   *  ajustado a los límites válidos (mínimo 2, máximo una por unidad cobrable). */
-  function activarDivision() {
-    const personasRegistradas = detalle?.orden.numero_personas ?? 0;
-    const partesIniciales = Math.min(
-      Math.max(2, personasRegistradas || 2),
-      Math.max(2, unidadesCobrables.length),
-    );
-    cambiarNumPartes(partesIniciales);
-    setDividirCuenta(true);
-  }
-
-  function subtotalParte(parteIdx: number) {
-    return unidadesCobrables
-      .filter((u) => asignaciones[u.key] === parteIdx)
-      .reduce((acc, u) => acc + u.subtotalUnidad, 0);
-  }
-
-  /** Agrupa las unidades de una parte por itemId (una parte puede llevarse
-   *  más de una unidad del mismo producto), para mandarle al backend cuánta
-   *  cantidad de cada ítem le corresponde. */
-  function unidadesAsignadasAParte(parteIdx: number) {
-    const porItem = new Map<number, number>();
-    for (const u of unidadesCobrables) {
-      if (asignaciones[u.key] === parteIdx) {
-        porItem.set(u.itemId, (porItem.get(u.itemId) ?? 0) + u.cantidadUnidad);
-      }
-    }
-    return Array.from(porItem.entries()).map(([itemId, cantidad]) => ({ itemId, cantidad }));
-  }
-
-  // "Dividir cuenta" y/o "Pago parcial" activan el motor nuevo — una cuenta
-  // sin dividir es, para él, una división de 1 sola parte.
-  const usarMotorNuevo = dividirCuenta || pagoParcial;
-
-  function construirDivisionInput(): DivisionInput {
-    if (!dividirCuenta) return { modo: "igual", numPartes: 1 };
-    if (modoDivisionCuenta === "igual") return { modo: "igual", numPartes };
-    return {
-      modo: "producto",
-      partes: Array.from({ length: numPartes }, (_, idx) => ({ unidades: unidadesAsignadasAParte(idx) })),
-    };
-  }
-
-  /** Fija cómo queda partida la cuenta y crea la venta+factura — todavía no
-   *  cobra nada, eso lo hace registrarPagos() con uno o más abonos. */
-  async function iniciarCobroMotor() {
-    if (!ordenSeleccionadaId) return;
-    setIniciandoCobro(true);
-    setError(null);
-    try {
-      setCuenta(await migaoApi.iniciarCobro(ordenSeleccionadaId, construirDivisionInput(), descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo iniciar el cobro de esta cuenta");
-    } finally {
-      setIniciandoCobro(false);
-    }
-  }
+  // Ya no se puede iniciar desde acá (se quitó "Dividir cuenta"/"Pago
+  // parcial") — solo queda true si la orden ya traía un cobro de este tipo
+  // en marcha de antes (ver seleccionarOrden), para poder terminarlo.
+  const usarMotorNuevo = cuenta !== null;
 
   // Se resincroniza cada vez que cambia `cuenta` (partes recién creadas, o
   // pendiente ya actualizado tras un abono) — conserva lo que el cajero ya
@@ -834,20 +714,42 @@ export function MigaoPage() {
                       }`}
                     >
                       {cobrable && (
-                        <input
-                          type="checkbox"
-                          checked={itemsSeleccionados.has(item.id)}
-                          onChange={() =>
-                            setItemsSeleccionados((actual) => {
-                              const copia = new Set(actual);
-                              if (copia.has(item.id)) copia.delete(item.id);
-                              else copia.add(item.id);
-                              return copia;
-                            })
-                          }
-                          className="h-4 w-4 shrink-0"
-                          aria-label={`Seleccionar ${item.producto_nombre} para cobrar`}
-                        />
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCantidadesSeleccionadas((actual) => {
+                                const nueva = Math.max(0, (actual[item.id] ?? 0) - 1);
+                                const copia = { ...actual };
+                                if (nueva <= 0) delete copia[item.id];
+                                else copia[item.id] = nueva;
+                                return copia;
+                              })
+                            }
+                            disabled={(cantidadesSeleccionadas[item.id] ?? 0) <= 0}
+                            className="flex h-7 w-7 items-center justify-center rounded-md border border-brand-vanilla-dark text-base font-bold leading-none text-brand-ink disabled:opacity-30 dark:border-brand-green-700 dark:text-brand-vanilla"
+                            aria-label={`Quitar una unidad de ${item.producto_nombre} de la selección`}
+                          >
+                            −
+                          </button>
+                          <span className="w-5 text-center text-sm font-semibold tabular-nums text-brand-ink dark:text-brand-vanilla">
+                            {cantidadesSeleccionadas[item.id] ?? 0}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCantidadesSeleccionadas((actual) => ({
+                                ...actual,
+                                [item.id]: Math.min(Number(item.cantidad), (actual[item.id] ?? 0) + 1),
+                              }))
+                            }
+                            disabled={(cantidadesSeleccionadas[item.id] ?? 0) >= Number(item.cantidad)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md border border-brand-vanilla-dark text-base font-bold leading-none text-brand-ink disabled:opacity-30 dark:border-brand-green-700 dark:text-brand-vanilla"
+                            aria-label={`Agregar una unidad de ${item.producto_nombre} a la selección`}
+                          >
+                            +
+                          </button>
+                        </div>
                       )}
                       <div className="flex-1">
                         <div className="text-base font-medium text-brand-ink dark:text-brand-vanilla">
@@ -880,11 +782,11 @@ export function MigaoPage() {
                 })}
               </div>
 
-              {itemsSeleccionados.size > 0 && (
+              {cantidadTotalSeleccionada > 0 && (
                 <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-brand-green-600 bg-brand-green-50 px-3 py-2 dark:bg-brand-green-700/20">
                   <span className="text-sm font-medium text-brand-green-700 dark:text-brand-vanilla">
-                    {itemsSeleccionados.size} producto{itemsSeleccionados.size === 1 ? "" : "s"} seleccionado
-                    {itemsSeleccionados.size === 1 ? "" : "s"} — {formatMoney(totalSeleccionados)}
+                    {cantidadTotalSeleccionada} unidad{cantidadTotalSeleccionada === 1 ? "" : "es"} seleccionada
+                    {cantidadTotalSeleccionada === 1 ? "" : "s"} — {formatMoney(totalSeleccionados)}
                   </span>
                   <button
                     onClick={abrirModalPagarItems}
@@ -951,21 +853,19 @@ export function MigaoPage() {
                 </p>
               )}
 
-              {!dividirCuenta && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-brand-ink dark:text-brand-vanilla">Descuento %</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="1"
-                    value={descuentoPorcentaje || ""}
-                    onChange={(e) => setDescuentoPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))}
-                    placeholder="0"
-                    className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                  />
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-brand-ink dark:text-brand-vanilla">Descuento %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="1"
+                  value={descuentoPorcentaje || ""}
+                  onChange={(e) => setDescuentoPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))}
+                  placeholder="0"
+                  className="w-20 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                />
+              </div>
 
               <div className="flex flex-col gap-2">
                 <span className="text-sm text-brand-ink dark:text-brand-vanilla">¿Agregar propina (servicio)?</span>
@@ -1014,11 +914,6 @@ export function MigaoPage() {
                     className="w-40 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                   />
                 )}
-                {dividirCuenta && propinaMonto > 0 && (
-                  <p className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                    ≈ {formatMoney(propinaMonto / numPartes)} de propina por persona
-                  </p>
-                )}
                 {propinaMonto > 0 &&
                   (propinaEsAutomatica ? (
                     // Se reparte sola según cómo se pague la cuenta (efectivo/banco/mixto/
@@ -1047,35 +942,6 @@ export function MigaoPage() {
                       ))}
                     </div>
                   ))}
-              </div>
-
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
-                  <input
-                    type="checkbox"
-                    checked={dividirCuenta}
-                    onChange={(e) => (e.target.checked ? activarDivision() : reiniciarDivision())}
-                    disabled={unidadesCobrables.length < 2 || cuenta !== null}
-                    className="h-4 w-4"
-                  />
-                  Dividir cuenta entre varias personas
-                  {!dividirCuenta && Boolean(detalle?.orden.numero_personas) && (
-                    <span className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-                      (sugerido: {detalle!.orden.numero_personas} comensal
-                      {detalle!.orden.numero_personas === 1 ? "" : "es"})
-                    </span>
-                  )}
-                </label>
-                <label className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
-                  <input
-                    type="checkbox"
-                    checked={pagoParcial}
-                    onChange={(e) => setPagoParcial(e.target.checked)}
-                    disabled={cuenta !== null}
-                    className="h-4 w-4"
-                  />
-                  ¿Pago parcial?
-                </label>
               </div>
 
               {!usarMotorNuevo ? (
@@ -1129,123 +995,7 @@ export function MigaoPage() {
                 </>
               ) : (
                 <div className="flex flex-col gap-4 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
-                  {!cuenta ? (
-                    <>
-                      {dividirCuenta && (
-                        <>
-                          <div className="flex gap-2">
-                            {(["producto", "igual"] as const).map((modo) => (
-                              <button
-                                key={modo}
-                                type="button"
-                                onClick={() => setModoDivisionCuenta(modo)}
-                                className={`flex-1 rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
-                                  modoDivisionCuenta === modo
-                                    ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                                    : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
-                                }`}
-                              >
-                                {modo === "producto" ? "Por producto" : "Por igual"}
-                              </button>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                              ¿Entre cuántas partes?
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => cambiarNumPartes(numPartes - 1)}
-                                disabled={numPartes <= 2}
-                                className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
-                              >
-                                −
-                              </button>
-                              <span className="w-6 text-center font-semibold text-brand-ink dark:text-brand-vanilla">
-                                {numPartes}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => cambiarNumPartes(numPartes + 1)}
-                                disabled={numPartes >= topeNumPartes()}
-                                className="flex h-8 w-8 items-center justify-center rounded-md border border-brand-green-700 font-bold text-brand-green-700 disabled:opacity-40 dark:border-brand-vanilla dark:text-brand-vanilla"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-
-                          {modoDivisionCuenta === "producto" && (
-                            <div className="flex flex-col gap-2">
-                              <span className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
-                                Toca la parte a la que corresponde cada producto:
-                              </span>
-                              {unidadesCobrables.map((unidad) => (
-                                <div key={unidad.key} className="flex items-center justify-between gap-2 text-sm">
-                                  <span className="text-brand-ink dark:text-brand-vanilla">
-                                    {formatCantidad(unidad.cantidadUnidad)}× {unidad.productoNombre}
-                                  </span>
-                                  <div className="flex shrink-0 gap-1">
-                                    {Array.from({ length: numPartes }, (_, idx) => (
-                                      <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => setAsignaciones((actual) => ({ ...actual, [unidad.key]: idx }))}
-                                        className={`flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold ${
-                                          asignaciones[unidad.key] === idx
-                                            ? "border-brand-green-700 bg-brand-green-700 text-brand-vanilla"
-                                            : "border-brand-vanilla-dark text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
-                                        }`}
-                                      >
-                                        {idx + 1}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                              <div className="flex flex-col gap-1 border-t border-brand-vanilla-dark pt-2 dark:border-brand-green-700">
-                                {Array.from({ length: numPartes }, (_, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex items-center justify-between text-xs text-brand-ink/70 dark:text-brand-vanilla/70"
-                                  >
-                                    <span>Parte {idx + 1}</span>
-                                    <span>{formatMoney(subtotalParte(idx))}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              {!todosAsignados && (
-                                <p className="text-xs text-amber-700 dark:text-amber-400">
-                                  Asigna todos los productos a alguna parte antes de continuar.
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {modoDivisionCuenta === "igual" && (
-                            <div className="flex flex-col gap-1">
-                              {Array.from({ length: numPartes }, (_, idx) => (
-                                <div key={idx} className="flex items-center justify-between text-sm text-brand-ink dark:text-brand-vanilla">
-                                  <span>Parte {idx + 1}</span>
-                                  <span>≈ {formatMoney(totalConDescuento / numPartes)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      <button
-                        onClick={iniciarCobroMotor}
-                        disabled={iniciandoCobro || (dividirCuenta && modoDivisionCuenta === "producto" && !todosAsignados)}
-                        className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-                      >
-                        {iniciandoCobro ? "Iniciando..." : "Continuar"}
-                      </button>
-                    </>
-                  ) : (
+                  {cuenta && (
                     <>
                       {cuenta.partes.length > 1 && propinaMonto > 0 && (
                         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1301,7 +1051,6 @@ export function MigaoPage() {
                                     min={0}
                                     max={parte.pendiente}
                                     step="100"
-                                    disabled={!pagoParcial}
                                     value={form.montoPagarAhora || ""}
                                     onChange={(e) =>
                                       actualizarAbonoForm(parte.id, {
@@ -1416,7 +1165,7 @@ export function MigaoPage() {
       {modalPagarItemsAbierto && (
         <Modal titulo="Cobrar productos seleccionados" onCerrar={() => setModalPagarItemsAbierto(false)}>
           <div className="mb-3 flex items-center justify-between text-lg font-bold text-brand-green-700 dark:text-brand-vanilla">
-            <span>Total ({itemsSeleccionados.size} producto{itemsSeleccionados.size === 1 ? "" : "s"})</span>
+            <span>Total ({cantidadTotalSeleccionada} unidad{cantidadTotalSeleccionada === 1 ? "" : "es"})</span>
             <span>{formatMoney(totalSeleccionados)}</span>
           </div>
 

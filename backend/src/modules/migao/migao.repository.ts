@@ -651,6 +651,45 @@ export async function updateItemCantidad(
   return result.rows[0];
 }
 
+/** Solo ajusta la cantidad, sin tocar estado/listo_cocina/observaciones — a
+ *  diferencia de updateItemCantidad (que resetea a 'pendiente' porque asume
+ *  que el mesero está corrigiendo el pedido), esto se usa para dejarle lo
+ *  que quede pendiente a un ítem que se está partiendo para cobrar solo una
+ *  parte (ver pagarItems en migao.service.ts) — el resto sigue exactamente
+ *  como estaba, en cocina o ya servido. */
+export async function reducirCantidadItem(itemId: number, nuevaCantidad: number, executor: Executor = pool) {
+  const result = await executor.query(
+    `UPDATE orden_items SET cantidad = $2 WHERE id = $1 RETURNING *`,
+    [itemId, nuevaCantidad],
+  );
+  return result.rows[0];
+}
+
+/** Crea una fila NUEVA para la porción que se está cobrando ahora de un
+ *  ítem con más cantidad de la que se paga (ver pagarItems) — copia
+ *  producto/precio/estado/preparación tal cual del ítem original, solo con
+ *  la cantidad que corresponde a este cobro. */
+export async function duplicarItemParaPago(
+  original: { orden_id: string; producto_id: string; precio_unitario: string; estado: string; listo_cocina: boolean; observaciones: string | null },
+  cantidad: number,
+  executor: Executor = pool,
+) {
+  const result = await executor.query(
+    `INSERT INTO orden_items (orden_id, producto_id, cantidad, precio_unitario, estado, listo_cocina, observaciones)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [
+      original.orden_id,
+      original.producto_id,
+      cantidad,
+      original.precio_unitario,
+      original.estado,
+      original.listo_cocina,
+      original.observaciones,
+    ],
+  );
+  return result.rows[0];
+}
+
 /** Corrige solo la nota del ítem (ej. "sin azúcar"), sin tocar cantidad ni estado. */
 export async function updateItemObservaciones(itemId: string, observaciones: string, executor: Executor = pool) {
   const result = await executor.query(

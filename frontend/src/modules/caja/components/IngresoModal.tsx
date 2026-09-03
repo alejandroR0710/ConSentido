@@ -6,13 +6,23 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
-import { cajaApi, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
+import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
 import { facturaCajaAReciboProps } from "../factura";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface IngresoModalProps {
   onCerrar: () => void;
-  onRegistrado: () => Promise<void>;
+  // Recibe el resultado del registro — quien abre este modal desde otro
+  // lugar (ej. "Pasar a factura" de una cotización) lo necesita para, por
+  // ejemplo, dejar un rastro de qué venta salió de ahí.
+  onRegistrado: (resultado: RegistrarIngresoResultado) => Promise<void>;
+  // Precarga el formulario — usado para "Pasar a factura" desde una
+  // cotización: todo queda editable, esto solo evita volver a escribirlo.
+  valoresIniciales?: {
+    moduloOrigenSlug?: ModuloOrigenSlug;
+    motivo?: string;
+    items?: ItemIngresoInput[];
+  };
 }
 
 // Igual que en Cotizaciones: en vez de un solo monto, se pueden agregar
@@ -31,20 +41,25 @@ function lineaVacia(): LineaIngreso {
   return { key: siguienteKeyLinea++, nombre: "", cantidad: 1, precioUnitario: 0 };
 }
 
-export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
+export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: IngresoModalProps) {
+  const tieneItemsIniciales = Boolean(valoresIniciales?.items && valoresIniciales.items.length > 0);
   // Con Sentido por defecto: la mayoría de ingresos manuales acá son de ahí
   // (Migao casi siempre cobra desde su propia pantalla, no desde acá) — antes
   // arrancaba en "migao" y era fácil dejarlo así sin querer.
-  const [modulo, setModulo] = useState<ModuloOrigenSlug>("con_sentido");
-  const [modoMonto, setModoMonto] = useState<"unico" | "productos">("unico");
+  const [modulo, setModulo] = useState<ModuloOrigenSlug>(valoresIniciales?.moduloOrigenSlug ?? "con_sentido");
+  const [modoMonto, setModoMonto] = useState<"unico" | "productos">(tieneItemsIniciales ? "productos" : "unico");
   // "Monto" siempre es el bruto (antes de descuento); lo que realmente se
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
   const [monto, setMonto] = useState(0);
-  const [lineas, setLineas] = useState<LineaIngreso[]>([lineaVacia()]);
+  const [lineas, setLineas] = useState<LineaIngreso[]>(
+    tieneItemsIniciales
+      ? valoresIniciales!.items!.map((i) => ({ key: siguienteKeyLinea++, ...i }))
+      : [lineaVacia()],
+  );
   const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(0);
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [montoRecibido, setMontoRecibido] = useState(0);
-  const [motivo, setMotivo] = useState("");
+  const [motivo, setMotivo] = useState(valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +111,7 @@ export function IngresoModal({ onCerrar, onRegistrado }: IngresoModalProps) {
           ? { ...pago, montoRecibidoEfectivo }
           : { metodoPago: pago.metodoPago, monto: montoNeto, montoRecibidoEfectivo }),
       });
-      await onRegistrado();
+      await onRegistrado(creado);
       setResultado(creado);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo registrar el ingreso");

@@ -17,6 +17,7 @@ import {
   editarMesaSchema,
   editarProductoSchema,
   iniciarCobroSchema,
+  marcarCotizacionFacturadaSchema,
   pagarItemsSchema,
   posicionMesaSchema,
   registrarAbonoSchema,
@@ -328,4 +329,10 @@ export async function obtenerCotizacionController(req: Request, res: Response) {
 export async function eliminarCotizacionController(req: Request, res: Response) {
   const resultado = await service.eliminarCotizacion(req.params.id);
   return ok(res, resultado);
+}
+
+export async function marcarCotizacionFacturadaController(req: Request, res: Response) {
+  const { ventaId } = marcarCotizacionFacturadaSchema.parse(req.body);
+  const cotizacion = await service.marcarCotizacionFacturada(req.params.id, ventaId);
+  return ok(res, cotizacion);
 }

@@ -531,6 +531,10 @@ export interface CotizacionResumen {
   total: string;
   created_at: string;
   usuario_nombre: string | null;
+  // Se llenan cuando ya se pasó a una venta real de Caja General (ver
+  // "Pasar a factura") — null si todavía es solo un presupuesto.
+  venta_id: string | null;
+  numero_factura: string | null;
 }
 export interface CotizacionDetalle extends CotizacionResumen {
   items: CotizacionItem[];
@@ -891,6 +895,10 @@ export const migaoApi = {
   ) => apiFetch<CotizacionDetalle>(`/migao/cotizaciones/${id}`, { method: "PATCH", body: input }),
   eliminarCotizacion: (id: string) =>
     apiFetch<{ eliminada: boolean }>(`/migao/cotizaciones/${id}`, { method: "DELETE" }),
+  // Se llama justo después de registrar el ingreso en Caja General a partir
+  // de esta cotización (ver CotizacionesPage → IngresoModal precargado).
+  marcarCotizacionFacturada: (id: string, ventaId: string) =>
+    apiFetch<CotizacionDetalle>(`/migao/cotizaciones/${id}/facturar`, { method: "PATCH", body: { ventaId } }),
 
   // Amasijos y bases: viven en el Inventario general de Migao (arriba) — acá
   // solo la recomendación de preparación y la receta de cada base.

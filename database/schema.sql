@@ -984,7 +984,11 @@ CREATE TABLE migao_cotizaciones (
   subtotal         NUMERIC(12,2) NOT NULL DEFAULT 0,
   total            NUMERIC(12,2) NOT NULL DEFAULT 0,
   usuario_id       UUID REFERENCES usuarios(id),
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Se llena cuando esta cotización se pasó a una venta real de Caja General
+  -- (ver "Pasar a factura" en CotizacionesPage) — solo un rastro para mostrar
+  -- "ya facturada" y el link a su factura, nunca bloquea volver a facturarla.
+  venta_id         UUID REFERENCES ventas(id)
 );
 
 CREATE TABLE migao_cotizacion_items (

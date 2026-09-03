@@ -373,3 +373,12 @@ export const crearCotizacionSchema = z.object({
     .min(1, "Agrega al menos un producto o servicio a la cotización"),
 });
 export type CrearCotizacionInput = z.infer<typeof crearCotizacionSchema>;
+
+// Se llama justo después de registrar el ingreso en Caja General a partir de
+// esta cotización (ver CotizacionesPage → IngresoModal precargado) — solo
+// deja un rastro de qué venta salió de cuál cotización, nunca bloquea volver
+// a facturarla si hiciera falta.
+export const marcarCotizacionFacturadaSchema = z.object({
+  ventaId: z.string().uuid(),
+});
+export type MarcarCotizacionFacturadaInput = z.infer<typeof marcarCotizacionFacturadaSchema>;

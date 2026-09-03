@@ -1479,9 +1479,10 @@ export async function reemplazarCotizacionItems(
 export async function listCotizaciones() {
   const result = await pool.query(
     `SELECT c.id, c.numero, c.cliente_nombre, c.cliente_telefono, c.nota, c.subtotal, c.total, c.created_at,
-            u.nombre AS usuario_nombre
+            c.venta_id, f.numero AS numero_factura, u.nombre AS usuario_nombre
        FROM migao_cotizaciones c
        LEFT JOIN usuarios u ON u.id = c.usuario_id
+       LEFT JOIN facturas f ON f.venta_id = c.venta_id
       ORDER BY c.created_at DESC
       LIMIT 500`,
   );
@@ -1491,9 +1492,10 @@ export async function listCotizaciones() {
 export async function getCotizacionPorId(id: string) {
   const cotizacion = await pool.query(
     `SELECT c.id, c.numero, c.cliente_nombre, c.cliente_telefono, c.nota, c.subtotal, c.total, c.created_at,
-            u.nombre AS usuario_nombre
+            c.venta_id, f.numero AS numero_factura, u.nombre AS usuario_nombre
        FROM migao_cotizaciones c
        LEFT JOIN usuarios u ON u.id = c.usuario_id
+       LEFT JOIN facturas f ON f.venta_id = c.venta_id
       WHERE c.id = $1`,
     [id],
   );
@@ -1511,5 +1513,15 @@ export async function getCotizacionPorId(id: string) {
 
 export async function eliminarCotizacion(id: string) {
   const result = await pool.query(`DELETE FROM migao_cotizaciones WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Deja rastro de que esta cotización se pasó a una venta real de Caja
+ *  General (ver "Pasar a factura") — nunca bloquea volver a facturarla. */
+export async function marcarCotizacionFacturada(id: string, ventaId: string) {
+  const result = await pool.query(
+    `UPDATE migao_cotizaciones SET venta_id = $2 WHERE id = $1 RETURNING id`,
+    [id, ventaId],
+  );
   return (result.rowCount ?? 0) > 0;
 }

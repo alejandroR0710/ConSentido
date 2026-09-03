@@ -1793,3 +1793,9 @@ export async function eliminarCotizacion(id: string) {
   if (!eliminada) throw Errors.notFound("Cotización no encontrada");
   return { eliminada: true };
 }
+
+export async function marcarCotizacionFacturada(id: string, ventaId: string) {
+  const actualizada = await repo.marcarCotizacionFacturada(id, ventaId);
+  if (!actualizada) throw Errors.notFound("Cotización no encontrada");
+  return repo.getCotizacionPorId(id);
+}

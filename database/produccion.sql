@@ -979,6 +979,15 @@ ALTER TABLE caja_ingreso_items ALTER COLUMN nombre TYPE TEXT;
 
 
 -- ========================================================================
+-- SECCIÓN 24: PASAR UNA COTIZACIÓN A FACTURA (Caja General)
+-- ========================================================================
+-- Solo un rastro de qué venta salió de cuál cotización (ver "Pasar a
+-- factura" en CotizacionesPage → abre Registrar ingreso ya precargado) —
+-- nunca bloquea volver a facturar la misma cotización si hiciera falta.
+ALTER TABLE migao_cotizaciones ADD COLUMN IF NOT EXISTS venta_id UUID REFERENCES ventas(id);
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

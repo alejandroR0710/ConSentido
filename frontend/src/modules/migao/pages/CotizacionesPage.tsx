@@ -4,7 +4,9 @@ import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
+import { IngresoModal } from "../../caja/components/IngresoModal";
 import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type Producto } from "../api";
+import { BotonFactura } from "../components/BotonFactura";
 
 interface LineaCotizacion {
   key: number;
@@ -79,6 +81,14 @@ export function CotizacionesPage() {
 
   const [recibo, setRecibo] = useState<ReturnType<typeof cotizacionAReciboProps> | null>(null);
   const [errorImprimir, setErrorImprimir] = useState<string | null>(null);
+
+  // Cotización que se está pasando a factura — abre "Registrar ingreso" de
+  // Caja General ya precargado con cliente/productos, el cajero solo elige
+  // método de pago y confirma (ver IngresoModal). Nunca se prohíbe volver a
+  // facturar la misma cotización, solo se avisa si ya tenía una factura.
+  const [facturandoCotizacion, setFacturandoCotizacion] = useState<CotizacionDetalle | null>(null);
+  const [cargandoFacturar, setCargandoFacturar] = useState<string | null>(null);
+  const [errorFacturar, setErrorFacturar] = useState<string | null>(null);
 
   async function cargarCotizaciones() {
     try {
@@ -198,6 +208,22 @@ export function CotizacionesPage() {
       setRecibo(cotizacionAReciboProps(detalle));
     } catch (err) {
       setErrorImprimir(err instanceof ApiError ? err.message : "No se pudo abrir la cotización");
+    }
+  }
+
+  /** Abre "Registrar ingreso" de Caja General precargado con el cliente y
+   *  los productos/servicios de esta cotización — el cajero elige el área,
+   *  confirma el método de pago, y ahí sale la venta real con su factura. */
+  async function abrirFacturarDesde(id: string) {
+    setCargandoFacturar(id);
+    setErrorFacturar(null);
+    try {
+      const detalle = await migaoApi.obtenerCotizacion(id);
+      setFacturandoCotizacion(detalle);
+    } catch (err) {
+      setErrorFacturar(err instanceof ApiError ? err.message : "No se pudo abrir la cotización para facturar");
+    } finally {
+      setCargandoFacturar(null);
     }
   }
 
@@ -339,27 +365,29 @@ export function CotizacionesPage() {
         <h2 className="mb-2 font-medium text-brand-green-700 dark:text-brand-vanilla">Cotizaciones guardadas</h2>
         {errorLista && <p className="mb-2 text-sm text-red-600">{errorLista}</p>}
         {errorImprimir && <p className="mb-2 text-sm text-red-600">{errorImprimir}</p>}
+        {errorFacturar && <p className="mb-2 text-sm text-red-600">{errorFacturar}</p>}
         <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          <table className="w-full min-w-[480px] text-left text-sm">
+          <table className="w-full min-w-[600px] text-left text-sm">
             <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
                 <th className="px-3 py-2">Nº</th>
                 <th className="px-3 py-2">Cliente</th>
                 <th className="px-3 py-2">Fecha</th>
                 <th className="px-3 py-2">Total</th>
+                <th className="px-3 py-2">Factura</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {cargandoLista ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                     Cargando...
                   </td>
                 </tr>
               ) : cotizaciones.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-brand-ink/60">
+                  <td colSpan={6} className="px-3 py-4 text-center text-brand-ink/60">
                     Todavía no hay cotizaciones guardadas.
                   </td>
                 </tr>
@@ -370,6 +398,23 @@ export function CotizacionesPage() {
                     <td className="px-3 py-2">{c.cliente_nombre ?? "—"}</td>
                     <td className="px-3 py-2">{formatearFecha(c.created_at)}</td>
                     <td className="px-3 py-2">{formatMoney(c.total)}</td>
+                    <td className="px-3 py-2">
+                      {c.venta_id ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-brand-green-100 px-2 py-0.5 text-xs font-semibold text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
+                            ✓ Facturada
+                          </span>
+                          {c.numero_factura && (
+                            <span className="font-mono text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                              {c.numero_factura}
+                            </span>
+                          )}
+                          <BotonFactura origen={{ tipo: "venta_caja", id: c.venta_id }} etiqueta="Ver" />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-brand-ink/40 dark:text-brand-vanilla/40">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1">
                         <button
@@ -384,6 +429,13 @@ export function CotizacionesPage() {
                           className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                         >
                           Imprimir
+                        </button>
+                        <button
+                          onClick={() => abrirFacturarDesde(c.id)}
+                          disabled={cargandoFacturar === c.id}
+                          className="rounded-md border border-brand-green-600 px-2 py-1 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-green-500 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                        >
+                          {cargandoFacturar === c.id ? "..." : c.venta_id ? "Facturar de nuevo" : "Pasar a factura"}
                         </button>
                         <button
                           onClick={() => eliminarCotizacion(c.id)}
@@ -402,6 +454,36 @@ export function CotizacionesPage() {
       </div>
 
       {recibo && <ModalImprimir {...recibo} onCerrar={() => setRecibo(null)} />}
+
+      {facturandoCotizacion && (
+        <IngresoModal
+          onCerrar={() => setFacturandoCotizacion(null)}
+          valoresIniciales={{
+            motivo: [
+              `Cotización #${facturandoCotizacion.numero}`,
+              facturandoCotizacion.cliente_nombre ?? undefined,
+              facturandoCotizacion.cliente_telefono ?? undefined,
+              facturandoCotizacion.nota ?? undefined,
+            ]
+              .filter(Boolean)
+              .join(" — "),
+            items: facturandoCotizacion.items.map((item) => ({
+              nombre: item.nombre,
+              cantidad: Number(item.cantidad),
+              precioUnitario: Number(item.precio_unitario),
+            })),
+          }}
+          onRegistrado={async (resultado) => {
+            try {
+              await migaoApi.marcarCotizacionFacturada(facturandoCotizacion.id, resultado.venta.id);
+            } catch {
+              // El ingreso ya quedó registrado — si esto falla, la cotización
+              // simplemente no queda marcada como facturada, nada se deshace.
+            }
+            await cargarCotizaciones();
+          }}
+        />
+      )}
     </div>
   );
 }

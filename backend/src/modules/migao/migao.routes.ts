@@ -56,6 +56,7 @@ import {
   listarProductosParaLlevarController,
   listarPropinasController,
   marcarCheckItemController,
+  marcarCotizacionFacturadaController,
   marcarOrdenListaController,
   moverMesaController,
   obtenerCotizacionController,
@@ -358,6 +359,14 @@ migaoRouter.delete(
   "/cotizaciones/:id",
   requirePermission("migao.cotizaciones.eliminar"),
   asyncHandler(eliminarCotizacionController),
+);
+// Se llama justo después de registrar el ingreso en Caja General a partir de
+// esta cotización — mismo permiso que crear/editar (no borra ni cobra nada,
+// solo deja el rastro de qué venta salió de acá).
+migaoRouter.patch(
+  "/cotizaciones/:id/facturar",
+  requirePermission("migao.cotizaciones.crear"),
+  asyncHandler(marcarCotizacionFacturadaController),
 );
 
 // Cocina: solo ve la cola de ítems pendientes/en preparación de todas las órdenes.

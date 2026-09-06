@@ -110,7 +110,12 @@ export function MigaoPage() {
   const [cantidadesSeleccionadas, setCantidadesSeleccionadas] = useState<Record<number, number>>({});
   const [modalPagarItemsAbierto, setModalPagarItemsAbierto] = useState(false);
   const [pagoItems, setPagoItems] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
-  const [propinaItemsMonto, setPropinaItemsMonto] = useState(0);
+  // Propina de este cobro puntual: mismos atajos 0/5%/10%/valor libre del
+  // cobro normal de arriba (propinaPorcentaje/propinaMontoCustom), pero
+  // independiente — esta se calcula sobre totalSeleccionados, no sobre toda
+  // la cuenta, y viaja en la misma llamada a pagarItems.
+  const [propinaItemsPorcentaje, setPropinaItemsPorcentaje] = useState<0 | 5 | 10 | null>(0);
+  const [propinaItemsMontoCustom, setPropinaItemsMontoCustom] = useState(0);
   const [montoRecibidoItems, setMontoRecibidoItems] = useState(0);
   const [cobrandoItems, setCobrandoItems] = useState(false);
   const [errorItems, setErrorItems] = useState<string | null>(null);
@@ -252,10 +257,17 @@ export function MigaoPage() {
         return acc + Number(i.precio_unitario) * cantidad;
       }, 0)
     : 0;
+  const propinaItemsMonto =
+    propinaItemsPorcentaje === 0
+      ? 0
+      : propinaItemsPorcentaje === null
+        ? propinaItemsMontoCustom
+        : totalSeleccionados * (propinaItemsPorcentaje / 100);
 
   function abrirModalPagarItems() {
     setPagoItems({ metodoPago: "efectivo" });
-    setPropinaItemsMonto(0);
+    setPropinaItemsPorcentaje(0);
+    setPropinaItemsMontoCustom(0);
     setMontoRecibidoItems(0);
     setErrorItems(null);
     setModalPagarItemsAbierto(true);
@@ -289,7 +301,7 @@ export function MigaoPage() {
           .map(([itemId, cantidad]) => ({ itemId: Number(itemId), cantidad })),
         ...pagoItems,
         montoRecibidoEfectivo: montoEnEfectivoItems > 0 ? montoRecibidoItems : undefined,
-        ...(propinaItemsMonto > 0 ? { propina: propinaItemsMonto } : {}),
+        ...(propinaItemsMonto > 0 ? { propina: propinaItemsMonto, propinaPorcentaje: propinaItemsPorcentaje } : {}),
       });
       setModalPagarItemsAbierto(false);
       setCantidadesSeleccionadas({});
@@ -1169,16 +1181,53 @@ export function MigaoPage() {
             <span>{formatMoney(totalSeleccionados)}</span>
           </div>
 
-          <label className="mb-1 block text-xs font-medium">Propina (opcional)</label>
-          <input
-            type="number"
-            min={0}
-            step="100"
-            value={propinaItemsMonto || ""}
-            onChange={(e) => setPropinaItemsMonto(Math.max(0, Number(e.target.value)))}
-            placeholder="0"
-            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          />
+          <div className="mb-3 flex flex-col gap-2">
+            <span className="text-xs font-medium">Propina (opcional)</span>
+            <div className="flex flex-wrap gap-2">
+              {([0, 5, 10] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPropinaItemsPorcentaje(p)}
+                  className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
+                    propinaItemsPorcentaje === p
+                      ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                      : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                  }`}
+                >
+                  {p === 0 ? "Sin propina" : `${p}%`}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPropinaItemsPorcentaje(null)}
+                className={`rounded-md border-2 px-3 py-1.5 text-sm font-medium ${
+                  propinaItemsPorcentaje === null
+                    ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                    : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                }`}
+              >
+                Otro valor
+              </button>
+            </div>
+            {propinaItemsPorcentaje === null && (
+              <input
+                type="number"
+                min={0}
+                step="100"
+                autoFocus
+                value={propinaItemsMontoCustom || ""}
+                onChange={(e) => setPropinaItemsMontoCustom(Math.max(0, Number(e.target.value)))}
+                placeholder="Valor de la propina"
+                className="w-40 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+            )}
+            {propinaItemsMonto > 0 && (
+              <p className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                Propina: {formatMoney(propinaItemsMonto)}
+              </p>
+            )}
+          </div>
 
           <label className="mb-1 block text-xs font-medium">Método de pago</label>
           <div className="mb-3">

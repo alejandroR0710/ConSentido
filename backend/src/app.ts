@@ -4,6 +4,7 @@ import express from "express";
 import { analyticsRouter } from "./modules/general/analytics/analytics.routes";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
+import { concretoRouter } from "./modules/concreto/concreto.routes";
 import { conSentidoRouter } from "./modules/con_sentido/con_sentido.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
 import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
@@ -71,6 +72,7 @@ export function createApp() {
   app.use("/api/v1/caja", cajaRouter);
   app.use("/api/v1/migao", migaoRouter);
   app.use("/api/v1/velas", velasRouter);
+  app.use("/api/v1/concreto", concretoRouter);
   app.use("/api/v1/analytics", analyticsRouter);
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);

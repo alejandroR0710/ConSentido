@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { CajaHistorialPage } from "./modules/caja/pages/CajaHistorialPage";
 import { CajaPage } from "./modules/caja/pages/CajaPage";
+import { CalculadoraConcretoPage } from "./modules/concreto/pages/CalculadoraConcretoPage";
 import { ClientesPage } from "./modules/con_sentido/pages/ClientesPage";
 import { ConSentidoPage } from "./modules/con_sentido/pages/ConSentidoPage";
 import { InventarioConSentidoPage } from "./modules/con_sentido/pages/InventarioPage";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/con-sentido/clientes" element={<ClientesPage />} />
         <Route path="/con-sentido/inventario" element={<InventarioConSentidoPage />} />
         <Route path="/con-sentido/velas" element={<CalculadoraVelasPage />} />
+        <Route path="/con-sentido/concreto" element={<CalculadoraConcretoPage />} />
         <Route path="/insumos" element={<InsumosListPage />} />
         <Route path="/mesero" element={<MeseroPage />} />
         <Route path="/mesero/historial" element={<MeseroHistorialPage />} />

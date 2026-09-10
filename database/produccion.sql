@@ -988,6 +988,52 @@ ALTER TABLE migao_cotizaciones ADD COLUMN IF NOT EXISTS venta_id UUID REFERENCES
 
 
 -- ========================================================================
+-- SECCIÓN 25: CALCULADORA DE PRECIO DE CONCRETO (Con Sentido)
+-- ========================================================================
+-- Calculadora nueva (debajo de la de velas): el usuario ingresa SOLO el peso
+-- final de la pieza terminada y el sistema devuelve el desglose de material,
+-- el costo de producción y el precio de venta. La receta de fabricación
+-- (40% cemento / 60% marmolina / 24% agua y el factor de conversión) va fija
+-- en concreto.service.ts; acá solo viven los precios/costos editables.
+CREATE TABLE IF NOT EXISTS concreto_parametros (
+  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  precio_cemento_gramo   NUMERIC(10,4) NOT NULL DEFAULT 2.125,
+  precio_marmolina_gramo NUMERIC(10,4) NOT NULL DEFAULT 0.7975,
+  costo_agua             NUMERIC(12,2) NOT NULL DEFAULT 400,
+  costo_pintura          NUMERIC(12,2) NOT NULL DEFAULT 400,
+  costo_sellante         NUMERIC(12,2) NOT NULL DEFAULT 200,
+  costo_lija             NUMERIC(12,2) NOT NULL DEFAULT 100,
+  costo_mano_obra        NUMERIC(12,2) NOT NULL DEFAULT 3000,
+  multiplicador_precio   NUMERIC(6,2)  NOT NULL DEFAULT 3,
+  redondeo               INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0, 100, 500, 1000)),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO concreto_parametros (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO permisos (modulo_id, accion, codigo)
+SELECT (SELECT id FROM modulos WHERE slug = 'con_sentido'), x.accion, x.codigo
+FROM (VALUES
+  ('ver_concreto',         'concreto.ver'),
+  ('administrar_concreto', 'concreto.administrar')
+) AS x(accion, codigo)
+WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE codigo = x.codigo);
+
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Super Root', 'Root')
+  AND p.codigo IN ('concreto.ver', 'concreto.administrar')
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'usuario') THEN
+    GRANT SELECT, INSERT, UPDATE ON concreto_parametros TO usuario;
+  END IF;
+END $$;
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

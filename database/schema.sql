@@ -537,6 +537,27 @@ CREATE TABLE velas_parametros (
 );
 INSERT INTO velas_parametros (id) VALUES (true);
 
+-- Calculadora de precio de piezas de concreto: fila única de parámetros
+-- editables (precios de material, costos fijos por pieza, mano de obra,
+-- multiplicador de venta y redondeo). La receta de fabricación (40% cemento /
+-- 60% marmolina / 24% agua y el factor de conversión derivado de la pieza de
+-- referencia de 549 g) NO va acá — está fija en concreto.service.ts. El
+-- usuario solo ingresa el peso final de la pieza y el sistema calcula todo.
+CREATE TABLE concreto_parametros (
+  id                     BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  precio_cemento_gramo   NUMERIC(10,4) NOT NULL DEFAULT 2.125,   -- bulto 40 kg a $85.000
+  precio_marmolina_gramo NUMERIC(10,4) NOT NULL DEFAULT 0.7975,  -- bulto 40 kg a $31.900
+  costo_agua             NUMERIC(12,2) NOT NULL DEFAULT 400,
+  costo_pintura          NUMERIC(12,2) NOT NULL DEFAULT 400,
+  costo_sellante         NUMERIC(12,2) NOT NULL DEFAULT 200,
+  costo_lija             NUMERIC(12,2) NOT NULL DEFAULT 100,
+  costo_mano_obra        NUMERIC(12,2) NOT NULL DEFAULT 3000,
+  multiplicador_precio   NUMERIC(6,2)  NOT NULL DEFAULT 3,
+  redondeo               INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0, 100, 500, 1000)),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO concreto_parametros (id) VALUES (true);
+
 -- Receta/producto guardado — reutilizable, editable, duplicable. El costo NUNCA
 -- se guarda acá (se recalcula en vivo contra los precios vigentes de las
 -- tablas maestras cada vez que se consulta) — lo único persistido es la

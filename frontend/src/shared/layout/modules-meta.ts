@@ -44,6 +44,15 @@ export const MODULES_META: ModuloMeta[] = [
     icon: "🕯️",
     roles: ["Super Root", "Root"],
   },
+  // Calculadora de precio de piezas de concreto (solo peso final → costo y
+  // precio) — exclusivo de Root/Super Root, va justo debajo de la de velas.
+  {
+    slug: "con_sentido",
+    label: "Precio de Concreto",
+    path: "/con-sentido/concreto",
+    icon: "🧱",
+    roles: ["Super Root", "Root"],
+  },
   { slug: "talleres", label: "Talleres", path: "/talleres", icon: "🎨" },
   { slug: "migao", label: "Mesero", path: "/mesero", icon: "📝", roles: ["Mesero"] },
   { slug: "migao", label: "Cocina", path: "/cocina", icon: "🍳", roles: ["Cocina"] },
@@ -135,7 +144,7 @@ export const NAV_GROUPS: NavGroupMeta[] = [
     slug: "con-sentido-grupo",
     label: "Con Sentido",
     icon: "🛍️",
-    paths: ["/con-sentido", "/con-sentido/velas", "/pedidos", "/talleres"],
+    paths: ["/con-sentido", "/con-sentido/velas", "/con-sentido/concreto", "/pedidos", "/talleres"],
   },
   { slug: "insumos-grupo", label: "Insumos", icon: "📦", paths: ["/insumos"] },
 ];

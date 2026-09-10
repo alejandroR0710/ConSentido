@@ -205,7 +205,7 @@ export function CalculadoraConcretoPage() {
                 value={pesoFinal}
                 onChange={setPesoFinal}
                 autoFocus
-                placeholder="Ej. 549"
+                placeholder="Ej. 580"
                 className={`${INPUT_CLASE} text-lg font-semibold`}
               />
             </Campo>

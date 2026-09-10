@@ -4,11 +4,12 @@ import type { ActualizarParametrosConcretoInput, CalcularConcretoInput } from ".
 // ============================================================================
 // Fórmula de fabricación — FIJA por decisión del negocio, nunca configurable.
 // ============================================================================
-// Pieza de referencia: molde con 300 g de agua → pieza terminada de 549 g.
-//   Base de mezcla = 300 × 1,8 = 540 g
+// Pieza de referencia: prueba real pesada por el negocio — pieza terminada
+// de 580 g hecha con 216 g cemento + 324 g marmolina + 129,6 g agua
+// (cemento+marmolina = base de mezcla = 540 g).
 // Como la calculadora solo recibe el peso final, se invierte esa relación:
-//   Base de mezcla = peso final × (540 ÷ 549)
-const FACTOR_CONVERSION = 540 / 549; // ≈ 0,983606557
+//   Base de mezcla = peso final × (540 ÷ 580)
+const FACTOR_CONVERSION = 540 / 580; // ≈ 0,931034483
 const PORCENTAJE_CEMENTO = 0.4; // 40% de la base de mezcla
 const PORCENTAJE_MARMOLINA = 0.6; // 60% de la base de mezcla
 const PORCENTAJE_AGUA = 0.24; // 24% de la base de mezcla

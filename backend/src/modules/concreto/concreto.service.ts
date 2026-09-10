@@ -31,15 +31,17 @@ export const actualizarParametros = (d: ActualizarParametrosConcretoInput) => re
  */
 export async function calcular(input: CalcularConcretoInput) {
   const p = await repo.getParametros();
-  const precioCementoGramo = Number(p.precio_cemento_gramo);
-  const precioMarmolinaGramo = Number(p.precio_marmolina_gramo);
-  const costoAgua = Number(p.costo_agua);
-  const costoPintura = Number(p.costo_pintura);
-  const costoSellante = Number(p.costo_sellante);
-  const costoLija = Number(p.costo_lija);
-  const costoManoObra = Number(p.costo_mano_obra);
-  const multiplicador = Number(p.multiplicador_precio);
-  const redondeo = Number(p.redondeo);
+  // Cada campo: el override que mandó la pantalla (edición en vivo, sin
+  // guardar) o, si no vino, el valor guardado en concreto_parametros.
+  const precioCementoGramo = input.precioCementoGramo ?? Number(p.precio_cemento_gramo);
+  const precioMarmolinaGramo = input.precioMarmolinaGramo ?? Number(p.precio_marmolina_gramo);
+  const costoAgua = input.costoAgua ?? Number(p.costo_agua);
+  const costoPintura = input.costoPintura ?? Number(p.costo_pintura);
+  const costoSellante = input.costoSellante ?? Number(p.costo_sellante);
+  const costoLija = input.costoLija ?? Number(p.costo_lija);
+  const costoManoObra = input.costoManoObra ?? Number(p.costo_mano_obra);
+  const multiplicador = input.multiplicadorPrecio ?? Number(p.multiplicador_precio);
+  const redondeo = input.redondeo ?? Number(p.redondeo);
 
   const pesoFinalG = input.pesoFinalG;
   const baseMezclaG = pesoFinalG * FACTOR_CONVERSION;

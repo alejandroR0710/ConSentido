@@ -1,9 +1,20 @@
 import { z } from "zod";
 
-// La calculadora recibe SOLO el peso final de la pieza terminada (gramos);
-// todo lo demás sale de la fórmula fija + los parámetros configurables.
+// La calculadora recibe el peso final de la pieza terminada (gramos). Los
+// demás campos son overrides opcionales: la pantalla única los manda mientras
+// el usuario edita los precios/costos SIN haberlos guardado todavía, para ver
+// el precio en vivo. Si no vienen, se usan los guardados en concreto_parametros.
 export const calcularConcretoSchema = z.object({
   pesoFinalG: z.number().positive("El peso final debe ser mayor a 0"),
+  precioCementoGramo: z.number().positive().optional(),
+  precioMarmolinaGramo: z.number().positive().optional(),
+  costoAgua: z.number().nonnegative().optional(),
+  costoPintura: z.number().nonnegative().optional(),
+  costoSellante: z.number().nonnegative().optional(),
+  costoLija: z.number().nonnegative().optional(),
+  costoManoObra: z.number().nonnegative().optional(),
+  multiplicadorPrecio: z.number().positive().optional(),
+  redondeo: z.union([z.literal(0), z.literal(100), z.literal(500), z.literal(1000)]).optional(),
 });
 export type CalcularConcretoInput = z.infer<typeof calcularConcretoSchema>;
 

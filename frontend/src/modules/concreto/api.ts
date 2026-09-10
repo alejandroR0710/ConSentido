@@ -50,10 +50,16 @@ export interface CalculoConcreto {
   precioVenta: number;
 }
 
+// pesoFinalG + overrides opcionales de precios/costos: la pantalla única los
+// manda mientras se editan sin guardar, para ver el precio en vivo.
+export interface CalcularConcretoInput extends Partial<ActualizarParametrosConcretoInput> {
+  pesoFinalG: number;
+}
+
 export const concretoApi = {
   obtenerParametros: () => apiFetch<ParametrosConcreto>("/concreto/parametros"),
   actualizarParametros: (input: ActualizarParametrosConcretoInput) =>
     apiFetch<ParametrosConcreto>("/concreto/parametros", { method: "PUT", body: input }),
-  calcular: (pesoFinalG: number) =>
-    apiFetch<CalculoConcreto>("/concreto/calcular", { method: "POST", body: { pesoFinalG } }),
+  calcular: (input: CalcularConcretoInput) =>
+    apiFetch<CalculoConcreto>("/concreto/calcular", { method: "POST", body: input }),
 };

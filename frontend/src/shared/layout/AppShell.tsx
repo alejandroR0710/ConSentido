@@ -4,6 +4,7 @@ import { desbloquearAudio } from "../../modules/migao/beep";
 import { useAuth } from "../auth/useAuth";
 import { Modal } from "../components/Modal";
 import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
+import { BotonLeadExterno } from "./BotonLeadExterno";
 import { IndicadorTurnoCaja } from "./IndicadorTurnoCaja";
 import { RoleNav } from "./RoleNav";
 
@@ -66,6 +67,7 @@ export function AppShell() {
           <div className="flex shrink-0 items-center gap-2 text-sm">
             <IndicadorTurnoCaja />
             <span className="hidden sm:inline">{usuario.nombre}</span>
+            <BotonLeadExterno />
             <BotonRefrescar />
             <button
               onClick={() => logout()}

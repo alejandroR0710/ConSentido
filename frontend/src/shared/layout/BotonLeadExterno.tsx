@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ApiError } from "../api/client";
 import { leadsExternosApi } from "../api/leadsExternos";
 import { Modal } from "../components/Modal";
 
@@ -15,9 +14,12 @@ const CASILLAS: { clave: "showWorkshops" | "showExperience" | "includeImages" | 
 
 /**
  * Botón del header para registrar un contacto interesado y reenviarlo al bot
- * externo (otro proyecto, fuera de este repo — ver leads-externos.service.ts
- * en el backend). Disponible para cualquier usuario logueado, sin permiso
- * dedicado: no es un módulo del menú, es un atajo rápido desde cualquier pantalla.
+ * externo (otro proyecto, fuera de este repo — ver leadsExternos.ts). Ese bot
+ * solo vive en la red Wi-Fi del negocio, así que la llamada sale DIRECTO
+ * desde el navegador (nunca pasa por nuestro backend en Render, que no
+ * podría alcanzarlo) — solo funciona si el dispositivo está en esa red.
+ * Disponible para cualquier usuario logueado, sin permiso dedicado: no es un
+ * módulo del menú, es un atajo rápido desde cualquier pantalla.
  */
 export function BotonLeadExterno() {
   const [abierto, setAbierto] = useState(false);
@@ -57,7 +59,7 @@ export function BotonLeadExterno() {
       await leadsExternosApi.enviar({ name: nombre.trim(), phone: telefono.trim(), params });
       setExito(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo enviar el lead");
+      setError(err instanceof Error ? err.message : "No se pudo enviar el lead");
     } finally {
       setEnviando(false);
     }

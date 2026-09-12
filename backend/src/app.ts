@@ -7,7 +7,6 @@ import { cajaRouter } from "./modules/general/caja/caja.routes";
 import { concretoRouter } from "./modules/concreto/concreto.routes";
 import { conSentidoRouter } from "./modules/con_sentido/con_sentido.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
-import { leadsExternosRouter } from "./modules/leads-externos/leads-externos.routes";
 import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
 import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
@@ -74,7 +73,6 @@ export function createApp() {
   app.use("/api/v1/migao", migaoRouter);
   app.use("/api/v1/velas", velasRouter);
   app.use("/api/v1/concreto", concretoRouter);
-  app.use("/api/v1/leads-externos", leadsExternosRouter);
   app.use("/api/v1/analytics", analyticsRouter);
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);

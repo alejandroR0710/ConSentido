@@ -1,8 +1,9 @@
-// El bot vive en la misma red Wi-Fi que la PC del negocio (WhatsApp + sesión
-// local) — no es alcanzable desde nuestro backend en Render (nube), así que
-// esto se llama DIRECTO desde el navegador de quien use el botón del header.
-// Solo funciona si ese dispositivo está conectado a esa misma red.
-const EXTERNAL_LEAD_URL = "http://192.168.0.18:4321/api/external-lead"; // TODO: actualizar si cambia la IP de la PC
+// El bot vive en la misma red que la PC del negocio (WhatsApp + sesión
+// local), conectada por cable Ethernet — no es alcanzable desde nuestro
+// backend en Render (nube), así que esto se llama DIRECTO desde el navegador
+// de quien use el botón del header. Solo funciona si ese dispositivo está
+// conectado a esa misma red.
+const EXTERNAL_LEAD_URL = "http://192.168.0.15:4321/api/external-lead"; // TODO: actualizar si cambia la IP de esa PC
 const EXTERNAL_LEAD_API_KEY = ""; // el bot todavía no exige x-api-key; pon el valor acá si se activa
 
 export interface EnviarLeadInput {

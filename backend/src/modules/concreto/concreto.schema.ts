@@ -20,8 +20,8 @@ export type CalcularConcretoInput = z.infer<typeof calcularConcretoSchema>;
 
 // Precios de material, costos fijos por pieza, mano de obra, multiplicador de
 // venta y redondeo — lo único editable. La receta de fabricación (40% cemento
-// / 60% marmolina / 24% agua y el factor de conversión) NO se toca, va fija
-// en concreto.service.ts.
+// / 60% marmolina directo sobre el peso final) NO se toca, va fija en
+// concreto.service.ts.
 export const actualizarParametrosConcretoSchema = z.object({
   precioCementoGramo: z.number().positive(),
   precioMarmolinaGramo: z.number().positive(),

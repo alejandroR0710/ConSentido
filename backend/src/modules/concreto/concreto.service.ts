@@ -4,15 +4,11 @@ import type { ActualizarParametrosConcretoInput, CalcularConcretoInput } from ".
 // ============================================================================
 // Fórmula de fabricación — FIJA por decisión del negocio, nunca configurable.
 // ============================================================================
-// Pieza de referencia: prueba real pesada por el negocio — pieza terminada
-// de 580 g hecha con 216 g cemento + 324 g marmolina + 129,6 g agua
-// (cemento+marmolina = base de mezcla = 540 g).
-// Como la calculadora solo recibe el peso final, se invierte esa relación:
-//   Base de mezcla = peso final × (540 ÷ 580)
-const FACTOR_CONVERSION = 540 / 580; // ≈ 0,931034483
-const PORCENTAJE_CEMENTO = 0.4; // 40% de la base de mezcla
-const PORCENTAJE_MARMOLINA = 0.6; // 60% de la base de mezcla
-const PORCENTAJE_AGUA = 0.24; // 24% de la base de mezcla
+// Directo sobre el peso final de la pieza terminada, sin factor de
+// conversión ni agua como material: cemento + marmolina ya suman el 100% de
+// ese peso (el agua entra solo como costo fijo de proceso, ver costoAgua).
+const PORCENTAJE_CEMENTO = 0.4; // 40% del peso final
+const PORCENTAJE_MARMOLINA = 0.6; // 60% del peso final
 
 /** Redondeo del precio de venta SIEMPRE hacia arriba — redondear hacia abajo
  *  le regalaría margen al negocio (mismo criterio que la calculadora de velas). */
@@ -28,7 +24,7 @@ export const actualizarParametros = (d: ActualizarParametrosConcretoInput) => re
  * A partir de SOLO el peso final de la pieza terminada, devuelve el desglose
  * completo: gramos de cada material, costo de producción y precio de venta.
  * Los precios y costos fijos salen de concreto_parametros (editables); la
- * receta (40/60/24 y el factor de conversión) va fija arriba.
+ * receta (40/60 directo sobre el peso final) va fija arriba.
  */
 export async function calcular(input: CalcularConcretoInput) {
   const p = await repo.getParametros();
@@ -45,10 +41,8 @@ export async function calcular(input: CalcularConcretoInput) {
   const redondeo = input.redondeo ?? Number(p.redondeo);
 
   const pesoFinalG = input.pesoFinalG;
-  const baseMezclaG = pesoFinalG * FACTOR_CONVERSION;
-  const cementoG = baseMezclaG * PORCENTAJE_CEMENTO;
-  const marmolinaG = baseMezclaG * PORCENTAJE_MARMOLINA;
-  const aguaG = baseMezclaG * PORCENTAJE_AGUA;
+  const cementoG = pesoFinalG * PORCENTAJE_CEMENTO;
+  const marmolinaG = pesoFinalG * PORCENTAJE_MARMOLINA;
 
   const costoCemento = cementoG * precioCementoGramo;
   const costoMarmolina = marmolinaG * precioMarmolinaGramo;
@@ -58,10 +52,8 @@ export async function calcular(input: CalcularConcretoInput) {
 
   return {
     pesoFinalG,
-    baseMezclaG,
     cementoG,
     marmolinaG,
-    aguaG,
     costoCemento,
     costoMarmolina,
     costosAdicionalesDetalle: {

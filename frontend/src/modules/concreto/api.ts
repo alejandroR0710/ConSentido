@@ -30,10 +30,8 @@ export interface ActualizarParametrosConcretoInput {
 // Resultado del cálculo — no persiste nada, se pide en cada cambio del peso.
 export interface CalculoConcreto {
   pesoFinalG: number;
-  baseMezclaG: number;
   cementoG: number;
   marmolinaG: number;
-  aguaG: number;
   costoCemento: number;
   costoMarmolina: number;
   costosAdicionalesDetalle: {

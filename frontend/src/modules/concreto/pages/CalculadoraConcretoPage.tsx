@@ -51,7 +51,7 @@ function Campo({
  * Todo en una sola pantalla: peso de la pieza + precios/costos editables, con
  * el desglose y el precio de venta actualizándose en vivo. "Guardar precios"
  * fija esos valores como los de por defecto para la próxima vez. La receta
- * (40% cemento / 60% marmolina / 24% agua, factor de mezcla) es fija.
+ * (40% cemento / 60% marmolina, directo sobre el peso final) es fija.
  */
 export function CalculadoraConcretoPage() {
   const { usuario } = useAuth();
@@ -165,10 +165,8 @@ export function CalculadoraConcretoPage() {
   const filas: { label: string; valor: string; fuerte?: boolean }[] = resultado
     ? [
         { label: "Peso final de la pieza", valor: formatGramos(resultado.pesoFinalG) },
-        { label: "Base de mezcla", valor: formatGramos(resultado.baseMezclaG) },
         { label: "Cemento blanco (40%)", valor: formatGramos(resultado.cementoG) },
         { label: "Marmolina (60%)", valor: formatGramos(resultado.marmolinaG) },
-        { label: "Agua (24%)", valor: formatGramos(resultado.aguaG) },
         { label: "Costo cemento", valor: formatMoney(resultado.costoCemento) },
         { label: "Costo marmolina", valor: formatMoney(resultado.costoMarmolina) },
         {
@@ -191,7 +189,7 @@ export function CalculadoraConcretoPage() {
         <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">Precio de Concreto</h1>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Pesa la pieza terminada, ingresa ese peso y el sistema calcula cuánto costó producirla y su precio de venta.
-          La receta es fija (40% cemento blanco, 60% marmolina, 24% agua, factor de mezcla 1,8); los precios de abajo se
+          La receta es fija (40% cemento blanco, 60% marmolina, directo sobre ese peso); los precios de abajo se
           ajustan cuando cambien.
         </p>
       </div>

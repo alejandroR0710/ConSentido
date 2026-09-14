@@ -2,8 +2,9 @@ import { useState } from "react";
 import { leadsExternosApi, type TipoLead } from "../api/leadsExternos";
 import { Modal } from "../components/Modal";
 
-const INPUT_CLASE =
-  "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
+const CAMPO_CLASE =
+  "rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
+const INPUT_CLASE = `w-full ${CAMPO_CLASE}`;
 
 // Indicativos de país más comunes para los clientes del negocio — Colombia
 // por defecto. El número final que se manda al bot es código + número pegado
@@ -123,7 +124,7 @@ export function BotonLeadExterno() {
                   <select
                     value={codigoPais}
                     onChange={(e) => setCodigoPais(e.target.value)}
-                    className={`${INPUT_CLASE} w-auto shrink-0`}
+                    className={`${CAMPO_CLASE} shrink-0`}
                   >
                     {CODIGOS_PAIS.map(({ valor, etiqueta }) => (
                       <option key={valor} value={valor}>
@@ -136,7 +137,7 @@ export function BotonLeadExterno() {
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value)}
                     placeholder="Ej. 3001234567"
-                    className={INPUT_CLASE}
+                    className={`${CAMPO_CLASE} min-w-0 flex-1`}
                   />
                 </div>
               </div>

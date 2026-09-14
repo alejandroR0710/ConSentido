@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { leadsExternosApi } from "../api/leadsExternos";
+import { leadsExternosApi, type TipoLead } from "../api/leadsExternos";
 import { Modal } from "../components/Modal";
 
 const INPUT_CLASE =
   "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 
-const CASILLAS: { clave: "showWorkshops" | "showExperience" | "includeImages" | "sendCatalog"; etiqueta: string }[] = [
-  { clave: "showExperience", etiqueta: "Mostrar experiencia" },
-  { clave: "showWorkshops", etiqueta: "Mostrar talleres" },
-  { clave: "includeImages", etiqueta: "Incluir imágenes" },
-  { clave: "sendCatalog", etiqueta: "Enviar catálogo" },
+// Las 5 opciones de interés que maneja el bot (params.type) — confirmadas
+// con el proyecto del bot.
+const TIPOS: { valor: TipoLead; etiqueta: string }[] = [
+  { valor: "experience", etiqueta: "Solo experiencia" },
+  { valor: "basic", etiqueta: "Taller básico (incluye básico personalizado)" },
+  { valor: "advanced", etiqueta: "Avanzado" },
+  { valor: "concrete", etiqueta: "Concreto" },
+  { valor: "all", etiqueta: "Todo junto" },
 ];
 
 /**
@@ -25,12 +28,7 @@ export function BotonLeadExterno() {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [params, setParams] = useState({
-    showWorkshops: false,
-    showExperience: false,
-    includeImages: false,
-    sendCatalog: false,
-  });
+  const [tipo, setTipo] = useState<TipoLead>("basic");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
@@ -38,7 +36,7 @@ export function BotonLeadExterno() {
   function reiniciar() {
     setNombre("");
     setTelefono("");
-    setParams({ showWorkshops: false, showExperience: false, includeImages: false, sendCatalog: false });
+    setTipo("basic");
     setError(null);
     setExito(false);
   }
@@ -56,7 +54,7 @@ export function BotonLeadExterno() {
     setEnviando(true);
     setError(null);
     try {
-      await leadsExternosApi.enviar({ name: nombre.trim(), phone: telefono.trim(), params });
+      await leadsExternosApi.enviar({ name: nombre.trim(), phone: telefono.trim(), params: { type: tipo } });
       setExito(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo enviar el lead");
@@ -114,13 +112,14 @@ export function BotonLeadExterno() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <span className="text-xs font-medium">¿Qué debe enviarle el bot?</span>
-                {CASILLAS.map(({ clave, etiqueta }) => (
-                  <label key={clave} className="flex items-center gap-2 text-sm">
+                <span className="text-xs font-medium">¿Qué le interesa?</span>
+                {TIPOS.map(({ valor, etiqueta }) => (
+                  <label key={valor} className="flex items-center gap-2 text-sm">
                     <input
-                      type="checkbox"
-                      checked={params[clave]}
-                      onChange={(e) => setParams((actual) => ({ ...actual, [clave]: e.target.checked }))}
+                      type="radio"
+                      name="tipo-lead"
+                      checked={tipo === valor}
+                      onChange={() => setTipo(valor)}
                       className="h-4 w-4"
                     />
                     {etiqueta}

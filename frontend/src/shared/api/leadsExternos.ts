@@ -4,17 +4,16 @@
 // de quien use el botón del header. Solo funciona si ese dispositivo está
 // conectado a esa misma red.
 const EXTERNAL_LEAD_URL = "http://192.168.0.15:4321/api/external-lead"; // TODO: actualizar si cambia la IP de esa PC
-const EXTERNAL_LEAD_API_KEY = ""; // el bot todavía no exige x-api-key; pon el valor acá si se activa
+const EXTERNAL_LEAD_API_KEY = "4d7b5012dfdaa6db6d2171d5dace6473d233e649416c57ea";
+
+// Las 5 opciones del negocio (ver BotonLeadExterno.tsx) — el bot solo recibe
+// un `type`, no las 4 casillas sueltas que se probaron antes.
+export type TipoLead = "experience" | "basic" | "advanced" | "concrete" | "all";
 
 export interface EnviarLeadInput {
   phone: string;
   name: string;
-  params: {
-    showWorkshops: boolean;
-    showExperience: boolean;
-    includeImages: boolean;
-    sendCatalog: boolean;
-  };
+  params: { type: TipoLead };
 }
 
 export const leadsExternosApi = {

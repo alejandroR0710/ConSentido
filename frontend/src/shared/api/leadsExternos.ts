@@ -4,7 +4,12 @@
 // de quien use el botón del header. Solo funciona si ese dispositivo está
 // conectado a esa misma red.
 const EXTERNAL_LEAD_URL = "http://192.168.0.15:4321/api/external-lead"; // TODO: actualizar si cambia la IP de esa PC
-const EXTERNAL_LEAD_API_KEY = "4d7b5012dfdaa6db6d2171d5dace6473d233e649416c57ea";
+// La clave SÍ sale de env var (VITE_EXTERNAL_LEAD_API_KEY, ver .env.example)
+// para no dejarla escrita en el código/git — aunque igual queda visible en el
+// JS ya compilado para quien abra la página, porque esta llamada sale del
+// navegador (ver comentario de arriba). La env var solo evita que quede en
+// el historial de git.
+const EXTERNAL_LEAD_API_KEY = import.meta.env.VITE_EXTERNAL_LEAD_API_KEY ?? "";
 
 // Las 5 opciones del negocio (ver BotonLeadExterno.tsx) — el bot solo recibe
 // un `type`, no las 4 casillas sueltas que se probaron antes.

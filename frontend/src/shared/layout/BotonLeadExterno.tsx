@@ -5,6 +5,20 @@ import { Modal } from "../components/Modal";
 const INPUT_CLASE =
   "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 
+// Indicativos de país más comunes para los clientes del negocio — Colombia
+// por defecto. El número final que se manda al bot es código + número pegado
+// (ej. "57" + "3001234567" = "573001234567"), igual al formato del ejemplo.
+const CODIGOS_PAIS: { valor: string; etiqueta: string }[] = [
+  { valor: "57", etiqueta: "🇨🇴 +57 Colombia" },
+  { valor: "52", etiqueta: "🇲🇽 +52 México" },
+  { valor: "58", etiqueta: "🇻🇪 +58 Venezuela" },
+  { valor: "593", etiqueta: "🇪🇨 +593 Ecuador" },
+  { valor: "51", etiqueta: "🇵🇪 +51 Perú" },
+  { valor: "54", etiqueta: "🇦🇷 +54 Argentina" },
+  { valor: "1", etiqueta: "🇺🇸 +1 Estados Unidos" },
+  { valor: "34", etiqueta: "🇪🇸 +34 España" },
+];
+
 // Las 5 opciones de interés que maneja el bot (params.type) — confirmadas
 // con el proyecto del bot.
 const TIPOS: { valor: TipoLead; etiqueta: string }[] = [
@@ -27,6 +41,7 @@ const TIPOS: { valor: TipoLead; etiqueta: string }[] = [
 export function BotonLeadExterno() {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
+  const [codigoPais, setCodigoPais] = useState("57");
   const [telefono, setTelefono] = useState("");
   const [tipo, setTipo] = useState<TipoLead>("basic");
   const [enviando, setEnviando] = useState(false);
@@ -35,6 +50,7 @@ export function BotonLeadExterno() {
 
   function reiniciar() {
     setNombre("");
+    setCodigoPais("57");
     setTelefono("");
     setTipo("basic");
     setError(null);
@@ -54,7 +70,8 @@ export function BotonLeadExterno() {
     setEnviando(true);
     setError(null);
     try {
-      await leadsExternosApi.enviar({ name: nombre.trim(), phone: telefono.trim(), params: { type: tipo } });
+      const phone = `${codigoPais}${telefono.trim().replace(/\D/g, "")}`;
+      await leadsExternosApi.enviar({ name: nombre.trim(), phone, params: { type: tipo } });
       setExito(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo enviar el lead");
@@ -102,13 +119,26 @@ export function BotonLeadExterno() {
 
               <div>
                 <label className="mb-1 block text-xs font-medium">Teléfono</label>
-                <input
-                  type="tel"
-                  value={telefono}
-                  onChange={(e) => setTelefono(e.target.value)}
-                  placeholder="Ej. 573001234567"
-                  className={INPUT_CLASE}
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={codigoPais}
+                    onChange={(e) => setCodigoPais(e.target.value)}
+                    className={`${INPUT_CLASE} w-auto shrink-0`}
+                  >
+                    {CODIGOS_PAIS.map(({ valor, etiqueta }) => (
+                      <option key={valor} value={valor}>
+                        {etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    value={telefono}
+                    onChange={(e) => setTelefono(e.target.value)}
+                    placeholder="Ej. 3001234567"
+                    className={INPUT_CLASE}
+                  />
+                </div>
               </div>
 
               <div className="flex flex-col gap-2">

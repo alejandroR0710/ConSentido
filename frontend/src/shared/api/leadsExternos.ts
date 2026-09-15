@@ -11,14 +11,14 @@ const EXTERNAL_LEAD_URL = "http://192.168.0.15:4321/api/external-lead"; // TODO:
 // el historial de git.
 const EXTERNAL_LEAD_API_KEY = import.meta.env.VITE_EXTERNAL_LEAD_API_KEY ?? "";
 
-// Las 5 opciones del negocio (ver BotonLeadExterno.tsx) — el bot solo recibe
-// un `type`, no las 4 casillas sueltas que se probaron antes.
+// Las 5 opciones del negocio (ver BotonLeadExterno.tsx) — el bot recibe una
+// LISTA de tipos (se puede marcar más de uno, no hace falta marcarlos todos).
 export type TipoLead = "experience" | "basic" | "advanced" | "concrete" | "all";
 
 export interface EnviarLeadInput {
   phone: string;
   name: string;
-  params: { type: TipoLead };
+  params: { type: TipoLead[] };
 }
 
 export const leadsExternosApi = {

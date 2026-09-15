@@ -44,7 +44,7 @@ export function BotonLeadExterno() {
   const [nombre, setNombre] = useState("");
   const [codigoPais, setCodigoPais] = useState("57");
   const [telefono, setTelefono] = useState("");
-  const [tipo, setTipo] = useState<TipoLead>("basic");
+  const [tipos, setTipos] = useState<TipoLead[]>(["basic"]);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
@@ -53,9 +53,13 @@ export function BotonLeadExterno() {
     setNombre("");
     setCodigoPais("57");
     setTelefono("");
-    setTipo("basic");
+    setTipos(["basic"]);
     setError(null);
     setExito(false);
+  }
+
+  function alternarTipo(valor: TipoLead) {
+    setTipos((actual) => (actual.includes(valor) ? actual.filter((t) => t !== valor) : [...actual, valor]));
   }
 
   function cerrar() {
@@ -68,11 +72,15 @@ export function BotonLeadExterno() {
       setError("Nombre y teléfono son obligatorios");
       return;
     }
+    if (tipos.length === 0) {
+      setError("Marca al menos una opción de interés");
+      return;
+    }
     setEnviando(true);
     setError(null);
     try {
       const phone = `${codigoPais}${telefono.trim().replace(/\D/g, "")}`;
-      await leadsExternosApi.enviar({ name: nombre.trim(), phone, params: { type: tipo } });
+      await leadsExternosApi.enviar({ name: nombre.trim(), phone, params: { type: tipos } });
       setExito(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo enviar el lead");
@@ -143,14 +151,13 @@ export function BotonLeadExterno() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <span className="text-xs font-medium">¿Qué le interesa?</span>
+                <span className="text-xs font-medium">¿Qué le interesa? (puedes marcar varios)</span>
                 {TIPOS.map(({ valor, etiqueta }) => (
                   <label key={valor} className="flex items-center gap-2 text-sm">
                     <input
-                      type="radio"
-                      name="tipo-lead"
-                      checked={tipo === valor}
-                      onChange={() => setTipo(valor)}
+                      type="checkbox"
+                      checked={tipos.includes(valor)}
+                      onChange={() => alternarTipo(valor)}
                       className="h-4 w-4"
                     />
                     {etiqueta}
@@ -162,7 +169,7 @@ export function BotonLeadExterno() {
 
               <button
                 onClick={enviar}
-                disabled={enviando}
+                disabled={enviando || tipos.length === 0}
                 className="w-full rounded-md bg-brand-green-700 px-4 py-2 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
               >
                 {enviando ? "Enviando..." : "Enviar lead"}

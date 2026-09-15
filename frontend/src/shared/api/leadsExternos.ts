@@ -11,9 +11,11 @@ const EXTERNAL_LEAD_URL = "http://192.168.0.15:4321/api/external-lead"; // TODO:
 // el historial de git.
 const EXTERNAL_LEAD_API_KEY = import.meta.env.VITE_EXTERNAL_LEAD_API_KEY ?? "";
 
-// Las 5 opciones del negocio (ver BotonLeadExterno.tsx) — el bot recibe una
-// LISTA de tipos (se puede marcar más de uno, no hace falta marcarlos todos).
-export type TipoLead = "experience" | "basic" | "advanced" | "concrete" | "all";
+// Los 4 tipos reales que entiende el bot — el bot recibe una LISTA (se puede
+// marcar más de uno, no hace falta marcarlos todos). "Todo junto" en el
+// formulario NO es un 5º valor: es un atajo de UI que marca estos 4 a la vez
+// (ver BotonLeadExterno.tsx), para no mandar "all" Y los sueltos duplicado.
+export type TipoLead = "experience" | "basic" | "advanced" | "concrete";
 
 export interface EnviarLeadInput {
   phone: string;

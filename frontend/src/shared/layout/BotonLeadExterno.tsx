@@ -20,15 +20,14 @@ const CODIGOS_PAIS: { valor: string; etiqueta: string }[] = [
   { valor: "34", etiqueta: "🇪🇸 +34 España" },
 ];
 
-// Las 5 opciones de interés que maneja el bot (params.type) — confirmadas
-// con el proyecto del bot.
+// Los 4 tipos reales que se mandan al bot (params.type).
 const TIPOS: { valor: TipoLead; etiqueta: string }[] = [
   { valor: "experience", etiqueta: "Solo experiencia" },
   { valor: "basic", etiqueta: "Taller básico (incluye básico personalizado)" },
   { valor: "advanced", etiqueta: "Avanzado" },
   { valor: "concrete", etiqueta: "Concreto" },
-  { valor: "all", etiqueta: "Todo junto" },
 ];
+const TODOS_LOS_TIPOS = TIPOS.map((t) => t.valor);
 
 /**
  * Botón del header para registrar un contacto interesado y reenviarlo al bot
@@ -60,6 +59,14 @@ export function BotonLeadExterno() {
 
   function alternarTipo(valor: TipoLead) {
     setTipos((actual) => (actual.includes(valor) ? actual.filter((t) => t !== valor) : [...actual, valor]));
+  }
+
+  // "Todo junto" no es un valor que se manda al bot: es un atajo que marca
+  // (o desmarca) los 4 tipos reales de una — evita mandar "all" Y los sueltos
+  // duplicado si alguien marca todo a mano.
+  const todoMarcado = TODOS_LOS_TIPOS.every((t) => tipos.includes(t));
+  function alternarTodo() {
+    setTipos(todoMarcado ? [] : TODOS_LOS_TIPOS);
   }
 
   function cerrar() {
@@ -163,6 +170,10 @@ export function BotonLeadExterno() {
                     {etiqueta}
                   </label>
                 ))}
+                <label className="flex items-center gap-2 border-t border-brand-vanilla-dark pt-2 text-sm font-medium dark:border-brand-green-700">
+                  <input type="checkbox" checked={todoMarcado} onChange={alternarTodo} className="h-4 w-4" />
+                  Todo junto
+                </label>
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}

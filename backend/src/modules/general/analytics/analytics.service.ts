@@ -5,10 +5,17 @@ import type { AnalyticsConSentido, AnalyticsInsumos, AnalyticsPedidos } from "./
  * Analíticas generales: resumen de movimientos de caja por todas las áreas
  */
 export async function obtenerAnalyticsGeneral(desde: string, hasta: string) {
-  const movimientosPorModulo = await repo.getMovimientosPorModulo(desde, hasta);
+  const [movimientosPorModulo, totales] = await Promise.all([
+    repo.getMovimientosPorModulo(desde, hasta),
+    repo.getTotalesMovimientos(desde, hasta),
+  ]);
 
-  const total_ingresos = movimientosPorModulo.reduce((sum, m) => sum + Number(m.ingresos), 0);
-  const total_egresos = movimientosPorModulo.reduce((sum, m) => sum + Number(m.egresos), 0);
+  // Totales reales del rango — NO la suma de `movimientosPorModulo`: esa
+  // vista excluye moduloId=1 y cualquier movimiento sin área asignada (la
+  // gran mayoría de los egresos), así que sumarla dejaba "Egresos totales"
+  // en $0 aunque sí hubiera egresos reales (ver getTotalesMovimientos).
+  const total_ingresos = Number(totales.ingresos);
+  const total_egresos = Number(totales.egresos);
 
   return {
     resumenGeneral: {

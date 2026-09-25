@@ -12,6 +12,31 @@ import { pool } from "../../../shared/db/pool";
  */
 const BOGOTA = "AT TIME ZONE 'America/Bogota'";
 
+/**
+ * Totales reales de ingresos/egresos del rango, sin pasar por la atribución
+ * a un área — a diferencia de un ingreso (siempre trae `modulo_origen_id`,
+ * es obligatorio al registrarlo), un egreso casi nunca tiene área propia: se
+ * clasifica por categoría de gasto, y la mayoría de categorías (Servicios,
+ * Mantenimiento, arriendo, etc.) no están ligadas a ningún módulo puntual
+ * (ver caja.service.ts línea ~344 y categorias_gasto.modulo_id, nullable).
+ * Si estos totales se calcularan sumando `getMovimientosPorModulo` (que
+ * excluye moduloId=1 y descarta cualquier fila sin área vía el LEFT JOIN),
+ * casi todos los egresos quedarían fuera y "Egresos totales" mostraría
+ * siempre $0 aunque sí haya egresos reales — por eso este total se calcula
+ * aparte, directo contra movimientos_caja completo.
+ */
+export async function getTotalesMovimientos(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso'), 0) AS ingresos,
+       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'), 0) AS egresos
+     FROM movimientos_caja
+     WHERE to_char(created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+    [desde, hasta],
+  );
+  return result.rows[0];
+}
+
 export async function getMovimientosPorModulo(desde: string, hasta: string) {
   const result = await pool.query(
     `WITH mov AS (

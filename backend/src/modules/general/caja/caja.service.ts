@@ -1,5 +1,4 @@
-import { Pool, PoolClient } from "pg";
-import { pool } from "../../../shared/db/pool";
+import { Pool, PoolClient, pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
 import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
@@ -577,7 +576,7 @@ export async function agregarMovimientoHistorico(
 
   // Mediodía en hora Bogotá (offset fijo -05:00, Colombia no tiene horario de
   // verano): cae de sobra dentro del mismo día calendario en cualquier
-  // consulta AT TIME ZONE 'America/Bogota' ya existente.
+  // consulta por día ya existente.
   const createdAt = new Date(`${fecha}T12:00:00-05:00`);
 
   const movimiento = await repo.insertMovimientoHistorico({

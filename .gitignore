@@ -29,3 +29,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Rama hosting-mysql: datos reales exportados de Supabase y paquete de hosting
+database/mysql/datos.sql
+hosting/
+backend/public/

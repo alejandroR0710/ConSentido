@@ -252,10 +252,10 @@ export async function getProductoById(id: string) {
   const producto = await pool.query(`SELECT * FROM velas_productos WHERE id = $1`, [id]);
   if (!producto.rowCount) return null;
   const [ceras, fragancias, insumos] = await Promise.all([
-    pool.query(`SELECT cera_id, gramos FROM velas_producto_ceras WHERE producto_id = $1`, [id]),
-    pool.query(`SELECT fragancia_id, porcentaje FROM velas_producto_fragancias WHERE producto_id = $1`, [id]),
+    pool.query(`SELECT cera_id, gramos FROM velas_producto_ceras WHERE producto_id = $1 ORDER BY orden`, [id]),
+    pool.query(`SELECT fragancia_id, porcentaje FROM velas_producto_fragancias WHERE producto_id = $1 ORDER BY orden`, [id]),
     pool.query(
-      `SELECT insumo_id, nombre_manual, valor_unitario_manual, cantidad FROM velas_producto_insumos WHERE producto_id = $1`,
+      `SELECT insumo_id, nombre_manual, valor_unitario_manual, cantidad FROM velas_producto_insumos WHERE producto_id = $1 ORDER BY orden`,
       [id],
     ),
   ]);
@@ -281,7 +281,7 @@ export async function getProductoById(id: string) {
   };
 }
 
-async function reemplazarComposicion(client: import("pg").PoolClient, productoId: string, c: ComposicionReceta) {
+async function reemplazarComposicion(client: import("../../shared/db/pool").PoolClient, productoId: string, c: ComposicionReceta) {
   await client.query(`DELETE FROM velas_producto_ceras WHERE producto_id = $1`, [productoId]);
   await client.query(`DELETE FROM velas_producto_fragancias WHERE producto_id = $1`, [productoId]);
   await client.query(`DELETE FROM velas_producto_insumos WHERE producto_id = $1`, [productoId]);

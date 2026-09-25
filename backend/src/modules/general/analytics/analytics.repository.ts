@@ -1,16 +1,11 @@
 import { pool } from "../../../shared/db/pool";
 
 /**
- * Todas las consultas filtran por to_char(columna AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')
- * en vez de ::date, igual que el resto de "historial" de la app (ver
- * caja.repository.ts) — evita que un servidor no-UTC desplace el día al
- * serializar a JSON. El "AT TIME ZONE" explícito (no basta con la config de
- * sesión del pool) es necesario porque si Supabase usa el connection pooler
- * en modo transacción, cada consulta puede caer en una conexión física
- * distinta y el "SET timezone" de sesión no aplica de forma confiable — esta
- * conversión es correcta sin importar la sesión.
+ * Todas las consultas filtran por DATE_FORMAT(columna, '%Y-%m-%d') (texto
+ * "YYYY-MM-DD", inequívoco al serializar a JSON), igual que el resto de
+ * "historial" de la app (ver caja.repository.ts). Las fechas ya se guardan
+ * en hora de Bogotá (ver shared/db/pool.ts), así que no hace falta convertir.
  */
-const BOGOTA = "AT TIME ZONE 'America/Bogota'";
 
 export async function getMovimientosPorModulo(desde: string, hasta: string) {
   const result = await pool.query(
@@ -24,15 +19,15 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
               COALESCE(mc.modulo_origen_id, cg.modulo_id) AS modulo_efectivo
          FROM movimientos_caja mc
          LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
-        WHERE to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        WHERE DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
      )
      SELECT
        m.id as modulo_id,
        m.nombre as modulo_nombre,
-       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso'), 0) AS ingresos,
-       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'egreso'), 0) AS egresos,
-       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso' AND mov.metodo_pago = 'efectivo'), 0) AS efectivo,
-       COALESCE(SUM(mov.monto) FILTER (WHERE mov.tipo = 'ingreso' AND mov.metodo_pago = 'banco'), 0) AS banco
+       COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' THEN mov.monto END), 0) AS ingresos,
+       COALESCE(SUM(CASE WHEN mov.tipo = 'egreso' THEN mov.monto END), 0) AS egresos,
+       COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' AND mov.metodo_pago = 'efectivo' THEN mov.monto END), 0) AS efectivo,
+       COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' AND mov.metodo_pago = 'banco' THEN mov.monto END), 0) AS banco
      FROM modulos m
      LEFT JOIN mov ON mov.modulo_efectivo = m.id
      WHERE m.id != 1
@@ -61,12 +56,12 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
 export async function getIngresosPorMetodoPagoConSentido(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+       COALESCE(SUM(CASE WHEN mc.metodo_pago = 'efectivo' THEN mc.monto END), 0) AS efectivo,
+       COALESCE(SUM(CASE WHEN mc.metodo_pago = 'banco' THEN mc.monto END), 0) AS banco
      FROM movimientos_caja mc
      JOIN modulos m ON m.id = mc.modulo_origen_id
      WHERE m.slug = 'con_sentido' AND mc.tipo = 'ingreso'
-       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+       AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -76,7 +71,7 @@ export async function getIngresosConSentido(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto), 0) AS total
        FROM con_sentido_ventas
-      WHERE to_char(created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+      WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         AND estado != 'anulada'`,
     [desde, hasta],
   );
@@ -89,7 +84,7 @@ export async function getVentasPorCategoriaConSentido(desde: string, hasta: stri
             COUNT(*) AS cantidad, COALESCE(SUM(cvi.subtotal), 0) AS total
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
-      WHERE to_char(cv.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+      WHERE DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         AND cv.estado != 'anulada'
       GROUP BY cvi.categoria
       ORDER BY total DESC`,
@@ -103,7 +98,7 @@ export async function getProductosTopConSentido(desde: string, hasta: string, li
     `SELECT cvi.producto AS producto_nombre, COUNT(*) AS cantidad, COALESCE(SUM(cvi.subtotal), 0) AS total
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
-      WHERE to_char(cv.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+      WHERE DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         AND cv.estado != 'anulada'
       GROUP BY cvi.producto
       ORDER BY cantidad DESC
@@ -120,7 +115,7 @@ export async function getIngresosModulo(moduloId: number, desde: string, hasta: 
        COALESCE(SUM(v.total), 0) as total
      FROM ventas v
      WHERE v.modulo_id = $1
-       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
        AND v.estado = 'completada'`,
     [moduloId, desde, hasta],
   );
@@ -138,7 +133,7 @@ export async function getVentasPorCategoria(moduloId: number, desde: string, has
      LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
      JOIN ventas v ON v.id = vi.venta_id
      WHERE p.modulo_id = $1
-       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
        AND v.estado = 'completada'
      GROUP BY cp.id, cp.nombre
      ORDER BY total DESC`,
@@ -159,7 +154,7 @@ export async function getProductosTopVendidos(moduloId: number, desde: string, h
      JOIN productos p ON p.id = vi.producto_id
      JOIN ventas v ON v.id = vi.venta_id
      WHERE p.modulo_id = $1
-       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
        AND v.estado = 'completada'
      GROUP BY p.id, p.nombre, p.costo, p.precio
      ORDER BY cantidad DESC
@@ -178,7 +173,7 @@ export async function getClientesFrecuentes(moduloId: number, desde: string, has
      FROM ventas v
      JOIN clientes c ON c.id = v.cliente_id
      WHERE v.modulo_id = $1
-       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
        AND v.estado = 'completada'
      GROUP BY c.id, c.nombre
      ORDER BY compras DESC
@@ -196,7 +191,7 @@ export async function getCostosModulo(moduloId: number, desde: string, hasta: st
      JOIN productos p ON p.id = vi.producto_id
      JOIN ventas v ON v.id = vi.venta_id
      WHERE p.modulo_id = $1
-       AND to_char(v.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $2 AND $3
+       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
        AND v.estado = 'completada'`,
     [moduloId, desde, hasta],
   );
@@ -210,7 +205,7 @@ export async function getPedidosResumen(desde: string, hasta: string) {
        COALESCE(SUM(p.precio_acordado), 0) as ingreso_total,
        COALESCE(SUM(p.costo_estimado), 0) as costo_total
      FROM pedidos p
-     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE DATE_FORMAT(p.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
        AND p.estado != 'cancelado'`,
     [desde, hasta],
   );
@@ -224,7 +219,7 @@ export async function getPedidosPorEstado(desde: string, hasta: string) {
        COUNT(*) as cantidad,
        COALESCE(SUM(p.precio_acordado), 0) as ingreso_estimado
      FROM pedidos p
-     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE DATE_FORMAT(p.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
      GROUP BY p.estado
      ORDER BY cantidad DESC`,
     [desde, hasta],
@@ -241,7 +236,7 @@ export async function getGananciasPedidos(desde: string, hasta: string) {
          ELSE ROUND(100 * AVG((p.precio_acordado - p.costo_estimado) / NULLIF(p.precio_acordado, 0)))
        END as margen_promedio
      FROM pedidos p
-     WHERE to_char(p.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE DATE_FORMAT(p.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
        AND p.estado != 'cancelado'`,
     [desde, hasta],
   );
@@ -260,12 +255,12 @@ const SIN_PAGO_ADMINISTRATIVO = `NOT EXISTS (
 export async function getResumenPedidos(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
-       COUNT(*) FILTER (WHERE estado = 'cerrada') AS cerradas,
-       COUNT(*) FILTER (WHERE estado = 'cancelada') AS canceladas,
-       COALESCE(SUM(numero_personas) FILTER (WHERE estado = 'cerrada'), 0) AS comensales,
-       COUNT(DISTINCT cliente_id) FILTER (WHERE estado = 'cerrada' AND cliente_id IS NOT NULL) AS clientes_unicos
+       COUNT(CASE WHEN estado = 'cerrada' THEN 1 END) AS cerradas,
+       COUNT(CASE WHEN estado = 'cancelada' THEN 1 END) AS canceladas,
+       COALESCE(SUM(CASE WHEN estado = 'cerrada' THEN numero_personas END), 0) AS comensales,
+       COUNT(DISTINCT CASE WHEN estado = 'cerrada' AND cliente_id IS NOT NULL THEN cliente_id END) AS clientes_unicos
      FROM ordenes o
-     WHERE to_char(closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+     WHERE DATE_FORMAT(closed_at, '%Y-%m-%d') BETWEEN $1 AND $2
        AND (estado != 'cerrada' OR ${SIN_PAGO_ADMINISTRATIVO})`,
     [desde, hasta],
   );
@@ -285,7 +280,7 @@ export async function getGanancias(desde: string, hasta: string) {
        SELECT o.id
          FROM ordenes o
         WHERE o.estado = 'cerrada'
-          AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND DATE_FORMAT(o.closed_at, '%Y-%m-%d') BETWEEN $1 AND $2
           AND ${SIN_PAGO_ADMINISTRATIVO}
      )
      SELECT
@@ -309,12 +304,12 @@ export async function getGanancias(desde: string, hasta: string) {
 export async function getIngresosPorMetodoPago(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
-       COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+       COALESCE(SUM(CASE WHEN mc.metodo_pago = 'efectivo' THEN mc.monto END), 0) AS efectivo,
+       COALESCE(SUM(CASE WHEN mc.metodo_pago = 'banco' THEN mc.monto END), 0) AS banco
      FROM movimientos_caja mc
      JOIN modulos m ON m.id = mc.modulo_origen_id
      WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
-       AND to_char(mc.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+       AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -333,7 +328,7 @@ export async function getResumenAdministrativo(desde: string, hasta: string) {
      JOIN ventas v ON v.orden_id = o.id
      JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
      WHERE o.estado = 'cerrada'
-       AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+       AND DATE_FORMAT(o.closed_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -343,16 +338,16 @@ export async function getParametrosMeseros(desde: string, hasta: string) {
   const ventas = await pool.query(
     `WITH ordenes_totales AS (
        SELECT o.id, o.mesero_id, o.created_at, o.closed_at,
-              COALESCE(SUM(oi.cantidad * oi.precio_unitario) FILTER (WHERE oi.estado != 'cancelado'), 0) AS total
+              COALESCE(SUM(CASE WHEN oi.estado != 'cancelado' THEN oi.cantidad * oi.precio_unitario END), 0) AS total
          FROM ordenes o
          LEFT JOIN orden_items oi ON oi.orden_id = o.id
-        WHERE o.estado = 'cerrada' AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+        WHERE o.estado = 'cerrada' AND DATE_FORMAT(o.closed_at, '%Y-%m-%d') BETWEEN $1 AND $2
         GROUP BY o.id, o.mesero_id, o.created_at, o.closed_at
      )
      SELECT u.id AS mesero_id, u.nombre AS mesero_nombre,
             COUNT(*) AS ordenes,
             SUM(ot.total) AS total_vendido,
-            AVG(EXTRACT(EPOCH FROM (ot.closed_at - ot.created_at)) / 60) AS tiempo_promedio_min
+            AVG((TIMESTAMPDIFF(MICROSECOND, ot.created_at, ot.closed_at) / 1000000) / 60) AS tiempo_promedio_min
        FROM ordenes_totales ot
        JOIN usuarios u ON u.id = ot.mesero_id
       GROUP BY u.id, u.nombre
@@ -363,7 +358,7 @@ export async function getParametrosMeseros(desde: string, hasta: string) {
   const canceladas = await pool.query(
     `SELECT o.mesero_id, COUNT(*) AS canceladas
        FROM ordenes o
-      WHERE o.estado = 'cancelada' AND to_char(o.closed_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+      WHERE o.estado = 'cancelada' AND DATE_FORMAT(o.closed_at, '%Y-%m-%d') BETWEEN $1 AND $2
       GROUP BY o.mesero_id`,
     [desde, hasta],
   );
@@ -386,11 +381,11 @@ export async function getParametrosCocina(desde: string, hasta: string) {
          JOIN orden_historial h2
            ON h2.orden_item_id = h1.orden_item_id AND h2.accion = 'item_listo' AND h2.created_at > h1.created_at
         WHERE h1.accion = 'item_preparando'
-          AND to_char(h1.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND DATE_FORMAT(h1.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         GROUP BY h1.orden_item_id, h1.created_at
      )
      SELECT COUNT(*) AS items_preparados,
-            AVG(EXTRACT(EPOCH FROM (fin - inicio)) / 60) AS tiempo_promedio_min
+            AVG((TIMESTAMPDIFF(MICROSECOND, inicio, fin) / 1000000) / 60) AS tiempo_promedio_min
        FROM tiempos`,
     [desde, hasta],
   );
@@ -406,10 +401,10 @@ export async function getTiempoEntrega(desde: string, hasta: string) {
          FROM orden_historial h
          JOIN orden_items oi ON oi.id = h.orden_item_id
         WHERE h.accion = 'item_entregado'
-          AND to_char(h.created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2
+          AND DATE_FORMAT(h.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
      )
      SELECT COUNT(*) AS items_entregados,
-            AVG(EXTRACT(EPOCH FROM (entregado - creado)) / 60) AS tiempo_promedio_min
+            AVG((TIMESTAMPDIFF(MICROSECOND, creado, entregado) / 1000000) / 60) AS tiempo_promedio_min
        FROM entregas`,
     [desde, hasta],
   );

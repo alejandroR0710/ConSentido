@@ -1,5 +1,4 @@
-import { Pool, PoolClient } from "pg";
-import { pool } from "../../../shared/db/pool";
+import { Pool, PoolClient, pool } from "../../../shared/db/pool";
 
 /** Permite que otros módulos (ej. Migao al cerrar una orden) registren el ingreso
  *  dentro de su misma transacción, en vez de una escritura separada e inconsistente. */
@@ -91,10 +90,10 @@ export interface SumaPorMetodo {
 export async function sumMovimientosPorTurno(turnoId: string): Promise<SumaPorMetodo> {
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'efectivo'), 0) AS ingresos_efectivo,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'  AND metodo_pago = 'efectivo'), 0) AS egresos_efectivo,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'banco'), 0)    AS ingresos_banco,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'  AND metodo_pago = 'banco'), 0)    AS egresos_banco
+       COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND metodo_pago = 'efectivo' THEN monto END), 0) AS ingresos_efectivo,
+       COALESCE(SUM(CASE WHEN tipo = 'egreso'  AND metodo_pago = 'efectivo' THEN monto END), 0) AS egresos_efectivo,
+       COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND metodo_pago = 'banco' THEN monto END), 0)    AS ingresos_banco,
+       COALESCE(SUM(CASE WHEN tipo = 'egreso'  AND metodo_pago = 'banco' THEN monto END), 0)    AS egresos_banco
      FROM movimientos_caja
      WHERE turno_id = $1`,
     [turnoId],
@@ -393,7 +392,7 @@ export async function getOrCrearFacturaVenta(
 ) {
   const insert = await executor.query(
     `INSERT INTO facturas (venta_id, numero, tipo, subtotal, total)
-     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $2, $3)
+     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq'), 6, '0'), 'factura', $2, $3)
      ON CONFLICT (venta_id) WHERE venta_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [params.ventaId, params.subtotal, params.total],
@@ -451,9 +450,9 @@ export async function borrarEgresosDelTurno(turnoId: string) {
 // al decidir a qué endpoint de factura pegarle (ver frontend BotonFactura).
 const JOIN_FACTURA_POR_MOVIMIENTO = `
        LEFT JOIN facturas f ON
-         (mc.referencia_entidad = 'ventas' AND f.venta_id::text = mc.referencia_id) OR
-         (mc.referencia_entidad = 'caja_ventas' AND f.venta_id::text = mc.referencia_id) OR
-         (mc.referencia_entidad = 'con_sentido_ventas' AND f.con_sentido_venta_id::text = mc.referencia_id)
+         (mc.referencia_entidad = 'ventas' AND f.venta_id = mc.referencia_id) OR
+         (mc.referencia_entidad = 'caja_ventas' AND f.venta_id = mc.referencia_id) OR
+         (mc.referencia_entidad = 'con_sentido_ventas' AND f.con_sentido_venta_id = mc.referencia_id)
 `;
 
 export async function listMovimientosPorTurno(turnoId: string) {
@@ -566,10 +565,10 @@ export async function insertEgresoAcumulado(params: {
 export async function getAcumuladoMovimientosCaja() {
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'efectivo'), 0) AS ingresos_efectivo,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso' AND metodo_pago = 'efectivo'), 0) AS egresos_efectivo,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso' AND metodo_pago = 'banco'), 0) AS ingresos_banco,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso' AND metodo_pago = 'banco'), 0) AS egresos_banco
+       COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND metodo_pago = 'efectivo' THEN monto END), 0) AS ingresos_efectivo,
+       COALESCE(SUM(CASE WHEN tipo = 'egreso' AND metodo_pago = 'efectivo' THEN monto END), 0) AS egresos_efectivo,
+       COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND metodo_pago = 'banco' THEN monto END), 0) AS ingresos_banco,
+       COALESCE(SUM(CASE WHEN tipo = 'egreso' AND metodo_pago = 'banco' THEN monto END), 0) AS egresos_banco
      FROM movimientos_caja`,
   );
   return result.rows[0];
@@ -592,7 +591,7 @@ export async function listEgresosAcumulado() {
 /** Alta retroactiva de un ingreso/egreso en un día ya cerrado — a diferencia
  *  de insertIngreso/insertEgreso, fija `created_at` explícito (mediodía Bogotá
  *  de ese día) en vez de `now()`, para que caiga en el día correcto en todas
- *  las consultas AT TIME ZONE ya existentes. */
+ *  las consultas por día ya existentes. */
 export async function insertMovimientoHistorico(params: {
   turnoId: string;
   tipo: "ingreso" | "egreso";
@@ -737,11 +736,11 @@ export async function listEdicionesDelDia(fecha: string): Promise<EdicionHistori
  *  día/semana/mes y la grilla tipo calendario del historial de Caja. Se agrupa
  *  por la fecha del movimiento, no por turno (un turno puede quedar abierto de
  *  un día para otro, pero cada movimiento ya tiene su propio timestamp real). */
-/** Turnos que arrancaron ese día calendario (mismo criterio to_char que
+/** Turnos que arrancaron ese día calendario (mismo criterio DATE_FORMAT que
  *  getHistorialDiario, para que "ese día" signifique lo mismo en toda Caja). */
 export async function listTurnosPorFecha(fecha: string): Promise<TurnoCaja[]> {
   const result = await pool.query(
-    `SELECT * FROM turnos_caja WHERE to_char(abierto_en AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1 ORDER BY abierto_en ASC`,
+    `SELECT * FROM turnos_caja WHERE DATE_FORMAT(abierto_en, '%Y-%m-%d') = $1 ORDER BY abierto_en ASC`,
     [fecha],
   );
   return result.rows.map(mapTurno);
@@ -780,7 +779,7 @@ export async function actualizarCierreCalculado(
 
 /** Detalle completo (no solo la suma) de los movimientos de un día calendario
  *  — para que el historial muestre de qué es cada ingreso/egreso, no solo el
- *  total. Mismo criterio de fecha (to_char sobre created_at) que el resto del
+ *  total. Mismo criterio de fecha (DATE_FORMAT sobre created_at) que el resto del
  *  historial, y mismos JOINs que listMovimientosPorTurno para traer el origen
  *  legible (módulo o categoría de gasto). */
 export async function listMovimientosDelDia(fecha: string) {
@@ -790,7 +789,7 @@ export async function listMovimientosDelDia(fecha: string) {
        LEFT JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
        ${JOIN_FACTURA_POR_MOVIMIENTO}
-      WHERE to_char(mc.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1
+      WHERE DATE_FORMAT(mc.created_at, '%Y-%m-%d') = $1
       ORDER BY mc.created_at ASC`,
     [fecha],
   );
@@ -802,7 +801,7 @@ export async function listMovimientosDelDia(fecha: string) {
  *  y cierre ya calculados) queda como registro, solo desaparece su detalle. */
 export async function borrarMovimientosDelDia(fecha: string) {
   const result = await pool.query(
-    `DELETE FROM movimientos_caja WHERE to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $1`,
+    `DELETE FROM movimientos_caja WHERE DATE_FORMAT(created_at, '%Y-%m-%d') = $1`,
     [fecha],
   );
   return result.rowCount ?? 0;
@@ -818,21 +817,16 @@ export async function borrarTurnoRow(client: PoolClient, turnoId: string) {
 }
 
 export async function getHistorialDiario(anio: number) {
-  // to_char en vez de ::date: pg devuelve DATE como objeto Date (JS) parseado en
-  // la zona horaria local del proceso, y al serializar a JSON puede desplazar el
-  // día si el servidor no corre en UTC. Un texto "YYYY-MM-DD" es inequívoco.
-  // AT TIME ZONE 'America/Bogota' explícito (no basta con la config de sesión
-  // del pool): si Supabase usa el pooler en modo transacción, cada consulta
-  // puede caer en una conexión física distinta y el "SET timezone" de sesión
-  // no aplica de forma confiable — esta conversión es correcta sin importar
-  // la sesión.
+  // DATE_FORMAT (texto "YYYY-MM-DD") en vez de DATE(): un texto es inequívoco
+  // al serializar a JSON. created_at ya está en hora de Bogotá (ver
+  // shared/db/pool.ts).
   const result = await pool.query(
-    `SELECT to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
-            COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso'), 0) AS ingresos,
-            COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'), 0) AS egresos,
+    `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS fecha,
+            COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
+            COALESCE(SUM(CASE WHEN tipo = 'egreso' THEN monto END), 0) AS egresos,
             COUNT(*) AS movimientos
        FROM movimientos_caja
-      WHERE EXTRACT(YEAR FROM created_at AT TIME ZONE 'America/Bogota') = $1
+      WHERE YEAR(created_at) = $1
       GROUP BY 1
       ORDER BY 1`,
     [anio],

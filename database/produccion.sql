@@ -1034,6 +1034,31 @@ END $$;
 
 
 -- ========================================================================
+-- SECCIÓN 26: ÁREA POR DEFECTO DE LAS CATEGORÍAS DE GASTO YA CREADAS
+-- ========================================================================
+-- La columna categorias_gasto.modulo_id existe desde la SECCIÓN 20, pero
+-- nunca se llenó: el 99% de los egresos históricos (353 de 365, ~$65,6M)
+-- quedaron "sin área asignada" en el Dashboard porque el campo Área del
+-- formulario de Registrar Egreso es opcional y casi nunca se elige. Como
+-- "Detalle por área" resuelve el área de un egreso con
+-- COALESCE(movimiento.modulo_origen_id, categoria.modulo_id), asignarle un
+-- área a la CATEGORÍA reclasifica automáticamente TODOS sus egresos —
+-- pasados y futuros — sin tocar ni una fila de movimientos_caja.
+-- Mapeo confirmado por el negocio:
+UPDATE categorias_gasto
+   SET modulo_id = (SELECT id FROM modulos WHERE slug = 'con_sentido')
+ WHERE nombre = 'Con Sentido';
+
+UPDATE categorias_gasto
+   SET modulo_id = (SELECT id FROM modulos WHERE slug = 'migao')
+ WHERE nombre IN ('MigaoPOS', 'QUESO');
+
+-- Servicios/Mantenimiento/Suministros/Otros quedan explícitamente SIN área
+-- (gastos generales del negocio, no de un área puntual) — no requieren
+-- ningún UPDATE, su modulo_id ya nace NULL.
+
+
+-- ========================================================================
 -- ⚠️ SEGURIDAD: DATOS NO SE TOCAN
 -- ========================================================================
 -- ❌ NO ejecutar INSERT/UPDATE/DELETE en tablas con datos reales

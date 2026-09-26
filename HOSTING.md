@@ -131,3 +131,34 @@ en cada reinicio, así que puede que no quede ninguna.
    `uploads/`**.
 3. Si cambió `package.json`: **Run NPM Install**.
 4. **Restart**.
+
+## Despliegue automático (GitHub Actions)
+
+Cada `git push` a la rama `hosting-mysql` compila el sistema, lo sube por FTP a
+`/home/consenti/sistemapos` y la app se reinicia sola. El archivo que lo hace
+es `.github/workflows/desplegar-hosting.yml`.
+
+**Configuración (una sola vez):**
+
+1. cPanel → **FTP Accounts** → crea una cuenta, por ejemplo `deploy`, con
+   **Directory** = `sistemapos` (la carpeta de la app, no `public_html`).
+2. GitHub → repositorio → **Settings → Secrets and variables → Actions → New
+   repository secret**. Crea estos cuatro:
+
+   | Secreto | Valor |
+   |---|---|
+   | `FTP_SERVER` | `ftp.consentidovelas.com` (o el que diga cPanel en "Configure FTP Client") |
+   | `FTP_USERNAME` | el usuario completo, ej. `deploy@consentidovelas.com` |
+   | `FTP_PASSWORD` | la clave de esa cuenta FTP |
+   | `VITE_EXTERNAL_LEAD_API_KEY` | el mismo valor que tienes en `frontend/.env` |
+
+**Qué no se hace solo:**
+
+- **Dependencias nuevas:** si un cambio agrega o actualiza paquetes en
+  `backend/package.json`, entra a cPanel → Setup Node.js App → **Run NPM
+  Install** → **Restart**.
+- **Cambios de base de datos:** si un cambio agrega tablas o columnas, hay que
+  correr ese SQL en phpMyAdmin.
+- **Seguimiento del despliegue:** en GitHub → pestaña **Actions** ves cada
+  despliegue (verde = subió bien). Desde ahí también puedes lanzarlo a mano
+  con **Run workflow**.

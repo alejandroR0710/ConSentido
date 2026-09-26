@@ -49,6 +49,16 @@ for (const archivo of ["package.json", "package-lock.json", ".env.example"]) {
 }
 fs.mkdirSync(path.join(CARPETA, "uploads"), { recursive: true });
 fs.writeFileSync(path.join(CARPETA, "uploads", ".gitkeep"), "");
+// Passenger (el que corre Node en cPanel) reinicia la app cuando cambia
+// este archivo: cada paquete lleva uno nuevo, así subirlo basta para reiniciar.
+fs.mkdirSync(path.join(CARPETA, "tmp"), { recursive: true });
+fs.writeFileSync(path.join(CARPETA, "tmp", "restart.txt"), new Date().toISOString());
+
+// En GitHub Actions se sube la carpeta por FTP directamente, sin zip.
+if (process.env.SIN_ZIP) {
+  console.log(`\n✔ Carpeta lista: ${path.relative(RAIZ, CARPETA)}`);
+  process.exit(0);
+}
 
 // bsdtar viene con Windows 10+ y macOS; -a elige zip por la extensión. En
 // Windows se llama por ruta completa: el `tar` de Git Bash (GNU) no hace zip

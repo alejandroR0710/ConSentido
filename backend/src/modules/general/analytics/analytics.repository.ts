@@ -23,10 +23,10 @@ import { pool } from "../../../shared/db/pool";
 export async function getTotalesMovimientos(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'ingreso'), 0) AS ingresos,
-       COALESCE(SUM(monto) FILTER (WHERE tipo = 'egreso'), 0) AS egresos
+       COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
+       COALESCE(SUM(CASE WHEN tipo = 'egreso' THEN monto END), 0) AS egresos
      FROM movimientos_caja
-     WHERE to_char(created_at ${BOGOTA}, 'YYYY-MM-DD') BETWEEN $1 AND $2`,
+     WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];

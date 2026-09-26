@@ -134,7 +134,7 @@ en cada reinicio, así que puede que no quede ninguna.
 
 ## Despliegue automático (GitHub Actions)
 
-Cada `git push` a `main` hace esto solo:
+Cada `git push` a la rama `hosting-mysql` hace esto solo:
 1. Compila el sistema en GitHub.
 2. Lo sube por SSH/rsync a `~/sistemapos`.
 3. Si cambiaron las dependencias, avisa en amarillo en GitHub. Esas se

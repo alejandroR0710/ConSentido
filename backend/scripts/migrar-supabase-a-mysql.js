@@ -54,6 +54,8 @@ const pg = new Pool({
   // Con la sesión en Bogotá, timestamptz sale como "2026-09-24 14:18:42.775396-05".
   options: "-c TimeZone=America/Bogota",
 });
+// El pooler de Supabase puede ignorar `options`: se fija también con SET.
+pg.on("connect", (client) => client.query("SET TIME ZONE 'America/Bogota'"));
 
 /** Tablas y columnas insertables del esquema MySQL (se omiten las GENERATED). */
 function leerEsquemaMysql() {

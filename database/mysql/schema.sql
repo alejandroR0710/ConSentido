@@ -162,7 +162,7 @@ CREATE TABLE movimientos_caja (
   metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco')),
   es_pago_mixto      BOOLEAN NOT NULL DEFAULT false,
   motivo             TEXT,
-  usuario_id         CHAR(36) NOT NULL,
+  usuario_id         CHAR(36), -- en producción hay movimientos viejos sin usuario
   created_at         DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   proveedor_id       CHAR(36),
   CHECK (tipo = 'ingreso' OR categoria_gasto_id IS NOT NULL),

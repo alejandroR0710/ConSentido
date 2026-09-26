@@ -97,13 +97,13 @@ En **Environment variables** agrega (**Add Variable**) una por una:
 | `ACCESS_TOKEN_TTL` | `15m` |
 | `REFRESH_TOKEN_TTL_HOURS` | `10` |
 | `CORS_ORIGIN` | `https://tudominio.com` |
-| `VAPID_PUBLIC_KEY` | la misma que ya usas en Render |
-| `VAPID_PRIVATE_KEY` | la misma que ya usas en Render |
-| `VAPID_SUBJECT` | la misma que ya usas en Render |
+| `VAPID_PUBLIC_KEY` | par de claves nuevo (`npx web-push generate-vapid-keys`) |
+| `VAPID_PRIVATE_KEY` | la privada de ese mismo par |
+| `VAPID_SUBJECT` | `mailto:` + un correo tuyo |
 
 - **No pongas `PORT`**: el hosting asigna el puerto solo.
-- Usa las **mismas** claves VAPID de Render. Si cambian, los celulares ya
-  suscritos dejan de recibir las notificaciones de Cocina/Mesero.
+- Al cambiar de dominio, cada celular vuelve a activar las notificaciones la
+  primera vez que entra, así que las claves VAPID pueden ser nuevas.
 
 Luego:
 

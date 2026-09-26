@@ -15,7 +15,7 @@ name: Desplegar al hosting (InterServer / DirectAdmin)
 
 on:
   push:
-    branches: [hosting-mysql]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

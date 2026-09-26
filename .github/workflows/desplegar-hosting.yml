@@ -2,7 +2,9 @@ name: Desplegar al hosting (InterServer / DirectAdmin)
 
 # Mismo esquema que EComerceConsentido: compila en GitHub (el hosting
 # compartido tiene pocos procesos disponibles), sube lo ya construido por
-# SSH/rsync y reinicia la app tocando tmp/restart.txt (Passenger).
+# SSH/rsync y reinicia la app tocando tmp/restart.txt (Passenger). Las
+# dependencias nuevas se instalan a mano (Run NPM Install): el hosting no da
+# hilos suficientes para correr npm desde aquí.
 #
 # Requiere estos Secrets del repositorio (Settings -> Secrets and variables -> Actions):
 #   SSH_HOST                    hostname del hosting        (el mismo de EComerceConsentido)
@@ -66,33 +68,20 @@ jobs:
           # usuarios) y node_modules/ del servidor nunca se tocan.
           rsync -az --delete -e "$SSH" dist/ "$REMOTE:sistemapos/dist/"
           rsync -az --delete -e "$SSH" public/ "$REMOTE:sistemapos/public/"
-          rsync -az -e "$SSH" package.json package-lock.json "$REMOTE:sistemapos/"
+          # -i lista lo que cambió: si cambió package-lock.json hay que instalar
+          # dependencias a mano. En este hosting (13 hilos por cuenta) npm install
+          # no puede correr desde aquí, igual que en EComerceConsentido.
+          CAMBIOS=$(rsync -az -i -e "$SSH" package.json package-lock.json "$REMOTE:sistemapos/")
+          if echo "$CAMBIOS" | grep -q "package-lock.json"; then
+            echo "::warning::Cambiaron las dependencias: en DirectAdmin → Setup Node.js App → Run NPM Install → Restart"
+          fi
 
-      - name: Dependencias (solo si cambiaron) y reinicio
+      - name: Reiniciar la app (Passenger)
         env:
           SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=accept-new
           REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
         run: |
-          $SSH "$REMOTE" '
-            set -eu
-            cd ~/sistemapos
-            HASH_FILE=.deploy-lockfile-hash
-            NUEVO=$(md5sum package-lock.json | cut -d" " -f1)
-            if [ "$NUEVO" != "$(cat $HASH_FILE 2>/dev/null)" ]; then
-              # Mismo entorno que usa el botón "Run NPM Install" del panel.
-              ACTIVAR=$(ls ~/nodevenv/sistemapos/*/bin/activate 2>/dev/null | head -1)
-              if [ -n "$ACTIVAR" ]; then
-                . "$ACTIVAR"
-                npm install --omit=dev
-                echo "$NUEVO" > $HASH_FILE
-              else
-                echo "::warning::No se encontró el nodevenv: usa Run NPM Install en el panel"
-              fi
-            else
-              echo "package-lock.json sin cambios, se omite npm install"
-            fi
-            mkdir -p tmp && touch tmp/restart.txt
-          '
+          $SSH "$REMOTE" 'mkdir -p ~/sistemapos/tmp && touch ~/sistemapos/tmp/restart.txt'
 
       - name: Verificar que responde
         run: |

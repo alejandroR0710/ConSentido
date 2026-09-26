@@ -137,7 +137,8 @@ en cada reinicio, así que puede que no quede ninguna.
 Cada `git push` a `main` hace esto solo:
 1. Compila el sistema en GitHub.
 2. Lo sube por SSH/rsync a `~/sistemapos`.
-3. Si cambiaron las dependencias, corre `npm install` en el servidor.
+3. Si cambiaron las dependencias, avisa en amarillo en GitHub. Esas se
+   instalan a mano: DirectAdmin → Setup Node.js App → **Run NPM Install**.
 4. Reinicia la app y comprueba que `/health` responda.
 
 Es el mismo método de EComerceConsentido. El archivo que lo hace es

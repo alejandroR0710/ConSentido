@@ -1,5 +1,4 @@
-import { PoolClient } from "pg";
-import { pool } from "../../shared/db/pool";
+import { PoolClient, pool } from "../../shared/db/pool";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { Errors } from "../../shared/utils/app-error";
 import * as amasijosService from "./amasijos.service";

@@ -1,5 +1,4 @@
-import { Pool, PoolClient } from "pg";
-import { pool } from "../../shared/db/pool";
+import { Pool, PoolClient, pool } from "../../shared/db/pool";
 
 type Executor = Pool | PoolClient;
 
@@ -161,10 +160,10 @@ export async function listOrdenesHistorial(meseroId?: string) {
            CASE WHEN COUNT(*) = 1 THEN MAX(inner_mc.id) END AS movimiento_id,
            CASE
              WHEN COUNT(*) = 1 THEN MAX(inner_mc.metodo_pago)
-             WHEN COUNT(*) > 1 THEN string_agg(DISTINCT inner_mc.metodo_pago, '+' ORDER BY inner_mc.metodo_pago)
+             WHEN COUNT(*) > 1 THEN GROUP_CONCAT(DISTINCT inner_mc.metodo_pago ORDER BY inner_mc.metodo_pago SEPARATOR '+')
            END AS metodo_pago
          FROM movimientos_caja inner_mc
-         WHERE inner_mc.referencia_entidad = 'ventas' AND inner_mc.referencia_id = v.id::text
+         WHERE inner_mc.referencia_entidad = 'ventas' AND inner_mc.referencia_id = v.id
        ) mc ON true
        -- Solo para auditoría en este historial (nunca en la factura, ver
        -- factura.ts): cuánto entregó el cliente en efectivo y cuánto se le
@@ -181,8 +180,8 @@ export async function listOrdenesHistorial(meseroId?: string) {
       -- mezclar cuentas que nunca generaron un peso con el pago diario real.
       -- "Mi historial" de un mesero puntual ($1 = su id) sí sigue mostrando
       -- también las que él mismo canceló, como siempre.
-      WHERE (($1::uuid IS NULL AND o.estado = 'cerrada')
-         OR  ($1::uuid IS NOT NULL AND o.estado IN ('cerrada', 'cancelada') AND o.mesero_id = $1))
+      WHERE (($1 IS NULL AND o.estado = 'cerrada')
+         OR  ($1 IS NOT NULL AND o.estado IN ('cerrada', 'cancelada') AND o.mesero_id = $1))
         -- Las cuentas cerradas con pago administrativo no cuentan como "pago
         -- diario": viven en su propio historial (ver listOrdenesHistorialAdministrativo).
         AND NOT EXISTS (
@@ -209,22 +208,23 @@ export async function listOrdenesHistorialCancelado() {
   const result = await pool.query(
     `SELECT o.id, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
             m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
-            COALESCE(items.total, 0) AS total, COALESCE(items.detalle, '[]') AS items
+            COALESCE(items.total, 0) AS total, COALESCE(items.detalle, JSON_ARRAY()) AS items
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN LATERAL (
          SELECT SUM(oi.cantidad * oi.precio_unitario) AS total,
-                json_agg(
-                  json_build_object('nombre', p.nombre, 'cantidad', oi.cantidad, 'precioUnitario', oi.precio_unitario)
-                  ORDER BY oi.id
-                ) AS detalle
+                -- GROUP_CONCAT: único agregado de MySQL que respeta ORDER BY.
+                CAST(CONCAT('[', GROUP_CONCAT(
+                  JSON_OBJECT('nombre', p.nombre, 'cantidad', oi.cantidad, 'precioUnitario', oi.precio_unitario)
+                  ORDER BY oi.id SEPARATOR ','
+                ), ']') AS JSON) AS detalle
            FROM orden_items oi
            JOIN productos p ON p.id = oi.producto_id
           WHERE oi.orden_id = o.id
        ) items ON true
       WHERE o.estado = 'cancelada'
-      ORDER BY o.closed_at DESC NULLS LAST, o.created_at DESC
+      ORDER BY o.closed_at DESC, o.created_at DESC
       LIMIT 200`,
   );
   return result.rows;
@@ -266,14 +266,14 @@ export async function listOrdenesHistorialAdministrativo() {
  * efectivo y banco queda repartida correctamente en cada bolsa (el historial
  * de órdenes solo muestra un método "combinado" por fila, no sirve para
  * sumar). Excluye "administrativo" solo porque esas cuentas nunca generan
- * fila aquí. AT TIME ZONE explícito por el mismo motivo que el resto de
+ * fila aquí. Día calendario en hora de Bogotá, igual que el resto de
  * consultas por día de la app (ver analytics.repository.ts).
  */
 export async function getResumenDiarioIngresos(limiteDias = 60) {
   const result = await pool.query(
-    `SELECT to_char(mc.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
-            COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'efectivo'), 0) AS efectivo,
-            COALESCE(SUM(mc.monto) FILTER (WHERE mc.metodo_pago = 'banco'), 0) AS banco
+    `SELECT DATE_FORMAT(mc.created_at, '%Y-%m-%d') AS fecha,
+            COALESCE(SUM(CASE WHEN mc.metodo_pago = 'efectivo' THEN mc.monto END), 0) AS efectivo,
+            COALESCE(SUM(CASE WHEN mc.metodo_pago = 'banco' THEN mc.monto END), 0) AS banco
        FROM movimientos_caja mc
        JOIN modulos m ON m.id = mc.modulo_origen_id
       WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
@@ -300,7 +300,7 @@ export async function listIngresosManualesMigao() {
        JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN usuarios u ON u.id = mc.usuario_id
       WHERE m.slug = 'migao' AND mc.tipo = 'ingreso'
-        AND mc.referencia_entidad IS DISTINCT FROM 'ventas'
+        AND NOT (mc.referencia_entidad <=> 'ventas')
       ORDER BY mc.created_at DESC
       LIMIT 200`,
   );
@@ -315,7 +315,8 @@ export async function crearOrden(
   executor: Executor = pool,
 ) {
   const result = await executor.query(
-    `INSERT INTO ordenes (mesa_id, mesero_id, cliente_id, numero_personas) VALUES ($1, $2, $3, $4) RETURNING *`,
+    `INSERT INTO ordenes (mesa_id, mesero_id, cliente_id, numero_personas, comensal_numero)
+     VALUES ($1, $2, $3, $4, nextval('comensal_seq')) RETURNING *`,
     [mesaId, meseroId, clienteId ?? null, numeroPersonas ?? null],
   );
   return result.rows[0];
@@ -345,12 +346,12 @@ export async function listProductosMigao() {
                WHERE pi.producto_id = p.id AND ip.stock_minimo_unidades IS NOT NULL
                  AND ip.stock_unidades <= ip.stock_minimo_unidades
             ) AS bajo_stock,
-            (SELECT json_agg(json_build_object(
+            (SELECT CAST(CONCAT('[', GROUP_CONCAT(JSON_OBJECT(
                        'nombre', ip.nombre,
                        'stockUnidades', ip.stock_unidades,
                        'unidadMedida', ip.unidad_medida,
                        'sinStock', ip.stock_unidades < pi.cantidad_por_unidad
-                     ) ORDER BY ip.nombre)
+                     ) ORDER BY ip.nombre SEPARATOR ','), ']') AS JSON)
                FROM migao_producto_ingredientes pi
                JOIN migao_inventario_productos ip ON ip.id = pi.inventario_producto_id
               WHERE pi.producto_id = p.id
@@ -363,7 +364,7 @@ export async function listProductosMigao() {
        JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
       WHERE m.slug = 'migao' AND p.activo = true
-      ORDER BY cp.nombre ASC NULLS LAST, p.nombre ASC`,
+      ORDER BY cp.nombre IS NULL, cp.nombre ASC, p.nombre ASC`,
   );
   return result.rows;
 }
@@ -424,15 +425,16 @@ export async function listProductosMigaoAdmin() {
   const result = await pool.query(
     `SELECT p.id, p.nombre, p.precio, p.costo, p.unidad_medida, p.imagen_url, p.categoria_id,
             p.descripcion, cp.nombre AS categoria_nombre, p.activo, p.es_para_llevar,
+            -- GROUP_CONCAT ignora los NULL (producto sin receta → NULL → []).
             COALESCE(
-              json_agg(
-                json_build_object(
+              CAST(CONCAT('[', GROUP_CONCAT(
+                CASE WHEN mpi.id IS NOT NULL THEN JSON_OBJECT(
                   'nombre', ip.nombre,
                   'cantidadPorUnidad', mpi.cantidad_por_unidad,
                   'unidadMedida', ip.unidad_medida
-                )
-              ) FILTER (WHERE mpi.id IS NOT NULL),
-              '[]'
+                ) END SEPARATOR ','
+              ), ']') AS JSON),
+              JSON_ARRAY()
             ) AS ingredientes
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
@@ -441,7 +443,7 @@ export async function listProductosMigaoAdmin() {
        LEFT JOIN migao_inventario_productos ip ON ip.id = mpi.inventario_producto_id
       WHERE m.slug = 'migao'
       GROUP BY p.id, cp.nombre
-      ORDER BY cp.nombre ASC NULLS LAST, p.nombre ASC`,
+      ORDER BY cp.nombre IS NULL, cp.nombre ASC, p.nombre ASC`,
   );
   return result.rows;
 }
@@ -564,14 +566,12 @@ export async function listItemsDespachados() {
  */
 export async function empezarPreparar(ordenId: string, executor: Executor = pool) {
   const result = await executor.query(
-    `UPDATE orden_items oi
+    `UPDATE orden_items
         SET estado = 'preparando'
-       FROM productos p
-      WHERE oi.producto_id = p.id
-        AND oi.orden_id = $1
-        AND oi.estado = 'pendiente'
-        AND p.es_para_llevar = false
-      RETURNING oi.*`,
+      WHERE orden_id = $1
+        AND estado = 'pendiente'
+        AND producto_id IN (SELECT id FROM productos WHERE es_para_llevar = false)
+      RETURNING *`,
     [ordenId],
   );
   return result.rows;
@@ -1010,7 +1010,7 @@ export async function existeCobroDivididoAbierto(ordenId: string) {
  *  (ver migao.service.ts::pagarItems) — de ahí en adelante ya no cuentan
  *  para el total pendiente de la orden, sin importar que la mesa siga abierta. */
 export async function marcarItemsPagados(client: PoolClient, itemIds: number[], ventaId: string) {
-  await client.query(`UPDATE orden_items SET venta_id = $2 WHERE id = ANY($1::bigint[])`, [itemIds, ventaId]);
+  await client.query(`UPDATE orden_items SET venta_id = $2 WHERE id IN ($1)`, [itemIds, ventaId]);
 }
 
 /**
@@ -1036,7 +1036,7 @@ export async function getCuentaPorOrden(ordenId: string) {
        FROM migao_cuenta_parte_unidades cpu
        JOIN orden_items oi ON oi.id = cpu.orden_item_id
        JOIN productos p ON p.id = oi.producto_id
-      WHERE cpu.parte_id = ANY($1::uuid[])`,
+      WHERE cpu.parte_id IN ($1)`,
     [partesResult.rows.map((r) => r.id)],
   );
   const unidadesPorParte = new Map<string, typeof unidadesResult.rows>();
@@ -1120,9 +1120,9 @@ export async function listPropinas() {
  *  semana completa o sueltos) entran, sin obligar a repartir TODO de una vez. */
 export async function listPendientesPropinasPorDia() {
   const result = await pool.query(
-    `SELECT to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
-            COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'efectivo'), 0) AS monto_efectivo,
-            COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'banco'), 0) AS monto_banco
+    `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS fecha,
+            COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN monto END), 0) AS monto_efectivo,
+            COALESCE(SUM(CASE WHEN metodo_pago = 'banco' THEN monto END), 0) AS monto_banco
        FROM migao_propinas
       WHERE liquidacion_id IS NULL
       GROUP BY fecha
@@ -1141,11 +1141,11 @@ export async function listPendientesPropinasPorDia() {
  *  no "cuánto falta repartir"). Usado en el resumen de Caja General. */
 export async function sumPropinasDeHoy() {
   const result = await pool.query(
-    `SELECT COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'efectivo'), 0) AS monto_efectivo,
-            COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'banco'), 0) AS monto_banco
+    `SELECT COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN monto END), 0) AS monto_efectivo,
+            COALESCE(SUM(CASE WHEN metodo_pago = 'banco' THEN monto END), 0) AS monto_banco
        FROM migao_propinas
-      WHERE to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')
-          = to_char(now() AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')`,
+      WHERE DATE_FORMAT(created_at, '%Y-%m-%d')
+          = DATE_FORMAT(now(), '%Y-%m-%d')`,
   );
   return {
     montoEfectivo: Number(result.rows[0].monto_efectivo),
@@ -1159,12 +1159,12 @@ export async function sumPropinasDeHoy() {
  *  siempre en vivo, nunca se guarda aparte, ver migao_propinas.liquidacion_id). */
 export async function sumPropinasPendientes(client: PoolClient, fechas?: string[]) {
   const result = await client.query(
-    `SELECT COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'efectivo'), 0) AS efectivo,
-            COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'banco'), 0) AS banco
+    `SELECT COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN monto END), 0) AS efectivo,
+            COALESCE(SUM(CASE WHEN metodo_pago = 'banco' THEN monto END), 0) AS banco
        FROM migao_propinas
       WHERE liquidacion_id IS NULL
-        AND ($1::text[] IS NULL OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = ANY($1::text[]))`,
-    [fechas ?? null],
+        ${fechas ? "AND DATE_FORMAT(created_at, '%Y-%m-%d') IN ($1)" : ""}`,
+    fechas ? [fechas] : [],
   );
   return { efectivo: Number(result.rows[0].efectivo), banco: Number(result.rows[0].banco) };
 }
@@ -1207,8 +1207,8 @@ export async function marcarPropinasLiquidadas(
     `UPDATE migao_propinas
         SET liquidacion_id = $1
       WHERE liquidacion_id IS NULL
-        AND ($2::text[] IS NULL OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = ANY($2::text[]))`,
-    [params.liquidacionId, params.fechas ?? null],
+        ${params.fechas ? "AND DATE_FORMAT(created_at, '%Y-%m-%d') IN ($2)" : ""}`,
+    params.fechas ? [params.liquidacionId, params.fechas] : [params.liquidacionId],
   );
 }
 
@@ -1280,13 +1280,13 @@ export async function resetearOrdenesCompleto() {
     const movimientosVentas = await client.query(
       `DELETE FROM movimientos_caja
         WHERE referencia_entidad = 'ventas'
-          AND referencia_id IN (SELECT id::text FROM ventas WHERE orden_id IS NOT NULL)`,
+          AND referencia_id IN (SELECT id FROM ventas WHERE orden_id IS NOT NULL)`,
     );
     const movimientosManuales = await client.query(
       `DELETE FROM movimientos_caja
         WHERE modulo_origen_id = (SELECT id FROM modulos WHERE slug = 'migao')
           AND tipo = 'ingreso'
-          AND referencia_entidad IS DISTINCT FROM 'ventas'`,
+          AND NOT (referencia_entidad <=> 'ventas')`,
     );
     const pagos = await client.query(`DELETE FROM pagos WHERE orden_id IS NOT NULL`);
     const ventas = await client.query(`DELETE FROM ventas WHERE orden_id IS NOT NULL`);
@@ -1438,7 +1438,7 @@ export async function getOrCrearFactura(
 ) {
   const insert = await executor.query(
     `INSERT INTO facturas (venta_id, orden_id, numero, tipo, subtotal, total)
-     VALUES ($1, $2, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $3, $4)
+     VALUES ($1, $2, 'F-' || lpad(nextval('facturas_numero_seq'), 6, '0'), 'factura', $3, $4)
      ON CONFLICT (venta_id) WHERE venta_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [params.ventaId, params.ordenId, params.subtotal, params.total],

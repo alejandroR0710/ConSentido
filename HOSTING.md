@@ -134,31 +134,28 @@ en cada reinicio, así que puede que no quede ninguna.
 
 ## Despliegue automático (GitHub Actions)
 
-Cada `git push` a la rama `hosting-mysql` compila el sistema, lo sube por FTP a
-`/home/consenti/sistemapos` y la app se reinicia sola. El archivo que lo hace
-es `.github/workflows/desplegar-hosting.yml`.
+Cada `git push` a la rama `hosting-mysql` hace esto solo:
+1. Compila el sistema en GitHub.
+2. Lo sube por SSH/rsync a `~/sistemapos`.
+3. Si cambiaron las dependencias, corre `npm install` en el servidor.
+4. Reinicia la app y comprueba que `/health` responda.
 
-**Configuración (una sola vez):**
+Es el mismo método de EComerceConsentido. El archivo que lo hace es
+`.github/workflows/desplegar-hosting.yml`.
 
-1. cPanel → **FTP Accounts** → crea una cuenta, por ejemplo `deploy`, con
-   **Directory** = `sistemapos` (la carpeta de la app, no `public_html`).
-2. GitHub → repositorio → **Settings → Secrets and variables → Actions → New
-   repository secret**. Crea estos cuatro:
+**Configuración (una sola vez):** en GitHub → repositorio → **Settings →
+Secrets and variables → Actions → New repository secret**, crea:
 
-   | Secreto | Valor |
-   |---|---|
-   | `FTP_SERVER` | `ftp.consentidovelas.com` (o el que diga cPanel en "Configure FTP Client") |
-   | `FTP_USERNAME` | el usuario completo, ej. `deploy@consentidovelas.com` |
-   | `FTP_PASSWORD` | la clave de esa cuenta FTP |
-   | `VITE_EXTERNAL_LEAD_API_KEY` | el mismo valor que tienes en `frontend/.env` |
+| Secreto | Valor |
+|---|---|
+| `SSH_HOST` | el mismo de EComerceConsentido |
+| `SSH_PORT` | `22` |
+| `SSH_USER` | `consenti` |
+| `SSH_PRIVATE_KEY` | la misma clave privada de despliegue de EComerceConsentido |
+| `VITE_EXTERNAL_LEAD_API_KEY` | el valor de `frontend/.env` |
 
-**Qué no se hace solo:**
+**Qué no se hace solo:** los cambios de base de datos (tablas o columnas
+nuevas) se corren a mano en phpMyAdmin.
 
-- **Dependencias nuevas:** si un cambio agrega o actualiza paquetes en
-  `backend/package.json`, entra a cPanel → Setup Node.js App → **Run NPM
-  Install** → **Restart**.
-- **Cambios de base de datos:** si un cambio agrega tablas o columnas, hay que
-  correr ese SQL en phpMyAdmin.
-- **Seguimiento del despliegue:** en GitHub → pestaña **Actions** ves cada
-  despliegue (verde = subió bien). Desde ahí también puedes lanzarlo a mano
-  con **Run workflow**.
+**Seguimiento:** en GitHub → pestaña **Actions** ves cada despliegue (verde =
+quedó arriba). Desde ahí también puedes lanzarlo a mano con **Run workflow**.

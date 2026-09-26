@@ -1,12 +1,22 @@
-# Despliegue automático al hosting (cPanel) en cada push a la rama hosting-mysql.
-# Compila backend + frontend, sube la carpeta por FTP y la app se reinicia
-# sola (tmp/restart.txt). Secretos necesarios: ver HOSTING.md → "Despliegue automático".
-name: Desplegar al hosting
+name: Desplegar al hosting (InterServer / DirectAdmin)
+
+# Mismo esquema que EComerceConsentido: compila en GitHub (el hosting
+# compartido tiene pocos procesos disponibles), sube lo ya construido por
+# SSH/rsync y reinicia la app tocando tmp/restart.txt (Passenger).
+#
+# Requiere estos Secrets del repositorio (Settings -> Secrets and variables -> Actions):
+#   SSH_HOST                    hostname del hosting        (el mismo de EComerceConsentido)
+#   SSH_PORT                    puerto SSH                  (22)
+#   SSH_USER                    usuario del hosting         (consenti)
+#   SSH_PRIVATE_KEY             clave privada de despliegue (la misma de EComerceConsentido sirve)
+#   VITE_EXTERNAL_LEAD_API_KEY  clave del bot de leads (la de frontend/.env)
+#
+# Los cambios de base de datos NO se aplican aquí: se corren a mano en phpMyAdmin.
 
 on:
   push:
     branches: [hosting-mysql]
-  workflow_dispatch: # botón "Run workflow" para desplegar a mano
+  workflow_dispatch:
 
 concurrency:
   group: desplegar-hosting
@@ -31,25 +41,65 @@ jobs:
           npm ci --prefix backend
           npm ci --prefix frontend
 
-      - name: Compilar y armar la carpeta del hosting
+      - name: Compilar (backend + frontend con VITE_API_URL=/api/v1)
         working-directory: backend
         env:
           SIN_ZIP: "1"
           VITE_EXTERNAL_LEAD_API_KEY: ${{ secrets.VITE_EXTERNAL_LEAD_API_KEY }}
         run: node scripts/empaquetar-hosting.js
 
-      - name: Subir por FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          local-dir: ./hosting/sistemapos/
-          server-dir: ./
-          # uploads/ tiene las fotos que suben los usuarios: nunca se toca.
-          exclude: |
-            **/.git*
-            **/.git*/**
-            uploads/**
-            node_modules/**
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Subir al servidor
+        env:
+          SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=accept-new
+          REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: |
+          set -eux
+          cd hosting/sistemapos
+          # dist/ y public/ se reemplazan completos. uploads/ (fotos de los
+          # usuarios) y node_modules/ del servidor nunca se tocan.
+          rsync -az --delete -e "$SSH" dist/ "$REMOTE:sistemapos/dist/"
+          rsync -az --delete -e "$SSH" public/ "$REMOTE:sistemapos/public/"
+          rsync -az -e "$SSH" package.json package-lock.json "$REMOTE:sistemapos/"
+
+      - name: Dependencias (solo si cambiaron) y reinicio
+        env:
+          SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=accept-new
+          REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: |
+          $SSH "$REMOTE" '
+            set -eu
+            cd ~/sistemapos
+            HASH_FILE=.deploy-lockfile-hash
+            NUEVO=$(md5sum package-lock.json | cut -d" " -f1)
+            if [ "$NUEVO" != "$(cat $HASH_FILE 2>/dev/null)" ]; then
+              # Mismo entorno que usa el botón "Run NPM Install" del panel.
+              ACTIVAR=$(ls ~/nodevenv/sistemapos/*/bin/activate 2>/dev/null | head -1)
+              if [ -n "$ACTIVAR" ]; then
+                . "$ACTIVAR"
+                npm install --omit=dev
+                echo "$NUEVO" > $HASH_FILE
+              else
+                echo "::warning::No se encontró el nodevenv: usa Run NPM Install en el panel"
+              fi
+            else
+              echo "package-lock.json sin cambios, se omite npm install"
+            fi
+            mkdir -p tmp && touch tmp/restart.txt
+          '
+
+      - name: Verificar que responde
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS https://sistemapos.consentidovelas.com/health | grep -q '"status":"ok"'; then
+              echo "OK (intento $i)"; exit 0
+            fi
+            echo "esperando arranque... ($i)"; sleep 10
+          done
+          echo "No respondió OK tras 2 minutos"; exit 1

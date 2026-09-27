@@ -99,7 +99,19 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
       </div>
 
       {value.metodoPago === "mixto" && (
-        <div className="flex flex-col gap-2 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
+        // Mismos colores de estado que el campo de referencia: ámbar mientras
+        // efectivo + banco no suman el total, verde cuando cuadra. Sin total
+        // conocido (totalFijo) no hay contra qué comparar y queda neutro.
+        <div
+          className={`flex flex-col gap-2 rounded-lg border-2 p-3 ${
+            totalFijo === undefined
+              ? "border-brand-vanilla-dark dark:border-brand-green-700"
+              : cuadra
+                ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
+                : "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
+          }`}
+        >
+          <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">🔀 ¿Cuánto paga en cada método?</span>
           <div className="flex items-center gap-2">
             <span className="w-16 shrink-0 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Efectivo</span>
             <MoneyInput
@@ -117,9 +129,16 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
             />
           </div>
           {totalFijo !== undefined && (
-            <p className={`text-xs ${cuadra ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"}`}>
-              {formatMoney(sumaMixta)} de {formatMoney(totalFijo)}
-              {!cuadra && " — debe cuadrar exacto"}
+            <p
+              className={`text-xs font-medium ${
+                cuadra ? "text-brand-green-700 dark:text-brand-vanilla" : "text-amber-700 dark:text-amber-400"
+              }`}
+            >
+              {cuadra
+                ? `✓ Cuadra: ${formatMoney(value.montoEfectivo)} efectivo + ${formatMoney(value.montoBanco)} banco = ${formatMoney(totalFijo)}`
+                : sumaMixta < totalFijo
+                  ? `Faltan ${formatMoney(totalFijo - sumaMixta)} por repartir (llevas ${formatMoney(sumaMixta)} de ${formatMoney(totalFijo)}).`
+                  : `Sobran ${formatMoney(sumaMixta - totalFijo)}: entre los dos deben sumar exacto ${formatMoney(totalFijo)}.`}
             </p>
           )}
         </div>

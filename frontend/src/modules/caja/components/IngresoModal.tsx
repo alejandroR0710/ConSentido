@@ -314,10 +314,12 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
 
       {pago.metodoPago !== "banco" && (
         <div className="mb-3">
-          <CalculadoraVuelta aPagar={montoEnEfectivo} recibido={montoRecibido} onChange={setMontoRecibido} />
-          {faltaMontoRecibido && (
-            <p className="mt-1 text-xs text-red-600">Escribe cuánto te dio el cliente en efectivo para poder registrar el ingreso.</p>
-          )}
+          <CalculadoraVuelta
+            aPagar={montoEnEfectivo}
+            recibido={montoRecibido}
+            onChange={setMontoRecibido}
+            esParteDeMixto={pago.metodoPago === "mixto"}
+          />
         </div>
       )}
 

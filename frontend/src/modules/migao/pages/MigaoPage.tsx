@@ -1007,12 +1007,12 @@ export function MigaoPage() {
 
                       {pago.metodoPago !== "banco" && (
                         <>
-                          <CalculadoraVuelta aPagar={montoEnEfectivoSimple} recibido={montoRecibido} onChange={setMontoRecibido} />
-                          {faltaMontoRecibido && (
-                            <p className="-mt-1 text-xs text-red-600">
-                              Escribe cuánto te dio el cliente en efectivo para poder cerrar la cuenta.
-                            </p>
-                          )}
+                          <CalculadoraVuelta
+                            aPagar={montoEnEfectivoSimple}
+                            recibido={montoRecibido}
+                            onChange={setMontoRecibido}
+                            esParteDeMixto={pago.metodoPago === "mixto"}
+                          />
                         </>
                       )}
                     </>
@@ -1131,12 +1131,8 @@ export function MigaoPage() {
                                       aPagar={montoEnEfectivoDeAbono(form)}
                                       recibido={form.montoRecibido}
                                       onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                                      esParteDeMixto={form.pago.metodoPago === "mixto"}
                                     />
-                                    {montoEnEfectivoDeAbono(form) > 0 && form.montoRecibido < montoEnEfectivoDeAbono(form) && (
-                                      <p className="text-xs text-red-600">
-                                        Escribe cuánto te dio el cliente en efectivo para poder registrar este abono.
-                                      </p>
-                                    )}
                                   </>
                                 )}
                               </>
@@ -1263,10 +1259,12 @@ export function MigaoPage() {
 
           {pagoItems.metodoPago !== "banco" && (
             <div className="mb-3">
-              <CalculadoraVuelta aPagar={montoEnEfectivoItems} recibido={montoRecibidoItems} onChange={setMontoRecibidoItems} />
-              {faltaMontoRecibidoItems && (
-                <p className="mt-1 text-xs text-red-600">Escribe cuánto te dio el cliente en efectivo para poder cobrar.</p>
-              )}
+              <CalculadoraVuelta
+                aPagar={montoEnEfectivoItems}
+                recibido={montoRecibidoItems}
+                onChange={setMontoRecibidoItems}
+                esParteDeMixto={pagoItems.metodoPago === "mixto"}
+              />
             </div>
           )}
 

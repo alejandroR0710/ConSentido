@@ -38,7 +38,9 @@ export function DashboardPage() {
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
 
       {/* Steps/Secciones */}
-      <div className="flex overflow-x-auto gap-2 pb-4 -mx-6 px-6 sm:mx-0 sm:px-0">
+      {/* -mx-4/px-4 = el p-4 del <main> (AppShell): la barra llega justo al borde
+          de la pantalla; con más margen se salía y la página se corría de lado. */}
+      <div className="flex overflow-x-auto gap-2 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
         {SECCIONES.map((seccion) => (
           <button
             key={seccion.id}

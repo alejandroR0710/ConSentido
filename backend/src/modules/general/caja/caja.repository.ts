@@ -141,12 +141,13 @@ export interface MovimientoCaja {
   metodoPago: string;
   motivo: string | null;
   usuarioId: string;
+  referenciaBanco: string | null;
 }
 
 export async function getMovimientoById(movimientoId: number): Promise<MovimientoCaja | null> {
   const result = await pool.query(
     `SELECT id, turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id,
-            monto, metodo_pago, motivo, usuario_id
+            monto, metodo_pago, motivo, usuario_id, referencia_banco
        FROM movimientos_caja
       WHERE id = $1`,
     [movimientoId],
@@ -165,6 +166,7 @@ export async function getMovimientoById(movimientoId: number): Promise<Movimient
     metodoPago: row.metodo_pago,
     motivo: row.motivo,
     usuarioId: row.usuario_id,
+    referenciaBanco: row.referencia_banco,
   };
 }
 
@@ -173,20 +175,22 @@ export async function getMovimientoById(movimientoId: number): Promise<Movimient
  *  (orden de Migao cerrada), también corrige el `pagos.metodo_pago` asociado
  *  para que ambos registros sigan contando la misma historia. `moduloOrigenSlug`
  *  es opcional (COALESCE): corrige de qué área viene el ingreso, sin afectarlo
- *  si no se manda. */
+ *  si no se manda. `referenciaBanco` solo queda guardada si el método final es 'banco'. */
 export async function actualizarMetodoPagoMovimiento(
   client: PoolClient,
   movimientoId: number,
   metodoPago: string,
   moduloOrigenSlug?: string,
+  referenciaBanco?: string,
 ) {
   const result = await client.query(
     `UPDATE movimientos_caja
         SET metodo_pago = $2,
-            modulo_origen_id = COALESCE((SELECT id FROM modulos WHERE slug = $3), modulo_origen_id)
+            modulo_origen_id = COALESCE((SELECT id FROM modulos WHERE slug = $3), modulo_origen_id),
+            referencia_banco = $4
       WHERE id = $1
       RETURNING *`,
-    [movimientoId, metodoPago, moduloOrigenSlug ?? null],
+    [movimientoId, metodoPago, moduloOrigenSlug ?? null, metodoPago === "banco" ? (referenciaBanco ?? null) : null],
   );
   return result.rows[0];
 }
@@ -255,11 +259,13 @@ export async function duplicarMovimientoConOtroMetodo(
   metodoPago: string,
   monto: number,
   moduloOrigenSlug?: string,
+  referenciaBanco?: string,
 ) {
   const result = await client.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id)
-     VALUES ($1, $2, COALESCE((SELECT id FROM modulos WHERE slug = $11), $3), $4, $5, $6, $7, $8, $9, $10)
+       (turno_id, tipo, modulo_origen_id, categoria_gasto_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id,
+        referencia_banco)
+     VALUES ($1, $2, COALESCE((SELECT id FROM modulos WHERE slug = $11), $3), $4, $5, $6, $7, $8, $9, $10, $12)
      RETURNING *`,
     [
       original.turnoId,
@@ -273,6 +279,7 @@ export async function duplicarMovimientoConOtroMetodo(
       original.motivo,
       original.usuarioId,
       moduloOrigenSlug ?? null,
+      metodoPago === "banco" ? (referenciaBanco ?? null) : null,
     ],
   );
   return result.rows[0];
@@ -486,13 +493,15 @@ export async function insertIngreso(
     // para mostrarlo así en los historiales, metodoPago sigue puro y todos
     // los cálculos existentes lo siguen usando tal cual.
     esPagoMixto?: boolean;
+    // Últimos 4 del ID de la transferencia — solo en líneas 'banco' (ver exigirReferenciaBanco).
+    referenciaBanco?: string;
   },
 ) {
   const result = await executor.query(
     `INSERT INTO movimientos_caja
        (turno_id, tipo, modulo_origen_id, referencia_entidad, referencia_id, monto, metodo_pago, motivo, usuario_id,
-        monto_sin_descuento, descuento_porcentaje, es_pago_mixto)
-     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        monto_sin_descuento, descuento_porcentaje, es_pago_mixto, referencia_banco)
+     VALUES ($1, 'ingreso', (SELECT id FROM modulos WHERE slug = $2), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       params.turnoId,
@@ -506,6 +515,7 @@ export async function insertIngreso(
       params.montoSinDescuento ?? null,
       params.descuentoPorcentaje ?? null,
       params.esPagoMixto ?? false,
+      params.metodoPago === "banco" ? (params.referenciaBanco ?? null) : null,
     ],
   );
   return result.rows[0];

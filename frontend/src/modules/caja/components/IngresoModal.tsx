@@ -4,7 +4,12 @@ import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta"
 import { Modal } from "../../../shared/components/Modal";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
-import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
+import {
+  SelectorMetodoPago,
+  faltaReferenciaBanco,
+  referenciaBancoPayload,
+  type MetodoPagoValor,
+} from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
 import { facturaCajaAReciboProps } from "../factura";
@@ -82,7 +87,11 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
   const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? montoNeto : 0;
   const faltaMontoRecibido = montoEnEfectivo > 0 && montoRecibido < montoEnEfectivo;
   const puedeRegistrar =
-    montoNeto > 0 && !mixtoInvalido && !faltaMontoRecibido && (modoMonto === "unico" || lineasValidas.length > 0);
+    montoNeto > 0 &&
+    !mixtoInvalido &&
+    !faltaMontoRecibido &&
+    !faltaReferenciaBanco(pago) &&
+    (modoMonto === "unico" || lineasValidas.length > 0);
 
   function actualizarLinea(key: number, cambios: Partial<LineaIngreso>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -110,6 +119,7 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
         ...(pago.metodoPago === "mixto"
           ? { ...pago, montoRecibidoEfectivo }
           : { metodoPago: pago.metodoPago, monto: montoNeto, montoRecibidoEfectivo }),
+        ...referenciaBancoPayload(pago),
       });
       await onRegistrado(creado);
       setResultado(creado);

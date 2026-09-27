@@ -1,4 +1,31 @@
+import { z } from "zod";
 import { Errors } from "./app-error";
+
+/**
+ * Últimos 4 caracteres del ID de la transferencia (letras y/o números) —
+ * obligatorio en todo pago RECIBIDO que tenga una parte por banco, para poder
+ * cruzarlo con el extracto del banco (ver exigirReferenciaBanco). Se guarda en
+ * movimientos_caja.referencia_banco, solo en la línea 'banco'.
+ */
+export const referenciaBancoSchema = {
+  referenciaBanco: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{4}$/, "La referencia del banco deben ser exactamente 4 letras o números")
+    .transform((v) => v.toUpperCase())
+    .optional(),
+};
+
+/** Exige la referencia de la transferencia cuando el pago lleva algo por
+ *  banco (`montoEnBanco` > 0). Devuelve el valor listo para guardar en la
+ *  línea 'banco', o undefined si no hay nada por banco. */
+export function exigirReferenciaBanco(montoEnBanco: number, referenciaBanco: string | undefined): string | undefined {
+  if (montoEnBanco <= 0) return undefined;
+  if (!referenciaBanco) {
+    throw Errors.badRequest("Escribe los últimos 4 dígitos del ID de la transferencia para registrar el pago por banco");
+  }
+  return referenciaBanco;
+}
 
 export type PagoInput =
   | { metodoPago: "efectivo" | "banco"; monto: number }

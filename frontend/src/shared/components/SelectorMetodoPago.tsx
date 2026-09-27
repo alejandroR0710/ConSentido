@@ -1,9 +1,31 @@
 import { formatMoney } from "../format/money";
 import { MoneyInput } from "./MoneyInput";
 
+// `referenciaBanco`: últimos 4 caracteres del ID de la transferencia. El
+// backend la exige en todo pago recibido que lleve algo por banco.
 export type MetodoPagoValor =
-  | { metodoPago: "efectivo" | "banco" }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number };
+  | { metodoPago: "efectivo" | "banco"; referenciaBanco?: string }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; referenciaBanco?: string };
+
+const REFERENCIA_BANCO_REGEX = /^[A-Z0-9]{4}$/;
+
+function llevaBanco(pago: MetodoPagoValor) {
+  return pago.metodoPago === "banco" || (pago.metodoPago === "mixto" && pago.montoBanco > 0);
+}
+
+/** true si el pago lleva algo por banco y todavía no tiene los 4 caracteres
+ *  de la transferencia — para deshabilitar el botón de cobrar. */
+export function faltaReferenciaBanco(pago: MetodoPagoValor) {
+  const valida = REFERENCIA_BANCO_REGEX.test(pago.referenciaBanco ?? "");
+  // A medio escribir tampoco sirve (el backend rechaza el formato), aunque el
+  // mixto todavía no tenga monto en banco.
+  return (llevaBanco(pago) && !valida) || (Boolean(pago.referenciaBanco) && !valida);
+}
+
+/** Lo que hay que sumarle al cuerpo del pago que se manda al backend. */
+export function referenciaBancoPayload(pago: MetodoPagoValor): { referenciaBanco?: string } {
+  return llevaBanco(pago) && pago.referenciaBanco ? { referenciaBanco: pago.referenciaBanco } : {};
+}
 
 interface SelectorMetodoPagoProps {
   value: MetodoPagoValor;
@@ -12,6 +34,9 @@ interface SelectorMetodoPagoProps {
    *  de una parte de la cuenta ya calculado), se muestra cuánto llevan sumado
    *  los dos montos mientras el cajero reparte — así sabe si falta o sobra. */
   totalFijo?: number;
+  /** Pide los últimos 4 del ID de la transferencia al elegir Banco/Mixto.
+   *  Solo en pagos que se RECIBEN — los egresos lo apagan. */
+  pedirReferenciaBanco?: boolean;
 }
 
 const claseMonto =
@@ -29,15 +54,21 @@ const METODOS: { valor: MetodoPagoValor["metodoPago"]; label: string; icono: str
  * efectivo y parte en banco. El backend lo descompone en 1-2 movimientos ya
  * puros — este selector solo recolecta esos dos montos.
  */
-export function SelectorMetodoPago({ value, onChange, totalFijo }: SelectorMetodoPagoProps) {
+export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferenciaBanco = true }: SelectorMetodoPagoProps) {
   const sumaMixta = value.metodoPago === "mixto" ? value.montoEfectivo + value.montoBanco : 0;
   const cuadra = totalFijo === undefined || Math.abs(sumaMixta - totalFijo) < 0.01;
+  const mostrarReferencia = pedirReferenciaBanco && value.metodoPago !== "efectivo";
+  const referencia = value.referenciaBanco ?? "";
+  const referenciaIncompleta = pedirReferenciaBanco && faltaReferenciaBanco(value);
 
   function seleccionar(metodo: MetodoPagoValor["metodoPago"]) {
+    // La referencia ya escrita se conserva al cambiar entre Banco y Mixto; en
+    // Efectivo no aplica y se descarta.
+    const referenciaBanco = metodo === "efectivo" ? undefined : value.referenciaBanco;
     onChange(
       metodo === "mixto"
-        ? { metodoPago: "mixto", montoEfectivo: totalFijo ?? 0, montoBanco: 0 }
-        : { metodoPago: metodo },
+        ? { metodoPago: "mixto", montoEfectivo: totalFijo ?? 0, montoBanco: 0, referenciaBanco }
+        : { metodoPago: metodo, referenciaBanco },
     );
   }
 
@@ -91,6 +122,36 @@ export function SelectorMetodoPago({ value, onChange, totalFijo }: SelectorMetod
             </p>
           )}
         </div>
+      )}
+
+      {mostrarReferencia && (
+        <label className="flex flex-col gap-1 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
+          <span className="text-xs font-medium text-brand-ink/80 dark:text-brand-vanilla/80">
+            Últimos 4 del ID de la transferencia
+          </span>
+          <input
+            value={referencia}
+            onChange={(e) =>
+              onChange({
+                ...value,
+                referenciaBanco: e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 4),
+              })
+            }
+            placeholder="Ej: 7A2F"
+            // Sin maxLength a propósito: el navegador cortaría lo pegado ANTES
+            // de quitar guiones/espacios ("7a-2f9" quedaría "7A2"). El límite de
+            // 4 ya lo aplica el onChange, después de limpiar.
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            className={`${claseMonto} font-mono tracking-[0.3em] uppercase`}
+          />
+          {referenciaIncompleta && (
+            <span className="text-xs text-amber-700 dark:text-amber-400">
+              Obligatorio para registrar el pago por banco: 4 letras o números.
+            </span>
+          )}
+        </label>
       )}
     </div>
   );

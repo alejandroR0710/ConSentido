@@ -179,8 +179,8 @@ export type MetodoPago = "efectivo" | "banco";
 // para calcular y dejar registrada la vuelta (solo en el historial, nunca en
 // la factura).
 export type PagoInput =
-  | { metodoPago: "efectivo" | "banco" | "administrativo"; montoRecibidoEfectivo?: number }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number };
+  | { metodoPago: "efectivo" | "banco" | "administrativo"; montoRecibidoEfectivo?: number; referenciaBanco?: string }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number; referenciaBanco?: string };
 
 // "servido" solo aparece en el historial de despachados (GET /cocina/historial);
 // la cola activa (GET /cocina/items) nunca devuelve pendiente/preparando/listo.
@@ -352,8 +352,8 @@ export interface PropinaInput {
 // solo PARTE de la cantidad de un ítem — ej. cobrar 1 de 3 limonadas, el
 // backend parte esa fila en dos (ver migao.service.ts::pagarItems).
 export type PagarItemsInput = (
-  | { metodoPago: "efectivo" | "banco"; montoRecibidoEfectivo?: number }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number }
+  | { metodoPago: "efectivo" | "banco"; montoRecibidoEfectivo?: number; referenciaBanco?: string }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number; referenciaBanco?: string }
 ) &
   PropinaInput & { unidades: { itemId: number; cantidad: number }[] };
 
@@ -379,13 +379,20 @@ export interface PropinaAbonoInput {
 }
 
 export type RegistrarAbonoInput =
-  | { metodoPago: "efectivo" | "banco"; monto: number; propina?: PropinaAbonoInput; montoRecibidoEfectivo?: number }
+  | {
+      metodoPago: "efectivo" | "banco";
+      monto: number;
+      propina?: PropinaAbonoInput;
+      montoRecibidoEfectivo?: number;
+      referenciaBanco?: string;
+    }
   | {
       metodoPago: "mixto";
       montoEfectivo: number;
       montoBanco: number;
       propina?: PropinaAbonoInput;
       montoRecibidoEfectivo?: number;
+      referenciaBanco?: string;
     };
 
 /** Una unidad de producto asignada a una parte (modo 'producto') — solo

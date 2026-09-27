@@ -10,8 +10,8 @@ export type ModuloOrigenSlug = "insumos" | "talleres" | "con_sentido" | "migao" 
 // el cliente, para calcular y dejar registrada la vuelta. No aplica a egresos
 // (el campo va en el tipo compartido, pero el backend lo ignora ahí).
 export type PagoInput =
-  | { metodoPago: "efectivo" | "banco"; monto: number; montoRecibidoEfectivo?: number }
-  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number };
+  | { metodoPago: "efectivo" | "banco"; monto: number; montoRecibidoEfectivo?: number; referenciaBanco?: string }
+  | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number; montoRecibidoEfectivo?: number; referenciaBanco?: string };
 
 // Ítem libre (modo "Agregar productos" del ingreso manual) — nombre en vez
 // de producto_id, no hay catálogo detrás (ver caja_ingreso_items en schema.sql).
@@ -28,7 +28,7 @@ export interface ItemIngresoInput {
 export type EditarPagoInput = (
   | { metodoPago: "efectivo" | "banco" }
   | { metodoPago: "mixto"; montoEfectivo: number; montoBanco: number }
-) & { moduloOrigenSlug?: ModuloOrigenSlug };
+) & { moduloOrigenSlug?: ModuloOrigenSlug; referenciaBanco?: string };
 
 export interface TurnoCaja {
   id: string;
@@ -70,6 +70,9 @@ export interface MovimientoCaja {
   // pago puro. metodo_pago sigue siendo puro, esto es solo para mostrar
   // "Mixta · efectivo"/"Mixta · banco" en vez de solo el método.
   es_pago_mixto: boolean;
+  // Últimos 4 del ID de la transferencia — solo en ingresos por banco
+  // registrados desde que se empezó a exigir (los anteriores vienen null).
+  referencia_banco?: string | null;
   motivo: string | null;
   usuario_id: string | null;
   created_at: string;

@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Modal } from "../../../shared/components/Modal";
-import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
+import {
+  SelectorMetodoPago,
+  faltaReferenciaBanco,
+  referenciaBancoPayload,
+  type MetodoPagoValor,
+} from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 
 interface Producto {
@@ -56,7 +61,8 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     itemsValidos &&
     total > 0 &&
     (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
-    !mixtoInvalido;
+    !mixtoInvalido &&
+    !faltaReferenciaBanco(pago);
 
   function agregarProducto(p: Producto) {
     setCarrito([
@@ -118,6 +124,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
           montoEfectivo: pago.montoEfectivo,
           montoBanco: pago.montoBanco,
         }),
+        ...referenciaBancoPayload(pago),
         fecha: new Date().toISOString(),
       };
 

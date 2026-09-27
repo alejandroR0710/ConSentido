@@ -5,7 +5,7 @@ import { MODULOS_ORIGEN } from "../../modules/caja/moduloOrigen";
 import { ApiError } from "../api/client";
 import { formatMoney } from "../format/money";
 import { Modal } from "./Modal";
-import { SelectorMetodoPago, type MetodoPagoValor } from "./SelectorMetodoPago";
+import { SelectorMetodoPago, faltaReferenciaBanco, type MetodoPagoValor } from "./SelectorMetodoPago";
 
 interface EditarMetodoPagoModalProps {
   movimientoId: number | string;
@@ -50,6 +50,10 @@ export function EditarMetodoPagoModal({
   const [error, setError] = useState<string | null>(null);
 
   const puedeEditarArea = tipo === "ingreso";
+  // Solo se pide al pasar un ingreso de EFECTIVO a banco/mixto: si ya era por
+  // banco, el backend conserva la referencia que tuviera (ver
+  // caja.service.ts::editarMetodoPagoMovimiento).
+  const pedirReferenciaBanco = tipo === "ingreso" && metodoPagoActual === "efectivo";
   const sinCambios = pago.metodoPago === metodoPagoActual && moduloOrigen === (moduloOrigenActual ?? null);
   const mixtoInvalido = pago.metodoPago === "mixto" && Math.abs(pago.montoEfectivo + pago.montoBanco - monto) > 0.01;
 
@@ -59,6 +63,7 @@ export function EditarMetodoPagoModal({
     try {
       await cajaApi.editarMetodoPagoMovimiento(movimientoId, {
         ...pago,
+        referenciaBanco: pedirReferenciaBanco ? pago.referenciaBanco : undefined,
         moduloOrigenSlug: puedeEditarArea && moduloOrigen && moduloOrigen !== moduloOrigenActual ? moduloOrigen : undefined,
       });
       await onGuardado();
@@ -80,7 +85,12 @@ export function EditarMetodoPagoModal({
 
       <label className="mb-1 block text-xs font-medium">Método de pago correcto</label>
       <div className="mb-4">
-        <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={monto} />
+        <SelectorMetodoPago
+          value={pago}
+          onChange={setPago}
+          totalFijo={monto}
+          pedirReferenciaBanco={pedirReferenciaBanco}
+        />
       </div>
 
       {puedeEditarArea && (
@@ -104,7 +114,7 @@ export function EditarMetodoPagoModal({
 
       <button
         onClick={guardar}
-        disabled={guardando || sinCambios || mixtoInvalido}
+        disabled={guardando || sinCambios || mixtoInvalido || (pedirReferenciaBanco && faltaReferenciaBanco(pago))}
         className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
       >
         {guardando ? "Guardando..." : "Guardar corrección"}

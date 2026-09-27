@@ -124,7 +124,7 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
       )}
       <label className="mb-1 block text-xs font-medium">Método</label>
       <div className="mb-3">
-        <SelectorMetodoPago value={pago} onChange={setPago} />
+        <SelectorMetodoPago value={pago} onChange={setPago} pedirReferenciaBanco={false} />
       </div>
 
       <label className="mb-1 block text-xs font-medium">Motivo</label>

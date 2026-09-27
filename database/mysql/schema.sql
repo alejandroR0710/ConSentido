@@ -161,6 +161,9 @@ CREATE TABLE movimientos_caja (
   descuento_porcentaje DECIMAL(5,2),
   metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco')),
   es_pago_mixto      BOOLEAN NOT NULL DEFAULT false,
+  -- Últimos 4 del ID de la transferencia (letras/números): obligatorio en
+  -- todo ingreso por banco desde 2026-09-27; null en efectivo y en los anteriores.
+  referencia_banco   VARCHAR(4),
   motivo             TEXT,
   usuario_id         CHAR(36), -- en producción hay movimientos viejos sin usuario
   created_at         DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),

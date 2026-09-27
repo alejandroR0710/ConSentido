@@ -6,7 +6,12 @@ import { useAuth } from "../../../shared/auth/useAuth";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { Modal } from "../../../shared/components/Modal";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
-import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/components/SelectorMetodoPago";
+import {
+  SelectorMetodoPago,
+  faltaReferenciaBanco,
+  referenciaBancoPayload,
+  type MetodoPagoValor,
+} from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
@@ -280,9 +285,10 @@ export function MigaoPage() {
         ? totalSeleccionados + propinaItemsMonto
         : 0;
   const faltaMontoRecibidoItems = montoEnEfectivoItems > 0 && montoRecibidoItems < montoEnEfectivoItems;
+  const faltaReferenciaItems = faltaReferenciaBanco(pagoItems);
 
   async function confirmarPagarItems() {
-    if (!ordenSeleccionadaId || cantidadTotalSeleccionada <= 0 || faltaMontoRecibidoItems) return;
+    if (!ordenSeleccionadaId || cantidadTotalSeleccionada <= 0 || faltaMontoRecibidoItems || faltaReferenciaItems) return;
     if (
       pagoItems.metodoPago === "mixto" &&
       Math.abs(pagoItems.montoEfectivo + pagoItems.montoBanco - (totalSeleccionados + propinaItemsMonto)) > 0.01
@@ -365,6 +371,7 @@ export function MigaoPage() {
         ? pago.montoEfectivo
         : montoEfectivoRequerido(pago, totalConDescuento) + propinaMonto;
   const faltaMontoRecibido = montoEnEfectivoSimple > 0 && montoRecibido < montoEnEfectivoSimple;
+  const faltaReferencia = !esAdministrativo && faltaReferenciaBanco(pago);
 
   /** Trae la factura recién generada y la ofrece para imprimir de una vez —
    *  si falla, solo se avisa aparte, nunca deshace el cobro (ya se cerró). */
@@ -379,7 +386,7 @@ export function MigaoPage() {
   }
 
   async function cerrarYCobrar() {
-    if (!ordenSeleccionadaId || pagoMixtoInvalido || faltaMontoRecibido) return;
+    if (!ordenSeleccionadaId || pagoMixtoInvalido || faltaMontoRecibido || faltaReferencia) return;
     setCobrando(true);
     setError(null);
     setMensaje(null);
@@ -488,11 +495,18 @@ export function MigaoPage() {
       })
     : false;
 
+  const algunAbonoSinReferencia = cuenta
+    ? cuenta.partes.some((parte) => {
+        const form = abonoForms[parte.id];
+        return Boolean(form && form.montoPagarAhora > 0 && faltaReferenciaBanco(form.pago));
+      })
+    : false;
+
   /** Registra un abono por cada parte que tenga algo que pagar ahora — puede
    *  ser el pago completo de todas (cierra la orden) o parcial de alguna(s)
    *  (la orden queda en 'pagando' hasta el próximo abono). */
   async function registrarPagos() {
-    if (!ordenSeleccionadaId || !cuenta || algunAbonoSinMontoRecibido) return;
+    if (!ordenSeleccionadaId || !cuenta || algunAbonoSinMontoRecibido || algunAbonoSinReferencia) return;
     setCobrando(true);
     setError(null);
     setMensaje(null);
@@ -512,8 +526,15 @@ export function MigaoPage() {
                 montoBanco: form.pago.montoBanco,
                 propina: propinaInput,
                 montoRecibidoEfectivo,
+                ...referenciaBancoPayload(form.pago),
               }
-            : { metodoPago: form.pago.metodoPago, monto: form.montoPagarAhora, propina: propinaInput, montoRecibidoEfectivo };
+            : {
+                metodoPago: form.pago.metodoPago,
+                monto: form.montoPagarAhora,
+                propina: propinaInput,
+                montoRecibidoEfectivo,
+                ...referenciaBancoPayload(form.pago),
+              };
         cuentaActual = await migaoApi.registrarAbono(parte.id, input);
       }
       setCuenta(cuentaActual);
@@ -999,7 +1020,7 @@ export function MigaoPage() {
 
                   <button
                     onClick={cerrarYCobrar}
-                    disabled={cobrando || pagoMixtoInvalido || faltaMontoRecibido}
+                    disabled={cobrando || pagoMixtoInvalido || faltaMontoRecibido || faltaReferencia}
                     className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                   >
                     {cobrando ? "Cobrando..." : "Cobrar y cerrar orden"}
@@ -1130,7 +1151,13 @@ export function MigaoPage() {
 
                       <button
                         onClick={registrarPagos}
-                        disabled={cobrando || algunAbonoMixtoInvalido || algunAbonoSinMontoRecibido || totalAPagarAhora <= 0}
+                        disabled={
+                          cobrando ||
+                          algunAbonoMixtoInvalido ||
+                          algunAbonoSinMontoRecibido ||
+                          algunAbonoSinReferencia ||
+                          totalAPagarAhora <= 0
+                        }
                         className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
                       >
                         {cobrando ? "Cobrando..." : "Registrar pago(s)"}
@@ -1247,7 +1274,7 @@ export function MigaoPage() {
 
           <button
             onClick={confirmarPagarItems}
-            disabled={cobrandoItems || faltaMontoRecibidoItems}
+            disabled={cobrandoItems || faltaMontoRecibidoItems || faltaReferenciaItems}
             className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
           >
             {cobrandoItems ? "Cobrando..." : "Cobrar y generar factura"}

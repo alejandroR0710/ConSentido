@@ -35,6 +35,8 @@ export interface Venta {
   metodoPago: "efectivo" | "banco" | "mixto";
   montoEfectivo?: number;
   montoBanco?: number;
+  // Últimos 4 del ID de la transferencia (obligatorio si algo va por banco).
+  referenciaBanco?: string;
   fecha: string;
 }
 

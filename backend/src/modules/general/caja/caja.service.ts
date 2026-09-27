@@ -1,6 +1,6 @@
 import { Pool, PoolClient, pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
-import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../../shared/utils/pago-mixto";
+import { descomponerPago, exigirMontoRecibidoEfectivo, exigirReferenciaBanco } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
@@ -113,6 +113,12 @@ async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioI
   // sepa de antemano (ver camposIngreso.esPagoMixto — llamadas internas de
   // Migao, que llegan con cada línea ya decompuesta en método puro).
   const esPagoMixto = input.esPagoMixto ?? partes.length > 1;
+  // Punto único para TODO ingreso que viene de otro módulo (Migao, Con
+  // Sentido...): si lleva algo por banco, sin la referencia no se registra.
+  const referenciaBanco = exigirReferenciaBanco(
+    partes.find((p) => p.metodoPago === "banco")?.monto ?? 0,
+    input.referenciaBanco,
+  );
   const movimientos = [];
   for (const parte of partes) {
     // Si hubo descuento, se guarda también cuánto habría sido esta línea sin
@@ -133,6 +139,7 @@ async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioI
         montoSinDescuento,
         descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         esPagoMixto,
+        referenciaBanco,
       }),
     );
   }
@@ -173,6 +180,10 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       partes.find((p) => p.metodoPago === "efectivo")?.monto ?? 0,
       input.montoRecibidoEfectivo,
     );
+    const referenciaBanco = exigirReferenciaBanco(
+      partes.find((p) => p.metodoPago === "banco")?.monto ?? 0,
+      input.referenciaBanco,
+    );
 
     const venta = await repo.crearVentaManual(client, {
       moduloOrigenSlug: input.moduloOrigenSlug,
@@ -210,6 +221,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
           montoSinDescuento,
           descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
           esPagoMixto,
+          referenciaBanco,
         }),
       );
     }
@@ -346,6 +358,19 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, input: Ed
     throw Errors.badRequest("Solo se puede corregir el área de un ingreso");
   }
 
+  // Un ingreso que era en EFECTIVO y pasa a tener algo por banco necesita la
+  // referencia de la transferencia (los egresos no). Si ya era por banco, esa
+  // plata ya estaba declarada: se conserva la referencia que tuviera (puede no
+  // tener, si se registró antes de exigirla) sin volver a pedirla.
+  const montoBancoNuevo =
+    input.metodoPago === "mixto" ? input.montoBanco : input.metodoPago === "banco" ? Number(movimiento.monto) : 0;
+  const referenciaBanco =
+    movimiento.tipo !== "ingreso"
+      ? undefined
+      : movimiento.metodoPago === "banco"
+        ? (input.referenciaBanco ?? movimiento.referenciaBanco ?? undefined)
+        : exigirReferenciaBanco(montoBancoNuevo, input.referenciaBanco);
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -356,6 +381,7 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, input: Ed
         movimientoId,
         input.metodoPago,
         input.moduloOrigenSlug,
+        referenciaBanco,
       );
       if (movimiento.referenciaEntidad === "ventas" && movimiento.referenciaId) {
         await repo.actualizarMetodoPagoPagoPorVenta(client, movimiento.referenciaId, input.metodoPago);
@@ -407,6 +433,7 @@ export async function editarMetodoPagoMovimiento(movimientoId: number, input: Ed
           parte.metodoPago,
           parte.monto,
           input.moduloOrigenSlug,
+          referenciaBanco,
         ),
       );
     }

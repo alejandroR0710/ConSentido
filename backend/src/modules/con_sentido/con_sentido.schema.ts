@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { referenciaBancoSchema } from "../../shared/utils/pago-mixto";
 
 const itemVentaSchema = z.object({
   producto: z.string().trim().min(1).max(255),
@@ -15,6 +16,7 @@ export const registrarVentaSchema = z.union([
     items: z.array(itemVentaSchema).min(1, "Agrega al menos un producto"),
     monto: z.number().positive(),
     metodoPago: z.enum(["efectivo", "banco"]),
+    ...referenciaBancoSchema,
   }),
   z
     .object({
@@ -23,6 +25,7 @@ export const registrarVentaSchema = z.union([
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),
+      ...referenciaBancoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, {
       message: "El total del pago mixto debe ser mayor a 0",

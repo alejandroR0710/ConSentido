@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { referenciaBancoSchema } from "../../shared/utils/pago-mixto";
 
 export const crearProductoSchema = z.object({
   nombre: z.string().trim().min(2).max(150),
@@ -106,6 +107,8 @@ const propinaSchema = {
 // que alcance para cubrir la parte en efectivo — acá solo se exige que venga
 // un número): cuánto entregó el cliente en efectivo, para poder calcular y
 // dejar registrado cuánto se le devolvió de vuelta.
+// Los cobros llevan además `referenciaBanco` (últimos 4 del ID de la
+// transferencia), obligatoria si algo va por banco — ver exigirReferenciaBanco.
 const montoRecibidoEfectivoSchema = { montoRecibidoEfectivo: z.number().nonnegative().optional() };
 
 export const cerrarOrdenSchema = z.union([
@@ -119,6 +122,7 @@ export const cerrarOrdenSchema = z.union([
     ...descuentoSchema,
     ...propinaSchema,
     ...montoRecibidoEfectivoSchema,
+    ...referenciaBancoSchema,
   }),
   z
     .object({
@@ -130,6 +134,7 @@ export const cerrarOrdenSchema = z.union([
       ...descuentoSchema,
       ...propinaSchema,
       ...montoRecibidoEfectivoSchema,
+      ...referenciaBancoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
   z.object({
@@ -137,13 +142,14 @@ export const cerrarOrdenSchema = z.union([
     partes: z
       .array(
         z.union([
-          z.object({ metodoPago: z.enum(["efectivo", "banco"]), unidades: unidadesSchema }),
+          z.object({ metodoPago: z.enum(["efectivo", "banco"]), unidades: unidadesSchema, ...referenciaBancoSchema }),
           z
             .object({
               metodoPago: z.literal("mixto"),
               montoEfectivo: z.number().nonnegative(),
               montoBanco: z.number().nonnegative(),
               unidades: unidadesSchema,
+              ...referenciaBancoSchema,
             })
             .refine((d) => d.montoEfectivo + d.montoBanco > 0, {
               message: MENSAJE_MIXTO_VACIO,
@@ -192,6 +198,7 @@ export const registrarAbonoSchema = z.union([
     monto: z.number().positive(),
     propina: propinaAbonoSchema,
     ...montoRecibidoEfectivoSchema,
+    ...referenciaBancoSchema,
   }),
   z
     .object({
@@ -200,6 +207,7 @@ export const registrarAbonoSchema = z.union([
       montoBanco: z.number().nonnegative(),
       propina: propinaAbonoSchema,
       ...montoRecibidoEfectivoSchema,
+      ...referenciaBancoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
 ]);
@@ -220,6 +228,7 @@ export const pagarItemsSchema = z.union([
     metodoPago: z.enum(["efectivo", "banco"]),
     ...propinaSchema,
     ...montoRecibidoEfectivoSchema,
+    ...referenciaBancoSchema,
   }),
   z
     .object({
@@ -229,6 +238,7 @@ export const pagarItemsSchema = z.union([
       montoBanco: z.number().nonnegative(),
       ...propinaSchema,
       ...montoRecibidoEfectivoSchema,
+      ...referenciaBancoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
 ]);

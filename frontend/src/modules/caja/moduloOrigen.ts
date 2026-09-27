@@ -4,8 +4,11 @@ import type { ModuloOrigenSlug, MovimientoCaja } from "./api";
  *  backend caja.service.ts::insertarMovimientosIngreso) — esto reconstruye
  *  la etiqueta "Mixta · efectivo"/"Mixta · banco" para mostrarlo en los
  *  historiales, sin que ningún cálculo tenga que dejar de usar el método puro. */
-export function labelMetodoPago(m: Pick<MovimientoCaja, "metodo_pago" | "es_pago_mixto">): string {
-  return m.es_pago_mixto ? `Mixta · ${m.metodo_pago}` : m.metodo_pago;
+export function labelMetodoPago(
+  m: Pick<MovimientoCaja, "metodo_pago" | "es_pago_mixto" | "referencia_banco">,
+): string {
+  const metodo = m.es_pago_mixto ? `Mixta · ${m.metodo_pago}` : m.metodo_pago;
+  return m.referencia_banco ? `${metodo} · Ref ${m.referencia_banco}` : metodo;
 }
 
 // Con Sentido primero a propósito: es el origen más común de un ingreso

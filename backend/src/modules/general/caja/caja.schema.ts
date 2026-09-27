@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { referenciaBancoSchema } from "../../../shared/utils/pago-mixto";
 
 const METODOS_PAGO = ["efectivo", "banco"] as const;
 const MODULO_ORIGEN_VALUES = ["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"] as const;
@@ -50,6 +51,8 @@ const camposIngreso = {
   // exigirMontoRecibidoEfectivo): cuánto entregó el cliente, para calcular y
   // dejar registrada la vuelta — mismo criterio que en Migao.
   montoRecibidoEfectivo: z.number().nonnegative().optional(),
+  // Obligatorio cuando el ingreso lleva algo por banco (ver exigirReferenciaBanco).
+  ...referenciaBancoSchema,
 };
 export const registrarIngresoSchema = z.union([
   z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
@@ -120,14 +123,20 @@ export type ResetearCajaInput = z.infer<typeof resetearCajaSchema>;
 // independiente del método — corrige de qué área viene el ingreso (ej. se
 // registró como "Migao" pero era de "Con Sentido"); el service la rechaza si
 // el movimiento no es un ingreso (los egresos no tienen área, tienen categoría).
+// `referenciaBanco`: obligatoria si un INGRESO pasa a tener algo por banco.
 export const editarMetodoPagoMovimientoSchema = z.union([
-  z.object({ metodoPago: z.enum(METODOS_PAGO), moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional() }),
+  z.object({
+    metodoPago: z.enum(METODOS_PAGO),
+    moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
+    ...referenciaBancoSchema,
+  }),
   z
     .object({
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),
       moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
+      ...referenciaBancoSchema,
     })
     .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
 ]);

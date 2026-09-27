@@ -60,6 +60,7 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
   const mostrarReferencia = pedirReferenciaBanco && value.metodoPago !== "efectivo";
   const referencia = value.referenciaBanco ?? "";
   const referenciaIncompleta = pedirReferenciaBanco && faltaReferenciaBanco(value);
+  const bancoRequerido = llevaBanco(value);
 
   function seleccionar(metodo: MetodoPagoValor["metodoPago"]) {
     // La referencia ya escrita se conserva al cambiar entre Banco y Mixto; en
@@ -125,9 +126,30 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
       )}
 
       {mostrarReferencia && (
-        <label className="flex flex-col gap-1 rounded-md border border-brand-vanilla-dark p-2 dark:border-brand-green-700">
-          <span className="text-xs font-medium text-brand-ink/80 dark:text-brand-vanilla/80">
-            Últimos 4 del ID de la transferencia
+        <label
+          className={`flex flex-col gap-2 rounded-lg border-2 p-3 ${
+            referenciaIncompleta
+              ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
+              : referencia.length === 4
+                ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
+                : "border-brand-vanilla-dark dark:border-brand-green-700"
+          }`}
+        >
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+            <span aria-hidden>🏦</span> Referencia de la transferencia
+            {bancoRequerido && <span className="text-xs font-normal text-red-600 dark:text-red-400">(obligatorio)</span>}
+          </span>
+          <span className="text-xs leading-snug text-brand-ink/75 dark:text-brand-vanilla/75">
+            Pídele al cliente el comprobante del pago (Nequi, Bancolombia, Daviplata, etc.) y escribe los{" "}
+            <strong>últimos 4 caracteres</strong> del número de referencia o ID de la transacción. Pueden ser letras,
+            números o las dos cosas.
+          </span>
+          <span className="text-xs leading-snug text-brand-ink/60 dark:text-brand-vanilla/60">
+            Sirve para comprobar después, contra el extracto del banco, que el pago sí llegó.
+            {value.metodoPago === "mixto" &&
+              (value.montoBanco > 0
+                ? ` Aplica a los ${formatMoney(value.montoBanco)} que se pagan por banco.`
+                : " Solo se pide si una parte se paga por banco.")}
           </span>
           <input
             value={referencia}
@@ -146,10 +168,18 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
             spellCheck={false}
             className={`${claseMonto} font-mono tracking-[0.3em] uppercase`}
           />
-          {referenciaIncompleta && (
-            <span className="text-xs text-amber-700 dark:text-amber-400">
-              Obligatorio para registrar el pago por banco: 4 letras o números.
+          {referenciaIncompleta ? (
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {referencia.length === 0
+                ? "Escribe los 4 caracteres para poder registrar el pago."
+                : `Faltan ${4 - referencia.length} de 4 caracteres.`}
             </span>
+          ) : (
+            referencia.length === 4 && (
+              <span className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
+                ✓ Referencia completa: {referencia}
+              </span>
+            )
           )}
         </label>
       )}

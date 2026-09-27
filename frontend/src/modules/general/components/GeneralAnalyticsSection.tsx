@@ -44,6 +44,18 @@ function StatCard({ titulo, valor, detalle }: { titulo: string; valor: string; d
   );
 }
 
+/** Línea chica bajo un valor de "Detalle por área": cuánto de ese valor fue
+ *  en efectivo y cuánto por banco. No se muestra si los dos son 0. */
+function DesgloseMetodo({ efectivo, banco }: { efectivo: number; banco: number }) {
+  if (efectivo === 0 && banco === 0) return null;
+  return (
+    <div className="mt-0.5 whitespace-nowrap text-[11px] font-normal leading-tight text-brand-ink/55 dark:text-brand-vanilla/55">
+      <div>Efectivo {formatMoney(efectivo)}</div>
+      <div>Banco {formatMoney(banco)}</div>
+    </div>
+  );
+}
+
 function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsGeneral | null }) {
   return (
     <div className="flex flex-col gap-4">
@@ -79,32 +91,29 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsGeneral
               <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Sin movimientos en este rango.</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-                <table className="w-full min-w-[600px] text-left text-sm">
+                <table className="w-full min-w-[440px] text-left text-sm">
                   <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
                     <tr>
                       <th className="px-3 py-2">Área / Módulo</th>
                       <th className="px-3 py-2 text-right">Ingresos</th>
-                      <th className="px-3 py-2 text-right">Efectivo</th>
-                      <th className="px-3 py-2 text-right">Banco</th>
                       <th className="px-3 py-2 text-right">Egresos</th>
                       <th className="px-3 py-2 text-right">Saldo Neto</th>
                     </tr>
                   </thead>
                   <tbody>
                     {datos.porModulo.map((m) => (
-                      <tr key={m.modulo_id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
+                      <tr
+                        key={m.modulo_id}
+                        className="border-t border-brand-vanilla-dark align-top dark:border-brand-green-700"
+                      >
                         <td className="px-3 py-2 font-medium">{m.modulo_nombre}</td>
                         <td className="px-3 py-2 text-right text-brand-green-600 dark:text-brand-vanilla">
                           {formatMoney(m.ingresos)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-brand-ink/70 dark:text-brand-vanilla/70">
-                          {m.efectivo > 0 ? formatMoney(m.efectivo) : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right text-brand-ink/70 dark:text-brand-vanilla/70">
-                          {m.banco > 0 ? formatMoney(m.banco) : "—"}
+                          <DesgloseMetodo efectivo={m.efectivo} banco={m.banco} />
                         </td>
                         <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">
                           {m.egresos > 0 ? formatMoney(m.egresos) : "—"}
+                          <DesgloseMetodo efectivo={m.egresos_efectivo} banco={m.egresos_banco} />
                         </td>
                         <td
                           className={`px-3 py-2 text-right font-medium ${
@@ -114,6 +123,10 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsGeneral
                           }`}
                         >
                           {formatMoney(m.saldo_neto)}
+                          <DesgloseMetodo
+                            efectivo={m.efectivo - m.egresos_efectivo}
+                            banco={m.banco - m.egresos_banco}
+                          />
                         </td>
                       </tr>
                     ))}

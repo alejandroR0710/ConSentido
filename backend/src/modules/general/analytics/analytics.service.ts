@@ -29,8 +29,11 @@ export async function obtenerAnalyticsGeneral(desde: string, hasta: string) {
       ingresos: Number(m.ingresos),
       egresos: Number(m.egresos),
       saldo_neto: Number(m.ingresos) - Number(m.egresos),
+      // efectivo/banco = ingresos por método de pago (nombres de siempre).
       efectivo: Number(m.efectivo),
       banco: Number(m.banco),
+      egresos_efectivo: Number(m.egresos_efectivo),
+      egresos_banco: Number(m.egresos_banco),
     })),
   };
 }

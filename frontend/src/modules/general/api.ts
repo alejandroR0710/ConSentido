@@ -53,8 +53,11 @@ export interface AnalyticsGeneral {
     ingresos: number;
     egresos: number;
     saldo_neto: number;
+    // efectivo/banco: ingresos por método de pago.
     efectivo: number;
     banco: number;
+    egresos_efectivo: number;
+    egresos_banco: number;
   }[];
 }
 

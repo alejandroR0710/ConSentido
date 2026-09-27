@@ -52,7 +52,9 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
        COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' THEN mov.monto END), 0) AS ingresos,
        COALESCE(SUM(CASE WHEN mov.tipo = 'egreso' THEN mov.monto END), 0) AS egresos,
        COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' AND mov.metodo_pago = 'efectivo' THEN mov.monto END), 0) AS efectivo,
-       COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' AND mov.metodo_pago = 'banco' THEN mov.monto END), 0) AS banco
+       COALESCE(SUM(CASE WHEN mov.tipo = 'ingreso' AND mov.metodo_pago = 'banco' THEN mov.monto END), 0) AS banco,
+       COALESCE(SUM(CASE WHEN mov.tipo = 'egreso' AND mov.metodo_pago = 'efectivo' THEN mov.monto END), 0) AS egresos_efectivo,
+       COALESCE(SUM(CASE WHEN mov.tipo = 'egreso' AND mov.metodo_pago = 'banco' THEN mov.monto END), 0) AS egresos_banco
      FROM modulos m
      LEFT JOIN mov ON mov.modulo_efectivo = m.id
      WHERE m.id != 1

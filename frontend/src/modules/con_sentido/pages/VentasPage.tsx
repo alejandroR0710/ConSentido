@@ -155,6 +155,8 @@ export function VentasPage() {
     // el frontend, así que Caja General mostraba el doble de lo vendido.
     await conSentidoApi.registrarVenta(venta);
     await cargarVentasActuales();
+    // El stock de lo vendido cambió: el buscador de la próxima venta debe verlo.
+    conSentidoApi.listarProductos().then(setProductos).catch(() => {});
   }
 
   return (

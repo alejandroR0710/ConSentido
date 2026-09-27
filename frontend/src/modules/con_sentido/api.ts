@@ -4,6 +4,12 @@ import type { FacturaOrden } from "../migao/api";
 export interface ProductoConSentido {
   id: string;
   nombre: string;
+  // SKU del e-commerce (null en productos creados a mano en el POS).
+  sku: string | null;
+  // Viene del e-commerce: nombre, precio y categoría se editan allá.
+  sincronizado: boolean;
+  // Publicado en la tienda en línea (null si no está sincronizado).
+  ecommerce_publicado: boolean | null;
   precio: number;
   descripcion: string | null;
   imagen_url: string | null;
@@ -20,6 +26,8 @@ export interface ClienteConSentido {
 }
 
 export interface ItemVenta {
+  // Producto del inventario; sin él es un "Otro producto" (no descuenta stock).
+  productoId?: string;
   producto: string;
   descripcion?: string;
   categoria?: string;

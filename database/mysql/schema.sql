@@ -401,6 +401,13 @@ CREATE TABLE categorias_producto (
 CREATE TABLE productos (
   id             CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   nombre         VARCHAR(150) NOT NULL,
+  -- Sincronización con el e-commerce (solo Con Sentido; ver
+  -- migraciones/2026-09-28_sincronizacion_ecommerce.sql).
+  sku                  VARCHAR(191) NULL,
+  ecommerce_item_key   VARCHAR(191) NULL,
+  ecommerce_product_id VARCHAR(191) NULL,
+  ecommerce_variant_id VARCHAR(191) NULL,
+  ecommerce_publicado  BOOLEAN NULL,
   categoria_id   INT,
   modulo_id      SMALLINT NOT NULL,
   precio         DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -414,7 +421,10 @@ CREATE TABLE productos (
   updated_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   FOREIGN KEY (categoria_id) REFERENCES categorias_producto(id),
   FOREIGN KEY (modulo_id) REFERENCES modulos(id),
-  INDEX idx_productos_modulo (modulo_id)
+  INDEX idx_productos_modulo (modulo_id),
+  UNIQUE INDEX uq_productos_ecommerce_item (ecommerce_item_key),
+  INDEX idx_productos_ecommerce_producto (ecommerce_product_id),
+  INDEX idx_productos_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 CREATE TABLE inventario_productos (
@@ -444,6 +454,8 @@ CREATE TABLE con_sentido_ventas (
 CREATE TABLE con_sentido_venta_items (
   id              BIGINT AUTO_INCREMENT PRIMARY KEY,
   venta_id        CHAR(36) NOT NULL,
+  producto_id     CHAR(36) NULL,
+  sku             VARCHAR(191) NULL,
   producto        VARCHAR(255) NOT NULL,
   descripcion     TEXT,
   categoria       VARCHAR(100),
@@ -452,7 +464,34 @@ CREATE TABLE con_sentido_venta_items (
   subtotal        DECIMAL(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
   created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (venta_id) REFERENCES con_sentido_ventas(id) ON DELETE CASCADE,
+  CONSTRAINT fk_con_sentido_venta_items_producto
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_con_sentido_venta_items_venta (venta_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+-- Avisos de stock por enviar al e-commerce / ya recibidos de él
+-- (ver backend/src/modules/integracion_ecommerce).
+CREATE TABLE ecommerce_sync_salida (
+  seq             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  event_id        CHAR(36) NOT NULL,
+  tipo            VARCHAR(30) NOT NULL,
+  payload         JSON NOT NULL,
+  estado          VARCHAR(12) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'enviado', 'fallido')),
+  intentos        INT NOT NULL DEFAULT 0,
+  proximo_intento DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  ultimo_error    TEXT,
+  created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  enviado_at      DATETIME(6) NULL,
+  UNIQUE KEY uq_ecommerce_sync_salida_evento (event_id),
+  INDEX idx_ecommerce_sync_salida_estado (estado, seq)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE ecommerce_sync_recibidos (
+  event_id   VARCHAR(191) PRIMARY KEY,
+  tipo       VARCHAR(30) NOT NULL,
+  resultado  VARCHAR(20) NOT NULL,
+  detalle    TEXT,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 -- ============================================================================

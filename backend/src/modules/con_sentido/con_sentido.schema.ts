@@ -1,13 +1,22 @@
 import { z } from "zod";
 import { referenciaBancoSchema } from "../../shared/utils/pago-mixto";
 
-const itemVentaSchema = z.object({
-  producto: z.string().trim().min(1).max(255),
-  descripcion: z.string().trim().max(500).optional(),
-  categoria: z.string().trim().max(100).optional(),
-  cantidad: z.number().positive(),
-  precioUnitario: z.number().nonnegative(),
-});
+const itemVentaSchema = z
+  .object({
+    // Producto del inventario (elegido en el buscador). Sin él es un "Otro
+    // producto" escrito a mano: se vende, pero no descuenta stock.
+    productoId: z.string().uuid().optional(),
+    producto: z.string().trim().min(1).max(255),
+    descripcion: z.string().trim().max(500).optional(),
+    categoria: z.string().trim().max(100).optional(),
+    cantidad: z.number().positive(),
+    precioUnitario: z.number().nonnegative(),
+  })
+  // El stock es por unidades enteras (el del e-commerce también).
+  .refine((item) => !item.productoId || Number.isInteger(item.cantidad), {
+    message: "La cantidad de un producto del inventario debe ser un número entero",
+    path: ["cantidad"],
+  });
 
 // "mixto" no es un método real en la base (ver shared/utils/pago-mixto.ts): es
 // una comodidad de UI que se descompone en 1-2 movimientos ya puros al guardar.

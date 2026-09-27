@@ -3,13 +3,11 @@ import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { conSentidoApi, type ProductoConSentido } from "../api";
-import { NuevaProductoModal } from "../components/NuevaProductoModal";
 
 export function InventarioConSentidoPage() {
   const [productos, setProductos] = useState<ProductoConSentido[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalAbierto, setModalAbierto] = useState(false);
 
   async function cargar() {
     try {
@@ -25,18 +23,6 @@ export function InventarioConSentidoPage() {
   useEffect(() => {
     cargar();
   }, []);
-
-  async function guardarProducto(producto: any) {
-    await conSentidoApi.crearProducto({
-      nombre: producto.nombre,
-      precio: producto.precio,
-      descripcion: producto.descripcion || undefined,
-      categoria: producto.categoria || undefined,
-      imagenUrl: producto.imagen || undefined,
-      stock: producto.stock,
-    });
-    await cargar();
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,12 +41,13 @@ export function InventarioConSentidoPage() {
         </Link>
       </div>
 
-      <button
-        onClick={() => setModalAbierto(true)}
-        className="w-full max-w-xs rounded-md bg-brand-green-600 px-4 py-3 font-medium text-white hover:bg-brand-green-700"
-      >
-        + Nuevo producto
-      </button>
+      {/* El catálogo de Con Sentido viene del e-commerce (ver
+          backend/src/modules/integracion_ecommerce): los productos se crean y
+          editan allá, y el stock se sincroniza en los dos sentidos. */}
+      <p className="rounded-md border border-brand-vanilla-dark bg-brand-green-50 px-4 py-3 text-sm text-brand-ink/80 dark:border-brand-green-700 dark:bg-brand-green-900/30 dark:text-brand-vanilla/80">
+        Los productos vienen de la tienda en línea (consentidovelas.com): se crean y se editan allá, en
+        Productos. El stock se sincroniza solo — lo que vendas acá se descuenta allá y al revés.
+      </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -76,6 +63,7 @@ export function InventarioConSentidoPage() {
             <thead className="bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla">
               <tr>
                 <th className="px-4 py-2">Producto</th>
+                <th className="px-4 py-2">SKU</th>
                 <th className="px-4 py-2">Categoría</th>
                 <th className="px-4 py-2">Stock</th>
                 <th className="px-4 py-2">Precio</th>
@@ -84,7 +72,17 @@ export function InventarioConSentidoPage() {
             <tbody>
               {productos.map((producto) => (
                 <tr key={producto.id} className="border-t border-brand-vanilla-dark dark:border-brand-green-700">
-                  <td className="px-4 py-2 font-medium">{producto.nombre}</td>
+                  <td className="px-4 py-2 font-medium">
+                    {producto.nombre}
+                    {producto.ecommerce_publicado === false && (
+                      <span className="ml-2 rounded bg-brand-vanilla-dark px-1.5 py-0.5 text-[10px] font-normal text-brand-ink/70 dark:bg-brand-green-700 dark:text-brand-vanilla/70">
+                        No publicado
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                    {producto.sku || "—"}
+                  </td>
                   <td className="px-4 py-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
                     {producto.categoria || "—"}
                   </td>
@@ -109,7 +107,6 @@ export function InventarioConSentidoPage() {
         </div>
       )}
 
-      {modalAbierto && <NuevaProductoModal onCerrar={() => setModalAbierto(false)} onGuardar={guardarProducto} />}
     </div>
   );
 }

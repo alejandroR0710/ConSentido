@@ -1,6 +1,7 @@
 import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import * as cajaService from "../general/caja/caja.service";
+import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import * as repo from "./con_sentido.repository";
 import {
   CrearClienteConSentidoInput,
@@ -17,10 +18,37 @@ export async function crearProducto(input: CrearProductoConSentidoInput) {
   return repo.crearProducto(input);
 }
 
+// Campos del catálogo que, en un producto sincronizado, manda el e-commerce.
+const CAMPOS_DEL_ECOMMERCE = ["nombre", "precio", "descripcion", "categoria", "imagenUrl", "activo"] as const;
+
 export async function editarProducto(id: string, input: EditarProductoConSentidoInput) {
   const existente = await repo.getProductoConSentidoById(id);
   if (!existente) throw Errors.notFound("Producto no encontrado");
-  return repo.actualizarProducto(id, input);
+
+  if (!existente.ecommerce_item_key) return repo.actualizarProducto(id, input);
+
+  // Producto sincronizado con el e-commerce: el catálogo se edita allá; acá
+  // solo se corrige el stock, y el ajuste se le avisa al e-commerce.
+  if (CAMPOS_DEL_ECOMMERCE.some((campo) => input[campo] !== undefined)) {
+    throw Errors.badRequest("Este producto viene del e-commerce: su nombre, precio y categoría se editan en consentidovelas.com.");
+  }
+  if (input.stock === undefined) return repo.actualizarProducto(id, input);
+  if (!Number.isInteger(input.stock)) throw Errors.badRequest("El stock debe ser un número entero");
+
+  const delta = input.stock - Number(existente.stock);
+  const actualizado = await repo.actualizarProducto(id, { stock: input.stock });
+  if (delta !== 0) {
+    await encolarDeltaStock(pool, {
+      productId: existente.ecommerce_product_id,
+      variantId: existente.ecommerce_variant_id,
+      sku: existente.sku,
+      delta,
+      kind: "ADJUSTMENT",
+      reason: "Ajuste de inventario en el POS",
+    });
+    programarEnvio();
+  }
+  return actualizado;
 }
 
 export async function listarClientes() {
@@ -52,9 +80,32 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
       montoBanco: input.metodoPago === "mixto" ? input.montoBanco : undefined,
     });
 
+    // Productos del inventario vendidos: se descuenta su stock (sin bajar de 0
+    // — sin stock se deja vender igual, decisión del negocio) y, si están
+    // sincronizados, se le avisa al e-commerce más abajo.
+    const vendidosSincronizados: { productId: string; variantId: string | null; sku: string; cantidad: number }[] = [];
     for (const item of input.items) {
+      let productoId: string | null = null;
+      let sku: string | null = null;
+      if (item.productoId) {
+        const producto = await repo.getProductoParaVenta(client, item.productoId);
+        if (!producto) throw Errors.badRequest(`El producto "${item.producto}" ya no está en el inventario`);
+        productoId = producto.id;
+        sku = producto.sku ?? null;
+        await repo.descontarStock(client, producto.id, item.cantidad);
+        if (producto.ecommerce_product_id) {
+          vendidosSincronizados.push({
+            productId: producto.ecommerce_product_id,
+            variantId: producto.ecommerce_variant_id ?? null,
+            sku: producto.sku,
+            cantidad: item.cantidad,
+          });
+        }
+      }
       await repo.crearVentaItem(client, {
         ventaId: venta.id,
+        productoId,
+        sku,
         producto: item.producto,
         descripcion: item.descripcion,
         categoria: item.categoria,
@@ -67,7 +118,20 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
     // la pide para imprimir — así cualquier venta ya tiene su número
     // (F-000123) desde el momento en que se cobra (ver mismo criterio en
     // migao.service.ts::cerrarOrden).
-    await repo.getOrCrearFactura({ ventaId: venta.id, subtotal: input.monto, total: input.monto }, client);
+    const factura = await repo.getOrCrearFactura({ ventaId: venta.id, subtotal: input.monto, total: input.monto }, client);
+
+    // Aviso al e-commerce en la MISMA transacción: si la venta se revierte
+    // (p. ej. caja cerrada), el aviso también.
+    for (const vendido of vendidosSincronizados) {
+      await encolarDeltaStock(client, {
+        productId: vendido.productId,
+        variantId: vendido.variantId,
+        sku: vendido.sku,
+        delta: -vendido.cantidad,
+        kind: "SALE",
+        reason: `Venta ${factura?.numero ?? venta.id}`,
+      });
+    }
 
     const motivo = `Venta Con Sentido - ${input.items.length} producto(s)`;
     if (input.metodoPago === "mixto") {
@@ -102,6 +166,7 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
     }
 
     await client.query("COMMIT");
+    if (vendidosSincronizados.length) programarEnvio();
     return { id: venta.id, createdAt: venta.created_at, monto: input.monto, metodoPago: input.metodoPago, items: input.items };
   } catch (err) {
     await client.query("ROLLBACK");

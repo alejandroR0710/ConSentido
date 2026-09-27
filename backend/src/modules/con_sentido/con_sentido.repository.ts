@@ -7,18 +7,30 @@ type Executor = Pool | PoolClient;
 // modulo_id) + `inventario_productos` para el stock de producto terminado.
 // --------------------------------------------------------------------------
 
+// DECIMAL llega de MySQL como texto ("20000.00"): se pasa a número acá, una
+// sola vez, para que el frontend y el validador de ventas (z.number()) reciban
+// números de verdad.
+function normalizarProducto<T extends Record<string, unknown>>(fila: T) {
+  return { ...fila, precio: Number(fila.precio), stock: Number(fila.stock) };
+}
+
+const SELECT_PRODUCTO = `
+  SELECT p.id, p.nombre, p.sku, p.precio, p.descripcion, p.imagen_url, p.activo,
+         p.ecommerce_publicado, (p.ecommerce_item_key IS NOT NULL) AS sincronizado,
+         cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock
+    FROM productos p
+    LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+    LEFT JOIN inventario_productos ip ON ip.producto_id = p.id
+`;
+
 export async function listProductos() {
   const result = await pool.query(
-    `SELECT p.id, p.nombre, p.precio, p.descripcion, p.imagen_url, p.activo,
-            cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock
-       FROM productos p
-       JOIN modulos m ON m.id = p.modulo_id
-       LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
-       LEFT JOIN inventario_productos ip ON ip.producto_id = p.id
+    `${SELECT_PRODUCTO}
+      JOIN modulos m ON m.id = p.modulo_id
       WHERE m.slug = 'con_sentido' AND p.activo = true
       ORDER BY p.nombre ASC`,
   );
-  return result.rows;
+  return result.rows.map(normalizarProducto);
 }
 
 /** Busca la categoría por nombre o la crea si no existe — así el formulario
@@ -71,7 +83,8 @@ export async function crearProducto(params: {
 
 export async function getProductoConSentidoById(id: string) {
   const result = await pool.query(
-    `SELECT p.id, p.categoria_id
+    `SELECT p.id, p.categoria_id, p.sku, p.ecommerce_item_key, p.ecommerce_product_id, p.ecommerce_variant_id,
+            COALESCE((SELECT ip.cantidad_actual FROM inventario_productos ip WHERE ip.producto_id = p.id), 0) AS stock
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
       WHERE p.id = $1 AND m.slug = 'con_sentido'`,
@@ -136,16 +149,36 @@ export async function actualizarProducto(
     client.release();
   }
 
-  const actualizado = await pool.query(
-    `SELECT p.id, p.nombre, p.precio, p.descripcion, p.imagen_url, p.activo,
-            cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock
+  const actualizado = await pool.query(`${SELECT_PRODUCTO} WHERE p.id = $1`, [id]);
+  return normalizarProducto(actualizado.rows[0]);
+}
+
+/**
+ * Producto de Con Sentido para una venta, con su fila de inventario bloqueada
+ * (FOR UPDATE) hasta el COMMIT: dos ventas simultáneas del mismo producto no
+ * leen el mismo stock.
+ */
+export async function getProductoParaVenta(client: PoolClient, id: string) {
+  const result = await client.query(
+    `SELECT p.id, p.nombre, p.sku, p.ecommerce_product_id, p.ecommerce_variant_id,
+            COALESCE(ip.cantidad_actual, 0) AS stock
        FROM productos p
-       LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+       JOIN modulos m ON m.id = p.modulo_id
        LEFT JOIN inventario_productos ip ON ip.producto_id = p.id
-      WHERE p.id = $1`,
+      WHERE p.id = $1 AND m.slug = 'con_sentido'
+      FOR UPDATE`,
     [id],
   );
-  return actualizado.rows[0];
+  return result.rowCount ? { ...result.rows[0], stock: Number(result.rows[0].stock) } : null;
+}
+
+/** Resta stock sin bajar de 0 (sin stock se deja vender igual — decisión del negocio). */
+export async function descontarStock(client: PoolClient, productoId: string, cantidad: number) {
+  await client.query(
+    `INSERT INTO inventario_productos (producto_id, cantidad_actual) VALUES ($1, 0)
+     ON CONFLICT (producto_id) DO UPDATE SET cantidad_actual = GREATEST(0, cantidad_actual - $2)`,
+    [productoId, cantidad],
+  );
 }
 
 // --------------------------------------------------------------------------
@@ -195,6 +228,8 @@ export async function crearVentaItem(
   executor: Executor,
   params: {
     ventaId: string;
+    productoId?: string | null;
+    sku?: string | null;
     producto: string;
     descripcion?: string;
     categoria?: string;
@@ -203,8 +238,8 @@ export async function crearVentaItem(
   },
 ) {
   await executor.query(
-    `INSERT INTO con_sentido_venta_items (venta_id, producto, descripcion, categoria, cantidad, precio_unitario)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO con_sentido_venta_items (venta_id, producto_id, sku, producto, descripcion, categoria, cantidad, precio_unitario)
+     VALUES ($1, $7, $8, $2, $3, $4, $5, $6)`,
     [
       params.ventaId,
       params.producto,
@@ -212,6 +247,8 @@ export async function crearVentaItem(
       params.categoria ?? null,
       params.cantidad,
       params.precioUnitario,
+      params.productoId ?? null,
+      params.sku ?? null,
     ],
   );
 }

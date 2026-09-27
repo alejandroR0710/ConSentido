@@ -9,6 +9,7 @@ import { cajaRouter } from "./modules/general/caja/caja.routes";
 import { concretoRouter } from "./modules/concreto/concreto.routes";
 import { conSentidoRouter } from "./modules/con_sentido/con_sentido.routes";
 import { insumosRouter } from "./modules/insumos/insumos.routes";
+import { integracionEcommerceRouter } from "./modules/integracion_ecommerce/integracion_ecommerce.routes";
 import { notificacionesRouter } from "./modules/general/notificaciones/notificaciones.routes";
 import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
@@ -75,6 +76,10 @@ export function createApp() {
     res.set("Cache-Control", "no-store");
     next();
   });
+
+  // Sincronización de inventario con el e-commerce (servidor a servidor, con
+  // x-sync-key — no usa la sesión de usuario). Ver modules/integracion_ecommerce.
+  app.use("/api/integraciones/ecommerce", integracionEcommerceRouter);
 
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/con-sentido", conSentidoRouter);

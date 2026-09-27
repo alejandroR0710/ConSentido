@@ -16,6 +16,9 @@ const MAX_ESPERA_MS = 60 * 60 * 1000;
 // para que esa transacción confirme antes de intentar enviarlo.
 const RETRASO_ENVIO_MS = 1500;
 
+// Respuestas del e-commerce que confirman que el aviso quedó registrado allá.
+const CONFIRMADOS = new Set(["APPLIED", "IGNORED", "DUPLICATE"]);
+
 export function esperaReintento(intentos: number): number {
   return Math.min(30_000 * 2 ** Math.max(0, intentos - 1), MAX_ESPERA_MS);
 }
@@ -130,9 +133,19 @@ async function enviar(
       body: JSON.stringify({ eventId: aviso.event_id, type: aviso.tipo, payload }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (respuesta.ok) return null;
     const cuerpo = await respuesta.text().catch(() => "");
-    return `HTTP ${respuesta.status} ${cuerpo.slice(0, 500)}`.trim();
+    if (!respuesta.ok) return `HTTP ${respuesta.status} ${cuerpo.slice(0, 500)}`.trim();
+    // Un 200 no alcanza: la protección anti-bots del hosting responde 200 con
+    // una página HTML ("One moment, please...") sin que el aviso llegue. Solo
+    // cuenta como entregado si el e-commerce contesta su confirmación real.
+    let status: unknown;
+    try {
+      status = (JSON.parse(cuerpo) as { status?: unknown }).status;
+    } catch {
+      status = undefined;
+    }
+    if (typeof status === "string" && CONFIRMADOS.has(status)) return null;
+    return `Respuesta inesperada del e-commerce (HTTP ${respuesta.status}): ${cuerpo.replace(/\s+/g, " ").slice(0, 300)}`;
   } catch (err) {
     return (err as Error).message || String(err);
   }

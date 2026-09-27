@@ -57,10 +57,14 @@ const METODOS: { valor: MetodoPagoValor["metodoPago"]; label: string; icono: str
 export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferenciaBanco = true }: SelectorMetodoPagoProps) {
   const sumaMixta = value.metodoPago === "mixto" ? value.montoEfectivo + value.montoBanco : 0;
   const cuadra = totalFijo === undefined || Math.abs(sumaMixta - totalFijo) < 0.01;
+  const repartoListo = cuadra && value.metodoPago === "mixto" && value.montoEfectivo > 0 && value.montoBanco > 0;
   const mostrarReferencia = pedirReferenciaBanco && value.metodoPago !== "efectivo";
   const referencia = value.referenciaBanco ?? "";
   const referenciaIncompleta = pedirReferenciaBanco && faltaReferenciaBanco(value);
-  const bancoRequerido = llevaBanco(value);
+  const esMixto = value.metodoPago === "mixto";
+  const mixtoSinBanco = value.metodoPago === "mixto" && value.montoBanco <= 0;
+  const bancoPendiente = referenciaIncompleta || mixtoSinBanco;
+  const montoPorBanco = value.metodoPago === "mixto" ? value.montoBanco : totalFijo;
 
   function seleccionar(metodo: MetodoPagoValor["metodoPago"]) {
     // La referencia ya escrita se conserva al cambiar entre Banco y Mixto; en
@@ -100,13 +104,14 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
 
       {value.metodoPago === "mixto" && (
         // Mismos colores de estado que el campo de referencia: ámbar mientras
-        // efectivo + banco no suman el total, verde cuando cuadra. Sin total
-        // conocido (totalFijo) no hay contra qué comparar y queda neutro.
+        // efectivo + banco no suman el total o alguno de los dos sigue en $0
+        // (todavía no es un mixto de verdad), verde cuando ya está repartido.
+        // Sin total conocido (totalFijo) no hay contra qué comparar: neutro.
         <div
           className={`flex flex-col gap-2 rounded-lg border-2 p-3 ${
             totalFijo === undefined
               ? "border-brand-vanilla-dark dark:border-brand-green-700"
-              : cuadra
+              : repartoListo
                 ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
                 : "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
           }`}
@@ -131,12 +136,16 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
           {totalFijo !== undefined && (
             <p
               className={`text-xs font-medium ${
-                cuadra ? "text-brand-green-700 dark:text-brand-vanilla" : "text-amber-700 dark:text-amber-400"
+                repartoListo ? "text-brand-green-700 dark:text-brand-vanilla" : "text-amber-700 dark:text-amber-400"
               }`}
             >
-              {cuadra
+              {repartoListo
                 ? `✓ Cuadra: ${formatMoney(value.montoEfectivo)} efectivo + ${formatMoney(value.montoBanco)} banco = ${formatMoney(totalFijo)}`
-                : sumaMixta < totalFijo
+                : cuadra && value.montoBanco <= 0
+                  ? `Escribe cuánto paga por banco y baja el efectivo en esa misma cantidad (total ${formatMoney(totalFijo)}).`
+                  : cuadra
+                    ? `Todo va por banco: si es así, elige "Banco" en vez de Mixto.`
+                    : sumaMixta < totalFijo
                   ? `Faltan ${formatMoney(totalFijo - sumaMixta)} por repartir (llevas ${formatMoney(sumaMixta)} de ${formatMoney(totalFijo)}).`
                   : `Sobran ${formatMoney(sumaMixta - totalFijo)}: entre los dos deben sumar exacto ${formatMoney(totalFijo)}.`}
             </p>
@@ -145,18 +154,33 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
       )}
 
       {mostrarReferencia && (
+        // Mismo formato que la CalculadoraVuelta ("💵 Parte en efectivo · A
+        // cobrar"), para que en un mixto las dos partes se lean igual. En
+        // mixto queda ámbar desde el inicio (aunque banco todavía esté en $0):
+        // la parte por banco sigue pendiente hasta tener monto y referencia.
         <label
           className={`flex flex-col gap-2 rounded-lg border-2 p-3 ${
-            referenciaIncompleta
+            bancoPendiente
               ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/20"
               : referencia.length === 4
                 ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-500 dark:bg-brand-green-700/20"
                 : "border-brand-vanilla-dark dark:border-brand-green-700"
           }`}
         >
+          <span className="flex items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-brand-ink/70 dark:text-brand-vanilla/70">
+              🏦 {esMixto ? "Parte por banco" : "Pago por banco"}
+            </span>
+            {montoPorBanco !== undefined && (
+              <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
+                A cobrar{" "}
+                <span className="font-semibold text-brand-ink dark:text-brand-vanilla">{formatMoney(montoPorBanco)}</span>
+              </span>
+            )}
+          </span>
           <span className="flex items-center gap-1.5 text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-            <span aria-hidden>🏦</span> Referencia de la transferencia
-            {bancoRequerido && <span className="text-xs font-normal text-red-600 dark:text-red-400">(obligatorio)</span>}
+            Referencia de la transferencia
+            <span className="text-xs font-normal text-red-600 dark:text-red-400">(obligatorio)</span>
           </span>
           <span className="text-xs leading-snug text-brand-ink/75 dark:text-brand-vanilla/75">
             Pídele al cliente el comprobante del pago (Nequi, Bancolombia, Daviplata, etc.) y escribe los{" "}
@@ -165,10 +189,6 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
           </span>
           <span className="text-xs leading-snug text-brand-ink/60 dark:text-brand-vanilla/60">
             Sirve para comprobar después, contra el extracto del banco, que el pago sí llegó.
-            {value.metodoPago === "mixto" &&
-              (value.montoBanco > 0
-                ? ` Aplica a los ${formatMoney(value.montoBanco)} que se pagan por banco.`
-                : " Solo se pide si una parte se paga por banco.")}
           </span>
           <input
             value={referencia}
@@ -187,7 +207,11 @@ export function SelectorMetodoPago({ value, onChange, totalFijo, pedirReferencia
             spellCheck={false}
             className={`${claseMonto} font-mono tracking-[0.3em] uppercase`}
           />
-          {referenciaIncompleta ? (
+          {mixtoSinBanco ? (
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              Escribe arriba cuánto paga por banco.
+            </span>
+          ) : referenciaIncompleta ? (
             <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
               {referencia.length === 0
                 ? "Escribe los 4 caracteres para poder registrar el pago."

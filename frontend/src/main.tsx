@@ -22,6 +22,19 @@ registerSW({
   },
 });
 
+// iOS Safari ignora user-scalable=no del meta viewport (index.html): el
+// pellizco para hacer zoom solo se bloquea cancelando sus eventos.
+for (const evento of ["gesturestart", "gesturechange"]) {
+  document.addEventListener(evento, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener(
+  "touchmove",
+  (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  },
+  { passive: false },
+);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

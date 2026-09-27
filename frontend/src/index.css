@@ -107,8 +107,22 @@
   color-scheme: light dark;
 }
 
+/*
+ * Mobile: la app se usa como POS, no como página para leer — el zoom solo
+ * estorba. touch-action quita el zoom por doble toque; el pellizco se bloquea
+ * con el meta viewport (index.html) y, en iOS, con el listener de main.tsx.
+ */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  /* Red de seguridad: si algún contenido se pasa de ancho, que no se pueda
+     arrastrar la página entera de lado. */
+  overflow-x: hidden;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
   background-color: var(--color-brand-vanilla);
   color: var(--color-brand-ink);
@@ -118,5 +132,17 @@ body {
   body {
     background-color: var(--color-brand-green-900);
     color: var(--color-brand-vanilla);
+  }
+}
+
+/*
+ * iOS hace zoom automático al enfocar un campo con letra menor a 16px (y no lo
+ * deshace al salir). En pantallas chicas los campos van a 16px.
+ */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }

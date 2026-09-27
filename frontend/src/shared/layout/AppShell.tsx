@@ -83,7 +83,11 @@ export function AppShell() {
             <RoleNav modulosPermitidos={usuario.modulos} rol={usuario.rol} />
           </aside>
 
-          <main className="min-h-[calc(100svh-57px)] flex-1 p-4">
+          {/* min-w-0: sin esto un hijo flex no puede quedar más angosto que su
+              contenido — una tabla ancha estiraba toda la página más allá del
+              header en mobile y los overflow-x-auto de las tablas nunca se
+              activaban. */}
+          <main className="min-h-[calc(100svh-57px)] min-w-0 flex-1 p-4">
             <Outlet />
           </main>
         </div>

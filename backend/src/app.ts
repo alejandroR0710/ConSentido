@@ -68,6 +68,14 @@ export function createApp() {
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+  // Datos en vivo (colas de Cocina/Mesero, caja...): ningún navegador, service
+  // worker ni proxy debe guardarlos. Una respuesta vieja servida desde caché
+  // hacía que una acción ya hecha se viera deshecha en el siguiente refresco.
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
+
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/con-sentido", conSentidoRouter);
   app.use("/api/v1/insumos", insumosRouter);

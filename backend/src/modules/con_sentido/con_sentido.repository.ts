@@ -1,5 +1,4 @@
-import { Pool, PoolClient } from "pg";
-import { pool } from "../../shared/db/pool";
+import { Pool, PoolClient, pool } from "../../shared/db/pool";
 
 type Executor = Pool | PoolClient;
 
@@ -221,18 +220,20 @@ const SELECT_VENTA_CON_ITEMS = `
   SELECT
     cv.id, cv.created_at, cv.monto, cv.metodo_pago, cv.monto_efectivo, cv.monto_banco,
     MAX(f.numero) AS numero_factura,
+    -- GROUP_CONCAT (no JSON_ARRAYAGG) porque es el único agregado de MySQL
+    -- que respeta ORDER BY; sin ítems queda NULL y cae en el [] del COALESCE.
     COALESCE(
-      json_agg(
-        json_build_object(
+      CAST(CONCAT('[', GROUP_CONCAT(
+        JSON_OBJECT(
           'producto', cvi.producto,
           'descripcion', cvi.descripcion,
           'categoria', cvi.categoria,
           'cantidad', cvi.cantidad,
           'precio_unitario', cvi.precio_unitario,
           'subtotal', cvi.subtotal
-        ) ORDER BY cvi.id
-      ) FILTER (WHERE cvi.id IS NOT NULL),
-      '[]'::json
+        ) ORDER BY cvi.id SEPARATOR ','
+      ), ']') AS JSON),
+      JSON_ARRAY()
     ) AS items
   FROM con_sentido_ventas cv
   LEFT JOIN con_sentido_venta_items cvi ON cv.id = cvi.venta_id
@@ -273,7 +274,7 @@ export async function getOrCrearFactura(
 ) {
   const insert = await executor.query(
     `INSERT INTO facturas (con_sentido_venta_id, numero, tipo, subtotal, total)
-     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq')::text, 6, '0'), 'factura', $2, $3)
+     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq'), 6, '0'), 'factura', $2, $3)
      ON CONFLICT (con_sentido_venta_id) WHERE con_sentido_venta_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [params.ventaId, params.subtotal, params.total],
@@ -299,7 +300,7 @@ export async function listIngresosManualesConSentido() {
        JOIN modulos m ON m.id = mc.modulo_origen_id
        LEFT JOIN usuarios u ON u.id = mc.usuario_id
       WHERE m.slug = 'con_sentido' AND mc.tipo = 'ingreso'
-        AND mc.referencia_entidad IS DISTINCT FROM 'con_sentido_ventas'
+        AND NOT (mc.referencia_entidad <=> 'con_sentido_ventas')
       ORDER BY mc.created_at DESC
       LIMIT 200`,
   );

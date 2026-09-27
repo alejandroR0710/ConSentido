@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "export:seed-produccion": "node scripts/exportar-usuarios-menu.js"
+    "export:seed-produccion": "node scripts/exportar-usuarios-menu.js",
+    "migrar:supabase-mysql": "node scripts/migrar-supabase-a-mysql.js",
+    "hosting:paquete": "node scripts/empaquetar-hosting.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,7 +20,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
-    "pg": "^8.11.5",
+    "mysql2": "^3.24.4",
     "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
@@ -32,6 +34,7 @@
     "@types/node": "^20.14.2",
     "@types/pg": "^8.11.6",
     "@types/web-push": "^3.6.4",
+    "pg": "^8.23.0",
     "tsx": "^4.15.6",
     "typescript": "^5.4.5"
   }

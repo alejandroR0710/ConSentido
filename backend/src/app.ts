@@ -1,6 +1,8 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import fs from "fs";
+import path from "path";
 import { analyticsRouter } from "./modules/general/analytics/analytics.routes";
 import { authRouter } from "./modules/general/auth/auth.routes";
 import { cajaRouter } from "./modules/general/caja/caja.routes";
@@ -76,6 +78,18 @@ export function createApp() {
   app.use("/api/v1/analytics", analyticsRouter);
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);
+
+  // Hosting (cPanel): el mismo proceso sirve el frontend compilado, así API
+  // y página quedan en el mismo dominio (frontend construido con
+  // VITE_API_URL=/api/v1, sin CORS). Carpeta: FRONTEND_DIR o ./public junto
+  // al backend. Si no existe (desarrollo local), no se sirve nada.
+  const carpetaFrontend = path.resolve(process.env.FRONTEND_DIR ?? path.join(process.cwd(), "public"));
+  if (fs.existsSync(path.join(carpetaFrontend, "index.html"))) {
+    app.use(express.static(carpetaFrontend, { index: false }));
+    app.get(/^\/(?!api\/|uploads\/|health$).*/, (_req, res) => {
+      res.sendFile(path.join(carpetaFrontend, "index.html"));
+    });
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -1,5 +1,4 @@
-import { PoolClient } from "pg";
-import { pool } from "../../shared/db/pool";
+import { PoolClient, pool } from "../../shared/db/pool";
 import { ActualizarInsumoInput, CrearInsumoInput } from "./insumos.schema";
 
 export interface Insumo {
@@ -188,7 +187,7 @@ export async function listMovimientos(desde: string, hasta: string) {
        LEFT JOIN almacenes ad ON ad.id = mi.almacen_destino_id
        LEFT JOIN proveedores p ON p.id = mi.proveedor_id
        LEFT JOIN usuarios u ON u.id = mi.usuario_id
-      WHERE mi.created_at::date BETWEEN $1 AND $2
+      WHERE DATE(mi.created_at) BETWEEN $1 AND $2
       ORDER BY mi.created_at DESC
       LIMIT 300`,
     [desde, hasta],

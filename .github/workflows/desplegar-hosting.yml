@@ -1,0 +1,114 @@
+name: Desplegar al hosting (InterServer / DirectAdmin)
+
+# Mismo esquema que EComerceConsentido: compila en el runner de GitHub (el
+# hosting compartido tiene pocos procesos: compilar o correr npm allá puede
+# tumbar los sitios), sube solo lo ya construido por SSH/rsync y reinicia la
+# app tocando tmp/restart.txt (Passenger / Node.js Selector).
+#
+# Estructura en el servidor (usuario consenti):
+#   ~/sistemapos/                 carpeta de la app Node (Node.js Selector)
+#     dist/                       backend compilado  -> se reemplaza en cada deploy
+#     public/                     frontend compilado -> se reemplaza en cada deploy
+#     uploads/                    fotos de los usuarios -> NUNCA se toca
+#     node_modules/, .env         viven solo en el servidor -> NUNCA se tocan
+#     tmp/restart.txt             se toca para reiniciar la app
+#   ~/domains/sistemapos.consentidovelas.com/public_html/
+#                                 raíz del dominio (.htaccess de Passenger) -> no se toca
+#
+# Secrets del repositorio (Settings -> Secrets and variables -> Actions):
+#   SSH_HOST                    IP del hosting (69.10.43.179)
+#   SSH_PORT                    puerto SSH
+#   SSH_USER                    usuario del hosting (consenti)
+#   SSH_PRIVATE_KEY             clave privada de despliegue (con BEGIN/END)
+#   VITE_EXTERNAL_LEAD_API_KEY  clave del bot de leads (la de frontend/.env);
+#                               Vite la mete en el frontend al compilar
+#
+# Lo que este workflow NO hace, a propósito:
+#   - No aplica cambios de base de datos: se corren a mano en phpMyAdmin/SSH.
+#   - No sube .env ni secretos del backend: viven en el servidor / panel.
+#   - No corre npm install en el servidor: si cambió package-lock.json deja un
+#     aviso y se instala a mano (Setup Node.js App -> Run NPM Install -> Restart).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # permite lanzarlo a mano desde la pestaña Actions
+
+# Dos deploys nunca corren a la vez: el segundo espera a que termine el primero.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  APP_DIR: sistemapos # relativo al home del usuario en el servidor
+  SITIO: https://sistemapos.consentidovelas.com
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Instalar dependencias (en GitHub, no en el hosting)
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+
+      # Arma hosting/sistemapos/ con dist/ (backend), public/ (frontend
+      # compilado con VITE_API_URL=/api/v1), package.json y package-lock.json.
+      - name: Compilar backend + frontend
+        working-directory: backend
+        env:
+          SIN_ZIP: "1"
+          VITE_EXTERNAL_LEAD_API_KEY: ${{ secrets.VITE_EXTERNAL_LEAD_API_KEY }}
+        run: node scripts/empaquetar-hosting.js
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Subir al servidor
+        env:
+          SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}
+          REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: |
+          set -eux
+          cd hosting/sistemapos
+          # --delete solo dentro de dist/ y public/: son 100% generados por el
+          # build. uploads/, node_modules/, .env y tmp/ quedan fuera de estas
+          # rutas, así que rsync nunca los ve ni los borra.
+          rsync -az --delete -e "$SSH" dist/ "$REMOTE:$APP_DIR/dist/"
+          rsync -az --delete -e "$SSH" public/ "$REMOTE:$APP_DIR/public/"
+          # Sin --delete. -i lista lo que cambió: si cambió package-lock.json
+          # hay dependencias nuevas que instalar a mano.
+          CAMBIOS=$(rsync -az -i -e "$SSH" package.json package-lock.json "$REMOTE:$APP_DIR/")
+          if echo "$CAMBIOS" | grep -q "package-lock.json"; then
+            echo "::warning::Cambiaron las dependencias: en DirectAdmin → Setup Node.js App → Run NPM Install → Restart"
+          fi
+
+      - name: Reiniciar la app (Passenger)
+        env:
+          SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}
+          REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: $SSH "$REMOTE" "mkdir -p $APP_DIR/tmp && touch $APP_DIR/tmp/restart.txt"
+
+      - name: Verificar que responde (12 intentos x 10 s)
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "$SITIO/health" | grep -q '"status":"ok"'; then
+              echo "OK (intento $i)"; exit 0
+            fi
+            echo "esperando arranque... ($i)"; sleep 10
+          done
+          echo "::error::$SITIO/health no respondió OK tras 2 minutos"; exit 1

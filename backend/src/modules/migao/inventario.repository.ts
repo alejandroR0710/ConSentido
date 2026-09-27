@@ -1,5 +1,4 @@
-import { Pool, PoolClient } from "pg";
-import { pool } from "../../shared/db/pool";
+import { Pool, PoolClient, pool } from "../../shared/db/pool";
 
 type Executor = Pool | PoolClient;
 
@@ -299,14 +298,14 @@ export async function listMovimientosConsumoPorOrdenes(): Promise<ConsumoInventa
        JOIN migao_inventario_productos ip ON ip.id = mi.producto_id
        -- 'consumo' también lo genera preparar una base en Amasijos, con
        -- referencia_entidad='preparacion_base' y referencia_id un UUID (no
-       -- numérico) — el CASE evita castear a bigint cualquier referencia_id
-       -- que no sea de 'orden_items' (si no, ::bigint revienta la consulta
-       -- entera con "invalid input syntax for type bigint"). Esas filas de
+       -- numérico) — el CASE evita castear a número cualquier referencia_id
+       -- que no sea de 'orden_items' (en MySQL el CAST de un UUID da 0 y
+       -- podría enganchar una fila equivocada). Esas filas de
        -- Amasijos simplemente no son "por orden", quedan fuera de este historial.
        LEFT JOIN orden_items oi
          ON oi.id = CASE
-                      WHEN mi.referencia_entidad = 'orden_items' AND mi.referencia_id ~ '^[0-9]+$'
-                      THEN mi.referencia_id::bigint
+                      WHEN mi.referencia_entidad = 'orden_items' AND mi.referencia_id REGEXP '^[0-9]+$'
+                      THEN CAST(mi.referencia_id AS UNSIGNED)
                     END
        LEFT JOIN productos p ON p.id = oi.producto_id
        LEFT JOIN ordenes o ON o.id = oi.orden_id

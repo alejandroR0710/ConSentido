@@ -9,13 +9,11 @@ const isProd = process.env.NODE_ENV === "production";
 function setRefreshCookie(res: Response, token: string, sessionExpiresAt: number) {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
-    // En producción el frontend (Vercel) y el backend (Render) viven en dominios
-    // distintos, así que la cookie es "cross-site": el navegador solo la manda si
-    // sameSite es "none", y "none" exige secure:true (solo funciona sobre HTTPS,
-    // que ambos proveen). En local, frontend y backend comparten origen de
-    // desarrollo así que "strict" es más seguro y no hace falta relajarlo.
+    // En el hosting (rama hosting-mysql) el mismo proceso sirve la página y la
+    // API en un solo dominio, así que la cookie ya no es "cross-site" y
+    // "strict" alcanza. secure:true en producción exige HTTPS (AutoSSL de cPanel).
     secure: isProd,
-    sameSite: isProd ? "none" : "strict",
+    sameSite: "strict",
     maxAge: Math.max(sessionExpiresAt - Date.now(), 0),
     path: "/api/v1/auth",
   });
@@ -43,7 +41,7 @@ export async function logoutController(_req: Request, res: Response) {
   // navegador no deja que un Set-Cookie sin Secure sobreescriba una cookie que
   // ya tenía Secure, así que sin esto el "borrado" no hacía nada en producción
   // y la sesión volvía sola al recargar la página después de "Salir".
-  res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth", secure: isProd, sameSite: isProd ? "none" : "strict" });
+  res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth", secure: isProd, sameSite: "strict" });
   return ok(res, { success: true });
 }
 

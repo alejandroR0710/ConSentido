@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { Modal } from "../../../shared/components/Modal";
@@ -11,7 +11,9 @@ import {
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
+import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
+import { SugerenciasProducto } from "./SugerenciasProducto";
 import { facturaCajaAReciboProps } from "../factura";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
@@ -39,6 +41,10 @@ interface LineaIngreso {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  // Solo queda seteado cuando la línea vino del autocompletar de productos
+  // (ver SugerenciasProducto) — escribir después de elegir lo limpia, porque
+  // el texto ya no coincide necesariamente con el producto del catálogo.
+  productoId?: string;
 }
 
 let siguienteKeyLinea = 1;
@@ -69,6 +75,18 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
   const [motivo, setMotivo] = useState(valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Catálogo de Con Sentido para el autocompletar de "Producto o servicio" —
+  // se carga una vez al abrir el modal (mismo listado que usa el e-commerce,
+  // con imagen/nombre/precio/sku ya sincronizados, ver con_sentido.repository.ts).
+  const [productos, setProductos] = useState<ProductoConSentido[]>([]);
+  const [filaEnfocada, setFilaEnfocada] = useState<number | null>(null);
+  useEffect(() => {
+    conSentidoApi
+      .listarProductos()
+      .then(setProductos)
+      .catch(() => {}); // sin catálogo disponible, el campo sigue funcionando como texto libre
+  }, []);
 
   // Todo ingreso genera su propia factura (ver caja.service.ts::registrarIngresoManual)
   // — al terminar se pregunta si se quiere imprimir, en vez de cerrar de una.
@@ -110,7 +128,12 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
     try {
       const items =
         modoMonto === "productos"
-          ? lineasValidas.map((l) => ({ nombre: l.nombre.trim(), cantidad: l.cantidad, precioUnitario: l.precioUnitario }))
+          ? lineasValidas.map((l) => ({
+              nombre: l.nombre.trim(),
+              cantidad: l.cantidad,
+              precioUnitario: l.precioUnitario,
+              productoId: l.productoId,
+            }))
           : undefined;
       const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
       const creado = await cajaApi.registrarIngreso({
@@ -228,12 +251,31 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
           <div className="mb-2 flex flex-col gap-2">
             {lineas.map((linea) => (
               <div key={linea.key} className="flex flex-wrap items-center gap-2">
-                <input
-                  value={linea.nombre}
-                  onChange={(e) => actualizarLinea(linea.key, { nombre: e.target.value })}
-                  placeholder="Producto o servicio"
-                  className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                />
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    value={linea.nombre}
+                    onChange={(e) => actualizarLinea(linea.key, { nombre: e.target.value, productoId: undefined })}
+                    onFocus={() => setFilaEnfocada(linea.key)}
+                    onBlur={() => setFilaEnfocada((actual) => (actual === linea.key ? null : actual))}
+                    placeholder="Producto o servicio"
+                    autoComplete="off"
+                    className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                  />
+                  {filaEnfocada === linea.key && (
+                    <SugerenciasProducto
+                      productos={productos}
+                      texto={linea.nombre}
+                      onSeleccionar={(producto) => {
+                        actualizarLinea(linea.key, {
+                          nombre: producto.nombre,
+                          precioUnitario: producto.precio,
+                          productoId: producto.id,
+                        });
+                        setFilaEnfocada(null);
+                      }}
+                    />
+                  )}
+                </div>
                 <input
                   type="number"
                   min={1}

@@ -29,6 +29,12 @@ const itemIngresoSchema = z.object({
   nombre: z.string().trim().min(1).max(150),
   cantidad: z.number().positive(),
   precioUnitario: z.number().nonnegative(),
+  // Si el ítem se eligió del autocompletar de productos (catálogo de Con
+  // Sentido), acá queda cuál — el service descuenta su stock y, si está
+  // sincronizado, le avisa al e-commerce (mismo criterio que
+  // con_sentido.service.ts::registrarVenta). Sin esto (texto libre o un
+  // servicio que no es del catálogo), no se toca ningún inventario.
+  productoId: z.string().uuid().optional(),
 });
 
 const camposIngreso = {

@@ -1,5 +1,7 @@
 import { Pool, PoolClient, pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
+import { descontarStock, getProductoParaVenta } from "../../con_sentido/con_sentido.repository";
+import { encolarDeltaStock, programarEnvio } from "../../integracion_ecommerce/salida";
 import { descomponerPago, exigirMontoRecibidoEfectivo, exigirReferenciaBanco } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
@@ -194,7 +196,40 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       total: totalNeto,
     });
     await repo.crearIngresoItems(client, venta.id, items);
+
+    // Ítems elegidos del autocompletar de productos (catálogo de Con
+    // Sentido, ver IngresoModal.tsx): se descuenta su stock acá mismo —
+    // igual que una venta registrada desde "Nueva venta" — y, si están
+    // sincronizados con el e-commerce, se encola el aviso en la MISMA
+    // transacción (si el ingreso se revierte, el aviso también).
+    const vendidosSincronizados: { productId: string; variantId: string | null; sku: string; cantidad: number }[] = [];
+    for (const item of input.items ?? []) {
+      if (!item.productoId) continue;
+      const producto = await getProductoParaVenta(client, item.productoId);
+      if (!producto) continue; // ya no está en el catálogo — no bloquea el ingreso
+      await descontarStock(client, producto.id, item.cantidad);
+      if (producto.ecommerce_product_id) {
+        vendidosSincronizados.push({
+          productId: producto.ecommerce_product_id,
+          variantId: producto.ecommerce_variant_id ?? null,
+          sku: producto.sku,
+          cantidad: item.cantidad,
+        });
+      }
+    }
+
     const factura = await repo.getOrCrearFacturaVenta({ ventaId: venta.id, subtotal: totalBruto, total: totalNeto }, client);
+
+    for (const vendido of vendidosSincronizados) {
+      await encolarDeltaStock(client, {
+        productId: vendido.productId,
+        variantId: vendido.variantId,
+        sku: vendido.sku,
+        delta: -vendido.cantidad,
+        kind: "SALE",
+        reason: `Ingreso Caja General ${factura?.numero ?? venta.id}`,
+      });
+    }
 
     const movimientos = [];
     for (const parte of partes) {
@@ -227,6 +262,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
     }
 
     await client.query("COMMIT");
+    if (vendidosSincronizados.length) programarEnvio();
     return { movimientos, venta, factura };
   } catch (err) {
     await client.query("ROLLBACK");

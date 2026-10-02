@@ -15,10 +15,15 @@ export type PagoInput =
 
 // Ítem libre (modo "Agregar productos" del ingreso manual) — nombre en vez
 // de producto_id, no hay catálogo detrás (ver caja_ingreso_items en schema.sql).
+// `productoId` es opcional: solo viaja cuando el ítem se eligió del
+// autocompletar de productos de Con Sentido — ahí el backend descuenta su
+// stock y, si está sincronizado, avisa al e-commerce (ver caja.service.ts::
+// registrarIngresoManual). Un texto libre no lo manda y no toca inventario.
 export interface ItemIngresoInput {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  productoId?: string;
 }
 
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente

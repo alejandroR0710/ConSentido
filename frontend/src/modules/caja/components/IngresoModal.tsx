@@ -52,7 +52,9 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
   // (Migao casi siempre cobra desde su propia pantalla, no desde acá) — antes
   // arrancaba en "migao" y era fácil dejarlo así sin querer.
   const [modulo, setModulo] = useState<ModuloOrigenSlug>(valoresIniciales?.moduloOrigenSlug ?? "con_sentido");
-  const [modoMonto, setModoMonto] = useState<"unico" | "productos">(tieneItemsIniciales ? "productos" : "unico");
+  // "Agregar productos" abre primero (es el flujo más usado); "Monto único"
+  // queda como segunda opción para un ingreso suelto sin desglose.
+  const [modoMonto, setModoMonto] = useState<"unico" | "productos">("productos");
   // "Monto" siempre es el bruto (antes de descuento); lo que realmente se
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
   const [monto, setMonto] = useState(0);
@@ -202,8 +204,8 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
       <div className="mb-3 flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
         {(
           [
-            { valor: "unico" as const, etiqueta: "Monto único" },
             { valor: "productos" as const, etiqueta: "Agregar productos" },
+            { valor: "unico" as const, etiqueta: "Monto único" },
           ]
         ).map((op) => (
           <button

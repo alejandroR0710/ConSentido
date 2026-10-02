@@ -35,6 +35,8 @@ const itemIngresoSchema = z.object({
   // con_sentido.service.ts::registrarVenta). Sin esto (texto libre o un
   // servicio que no es del catálogo), no se toca ningún inventario.
   productoId: z.string().uuid().optional(),
+  // Obligatoria si el producto queda en stock negativo (ver con_sentido/stock-venta.ts).
+  observacionInventario: z.string().trim().max(500).optional(),
 });
 
 const camposIngreso = {

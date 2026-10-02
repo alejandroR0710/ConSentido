@@ -3,6 +3,7 @@ import { Errors } from "../../shared/utils/app-error";
 import * as cajaService from "../general/caja/caja.service";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import * as repo from "./con_sentido.repository";
+import { descontarParaVenta, motivoVenta } from "./stock-venta";
 import {
   CrearClienteConSentidoInput,
   CrearProductoConSentidoInput,
@@ -35,7 +36,8 @@ export async function editarProducto(id: string, input: EditarProductoConSentido
   if (input.stock === undefined) return repo.actualizarProducto(id, input);
   if (!Number.isInteger(input.stock)) throw Errors.badRequest("El stock debe ser un número entero");
 
-  const delta = input.stock - Number(existente.stock);
+  // El e-commerce refleja max(stock, 0) — ver deltaEcommerce.
+  const delta = repo.deltaEcommerce(Number(existente.stock), input.stock);
   const actualizado = await repo.actualizarProducto(id, { stock: input.stock });
   if (delta !== 0) {
     await encolarDeltaStock(pool, {
@@ -80,25 +82,39 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
       montoBanco: input.metodoPago === "mixto" ? input.montoBanco : undefined,
     });
 
-    // Productos del inventario vendidos: se descuenta su stock (sin bajar de 0
-    // — sin stock se deja vender igual, decisión del negocio) y, si están
-    // sincronizados, se le avisa al e-commerce más abajo.
-    const vendidosSincronizados: { productId: string; variantId: string | null; sku: string; cantidad: number }[] = [];
+    // Productos del inventario vendidos: se descuenta su stock (sin stock se
+    // deja vender igual: queda en negativo, con observación obligatoria — ver
+    // stock-venta.ts) y, si están sincronizados, se le avisa al e-commerce más abajo.
+    const vendidosSincronizados: {
+      productId: string;
+      variantId: string | null;
+      sku: string;
+      delta: number;
+      observacion: string | null;
+    }[] = [];
     for (const item of input.items) {
       let productoId: string | null = null;
       let sku: string | null = null;
+      let observacionInventario: string | null = null;
       if (item.productoId) {
-        const producto = await repo.getProductoParaVenta(client, item.productoId);
-        if (!producto) throw Errors.badRequest(`El producto "${item.producto}" ya no está en el inventario`);
+        const vendido = await descontarParaVenta(client, {
+          productoId: item.productoId,
+          cantidad: item.cantidad,
+          nombre: item.producto,
+          observacion: item.observacionInventario,
+        });
+        if (!vendido) throw Errors.badRequest(`El producto "${item.producto}" ya no está en el inventario`);
+        const { producto } = vendido;
         productoId = producto.id;
         sku = producto.sku ?? null;
-        await repo.descontarStock(client, producto.id, item.cantidad);
+        observacionInventario = vendido.observacion;
         if (producto.ecommerce_product_id) {
           vendidosSincronizados.push({
             productId: producto.ecommerce_product_id,
             variantId: producto.ecommerce_variant_id ?? null,
             sku: producto.sku,
-            cantidad: item.cantidad,
+            delta: vendido.deltaEcommerce,
+            observacion: vendido.observacion,
           });
         }
       }
@@ -110,6 +126,7 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
         descripcion: item.descripcion,
         categoria: item.categoria,
         cantidad: item.cantidad,
+        observacionInventario,
         precioUnitario: item.precioUnitario,
       });
     }
@@ -127,9 +144,9 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
         productId: vendido.productId,
         variantId: vendido.variantId,
         sku: vendido.sku,
-        delta: -vendido.cantidad,
+        delta: vendido.delta,
         kind: "SALE",
-        reason: `Venta ${factura?.numero ?? venta.id}`,
+        reason: motivoVenta(`Venta ${factura?.numero ?? venta.id}`, vendido.observacion),
       });
     }
 

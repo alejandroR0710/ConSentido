@@ -34,6 +34,8 @@ export interface ItemVenta {
   cantidad: number;
   precioUnitario: number;
   subtotal: number;
+  // Obligatoria si la venta deja el producto en stock negativo.
+  observacionInventario?: string;
 }
 
 export interface Venta {

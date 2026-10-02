@@ -11,6 +11,9 @@ const itemVentaSchema = z
     categoria: z.string().trim().max(100).optional(),
     cantidad: z.number().positive(),
     precioUnitario: z.number().nonnegative(),
+    // Obligatoria (lo valida el service, que conoce el stock) si la venta deja
+    // el producto en negativo: por qué no cuadró el inventario.
+    observacionInventario: z.string().trim().max(500).optional(),
   })
   // El stock es por unidades enteras (el del e-commerce también).
   .refine((item) => !item.productoId || Number.isInteger(item.cantidad), {

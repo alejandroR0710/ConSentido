@@ -1,6 +1,7 @@
 import { Pool, PoolClient, pool } from "../../../shared/db/pool";
 import { Errors } from "../../../shared/utils/app-error";
-import { descontarStock, getProductoParaVenta } from "../../con_sentido/con_sentido.repository";
+import { deltaEcommerce, getProductoParaVenta, reponerStock } from "../../con_sentido/con_sentido.repository";
+import { descontarParaVenta, motivoVenta } from "../../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../../integracion_ecommerce/salida";
 import { descomponerPago, exigirMontoRecibidoEfectivo, exigirReferenciaBanco } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
@@ -195,28 +196,53 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       descuentoPorcentaje,
       total: totalNeto,
     });
-    await repo.crearIngresoItems(client, venta.id, items);
-
     // Ítems elegidos del autocompletar de productos (catálogo de Con
     // Sentido, ver IngresoModal.tsx): se descuenta su stock acá mismo —
     // igual que una venta registrada desde "Nueva venta" — y, si están
     // sincronizados con el e-commerce, se encola el aviso en la MISMA
-    // transacción (si el ingreso se revierte, el aviso también).
-    const vendidosSincronizados: { productId: string; variantId: string | null; sku: string; cantidad: number }[] = [];
-    for (const item of input.items ?? []) {
-      if (!item.productoId) continue;
-      const producto = await getProductoParaVenta(client, item.productoId);
-      if (!producto) continue; // ya no está en el catálogo — no bloquea el ingreso
-      await descontarStock(client, producto.id, item.cantidad);
+    // transacción (si el ingreso se revierte, el aviso también). Sin stock se
+    // vende igual: queda en negativo, con observación obligatoria (ver
+    // con_sentido/stock-venta.ts). Cada línea guarda su producto, para
+    // devolver el stock si se anula.
+    const vendidosSincronizados: {
+      productId: string;
+      variantId: string | null;
+      sku: string;
+      delta: number;
+      observacion: string | null;
+    }[] = [];
+    const filas: repo.IngresoItemFila[] = [];
+    for (const item of items) {
+      const fila: repo.IngresoItemFila = {
+        nombre: item.nombre,
+        cantidad: item.cantidad,
+        precioUnitario: item.precioUnitario,
+        productoId: null,
+        observacionInventario: null,
+      };
+      filas.push(fila);
+      if (!("productoId" in item) || !item.productoId) continue;
+      const vendido = await descontarParaVenta(client, {
+        productoId: item.productoId,
+        cantidad: item.cantidad,
+        nombre: item.nombre,
+        observacion: item.observacionInventario,
+      });
+      if (!vendido) continue; // ya no está en el catálogo — no bloquea el ingreso
+      const { producto } = vendido;
+      fila.productoId = producto.id;
+      fila.observacionInventario = vendido.observacion;
       if (producto.ecommerce_product_id) {
         vendidosSincronizados.push({
           productId: producto.ecommerce_product_id,
           variantId: producto.ecommerce_variant_id ?? null,
           sku: producto.sku,
-          cantidad: item.cantidad,
+          delta: vendido.deltaEcommerce,
+          observacion: vendido.observacion,
         });
       }
     }
+    await repo.crearIngresoItems(client, venta.id, filas);
 
     const factura = await repo.getOrCrearFacturaVenta({ ventaId: venta.id, subtotal: totalBruto, total: totalNeto }, client);
 
@@ -225,9 +251,9 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
         productId: vendido.productId,
         variantId: vendido.variantId,
         sku: vendido.sku,
-        delta: -vendido.cantidad,
+        delta: vendido.delta,
         kind: "SALE",
-        reason: `Ingreso Caja General ${factura?.numero ?? venta.id}`,
+        reason: motivoVenta(`Ingreso Caja General ${factura?.numero ?? venta.id}`, vendido.observacion),
       });
     }
 
@@ -778,6 +804,30 @@ export async function anularVenta(movimientoId: number, input: AnularVentaInput,
       throw Errors.conflict("Esta venta ya está anulada o ya no existe.");
     }
 
+    // Lo que la venta descontó del inventario vuelve al stock y, si el producto
+    // está sincronizado, se le avisa al e-commerce como devolución — en la
+    // MISMA transacción: si la anulación se revierte, la devolución también.
+    let hayAvisosEcommerce = false;
+    for (const item of await repo.listarStockADevolver(client, movimiento.referenciaEntidad, movimiento.referenciaId)) {
+      const producto = await getProductoParaVenta(client, item.productoId);
+      if (!producto) continue; // ya no está en el catálogo
+      await reponerStock(client, producto.id, item.cantidad);
+      // El e-commerce refleja max(stock, 0): devolver una venta que había dejado
+      // el producto en negativo solo le suma lo que vuelve a quedar por encima de 0.
+      const delta = deltaEcommerce(producto.stock, producto.stock + item.cantidad);
+      if (producto.ecommerce_product_id && delta !== 0) {
+        await encolarDeltaStock(client, {
+          productId: producto.ecommerce_product_id,
+          variantId: producto.ecommerce_variant_id ?? null,
+          sku: producto.sku,
+          delta,
+          kind: "RETURN",
+          reason: "Anulación de venta en el POS",
+        });
+        hayAvisosEcommerce = true;
+      }
+    }
+
     if (esVentaGenerica) {
       const pagos = await repo.listPagosPorVenta(client, movimiento.referenciaId);
       for (const pago of pagos) {
@@ -812,6 +862,7 @@ export async function anularVenta(movimientoId: number, input: AnularVentaInput,
     await repo.borrarMovimientosPorReferencia(client, movimiento.referenciaEntidad, movimiento.referenciaId);
 
     await client.query("COMMIT");
+    if (hayAvisosEcommerce) programarEnvio();
 
     // Solo hace falta recalcular el cierre de turnos que ya estén cerrados
     // (uno abierto calcula sus saldos en vivo, sin nada guardado que arreglar).

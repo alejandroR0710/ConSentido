@@ -461,6 +461,9 @@ CREATE TABLE con_sentido_venta_items (
   categoria       VARCHAR(100),
   cantidad        DECIMAL(12,3) NOT NULL CHECK (cantidad > 0),
   precio_unitario DECIMAL(12,2) NOT NULL,
+  -- Obligatoria si la venta dejó el producto en stock negativo: por qué no
+  -- cuadró el inventario (apareció en bodega, mala contada...).
+  observacion_inventario TEXT NULL,
   subtotal        DECIMAL(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
   created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (venta_id) REFERENCES con_sentido_ventas(id) ON DELETE CASCADE,
@@ -739,11 +742,17 @@ CREATE TABLE venta_items (
 CREATE TABLE caja_ingreso_items (
   id              BIGINT AUTO_INCREMENT PRIMARY KEY,
   venta_id        CHAR(36) NOT NULL,
+  -- Producto del catálogo elegido en el autocompletar (NULL = texto libre).
+  producto_id     CHAR(36) NULL,
   nombre          TEXT NOT NULL,
   cantidad        DECIMAL(12,3) NOT NULL CHECK (cantidad > 0),
   precio_unitario DECIMAL(12,2) NOT NULL,
+  -- Igual que en con_sentido_venta_items: por qué quedó en stock negativo.
+  observacion_inventario TEXT NULL,
   subtotal        DECIMAL(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
   FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+  CONSTRAINT fk_caja_ingreso_items_producto
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_caja_ingreso_items_venta (venta_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 

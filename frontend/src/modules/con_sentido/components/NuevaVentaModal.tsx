@@ -33,6 +33,8 @@ interface ItemCarrito {
   descripcionOtro: string;
   cantidad: number;
   precioUnitario: number;
+  // Obligatoria si la venta deja el producto en stock negativo (ver faltaStock).
+  observacionInventario: string;
 }
 
 interface NuevaVentaModalProps {
@@ -58,14 +60,25 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
   const cantidadEnCarrito = (productoId: string) =>
     carrito.filter((i) => i.producto?.id === productoId).reduce((sum, i) => sum + i.cantidad, 0);
 
+  // Sin stock suficiente se vende igual: el inventario queda en negativo y hay
+  // que explicar por qué no cuadró (apareció en bodega, mala contada...).
+  const stockResultante = (item: ItemCarrito) =>
+    item.producto && item.producto.stock !== undefined
+      ? Number(item.producto.stock) - cantidadEnCarrito(item.producto.id)
+      : null;
+  const faltaStock = (item: ItemCarrito) => {
+    const resultante = stockResultante(item);
+    return resultante !== null && resultante < 0;
+  };
+
   const total = carrito.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
 
   // Validar que todos los items sean válidos
   const itemsValidos = carrito.every((item) => {
     if (item.producto) {
-      // Item con producto: solo validar que tenga precio
-      return item.precioUnitario > 0;
+      // Item con producto: precio, y observación si queda en stock negativo
+      return item.precioUnitario > 0 && (!faltaStock(item) || item.observacionInventario.trim().length > 0);
     } else {
       // Item "Otro": debe tener descripción y precio
       return item.descripcionOtro.trim().length > 0 && item.precioUnitario > 0;
@@ -89,6 +102,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         descripcionOtro: "",
         cantidad: 1,
         precioUnitario: Number(p.precio),
+        observacionInventario: "",
       },
     ]);
     setBusqueda("");
@@ -103,6 +117,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         descripcionOtro: "",
         cantidad: 1,
         precioUnitario: 0,
+        observacionInventario: "",
       },
     ]);
     setBusqueda("");
@@ -134,6 +149,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
           cantidad: item.cantidad,
           precioUnitario: item.precioUnitario,
           subtotal: item.precioUnitario * item.cantidad,
+          observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
         })),
         monto: total,
         metodoPago: pago.metodoPago,
@@ -201,7 +217,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                         {p.stock !== undefined && (
                           <span className={Number(p.stock) <= 0 ? " font-semibold text-red-600 dark:text-red-400" : ""}>
                             {" · "}
-                            {Number(p.stock) <= 0 ? "Sin stock" : `Stock: ${Number(p.stock)}`}
+                            {Number(p.stock) === 0 ? "Sin stock" : `Stock: ${Number(p.stock)}`}
                           </span>
                         )}
                       </div>
@@ -275,13 +291,26 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                             {item.producto.categoria}
                           </div>
                         )}
-                        {item.producto.stock !== undefined &&
-                          cantidadEnCarrito(item.producto.id) > Number(item.producto.stock) && (
-                            <div className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                              ⚠️ En inventario hay {Math.max(0, Number(item.producto.stock))}. Se puede vender igual; el
-                              stock quedará en 0.
+                        {faltaStock(item) && (
+                          <div className="mt-1">
+                            <div className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                              ⚠️ En inventario hay {Number(item.producto.stock)}: quedará en {stockResultante(item)}.
+                              Explica por qué no cuadra el inventario:
                             </div>
-                          )}
+                            <textarea
+                              rows={2}
+                              maxLength={500}
+                              placeholder="Ej.: apareció en bodega, se hizo para esta venta, mala contada…"
+                              value={item.observacionInventario}
+                              onChange={(e) => actualizarItem(item.id, { observacionInventario: e.target.value })}
+                              className={`mt-0.5 w-full rounded border bg-brand-vanilla px-2 py-1 text-xs text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla ${
+                                item.observacionInventario.trim().length === 0
+                                  ? "border-red-400 dark:border-red-500"
+                                  : "border-brand-vanilla-dark dark:border-brand-green-700"
+                              }`}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (

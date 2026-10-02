@@ -376,17 +376,51 @@ export async function crearVentaManual(
 
 /** Ítems libres (nombre en vez de producto_id — ver caja_ingreso_items en
  *  schema.sql) del ingreso manual, modo "Agregar productos". */
-export async function crearIngresoItems(
-  client: PoolClient,
-  ventaId: string,
-  items: { nombre: string; cantidad: number; precioUnitario: number }[],
-) {
+export interface IngresoItemFila {
+  nombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  // Producto del catálogo elegido en el autocompletar (null = texto libre):
+  // si se anula el ingreso, se devuelve su stock (ver anularVenta).
+  productoId: string | null;
+  // Por qué quedó en stock negativo (solo en ese caso).
+  observacionInventario: string | null;
+}
+
+export async function crearIngresoItems(client: PoolClient, ventaId: string, items: IngresoItemFila[]) {
   for (const item of items) {
     await client.query(
-      `INSERT INTO caja_ingreso_items (venta_id, nombre, cantidad, precio_unitario) VALUES ($1, $2, $3, $4)`,
-      [ventaId, item.nombre, item.cantidad, item.precioUnitario],
+      `INSERT INTO caja_ingreso_items (venta_id, producto_id, nombre, cantidad, precio_unitario, observacion_inventario)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [ventaId, item.productoId, item.nombre, item.cantidad, item.precioUnitario, item.observacionInventario],
     );
   }
+}
+
+/**
+ * Productos a devolver al inventario al anular una venta: la cantidad vendida
+ * de cada línea ligada a un producto. Los ingresos de Caja anteriores a
+ * 2026-10-02 no guardaban el producto y no devuelven nada.
+ */
+export async function listarStockADevolver(
+  client: PoolClient,
+  referenciaEntidad: string,
+  ventaId: string,
+): Promise<{ productoId: string; cantidad: number }[]> {
+  let sql: string;
+  if (referenciaEntidad === "con_sentido_ventas") {
+    sql = `SELECT producto_id, cantidad
+             FROM con_sentido_venta_items WHERE venta_id = $1 AND producto_id IS NOT NULL`;
+  } else if (referenciaEntidad === "caja_ventas") {
+    sql = `SELECT producto_id, cantidad
+             FROM caja_ingreso_items WHERE venta_id = $1 AND producto_id IS NOT NULL`;
+  } else {
+    return [];
+  }
+  const result = await client.query(sql, [ventaId]);
+  return result.rows
+    .map((r) => ({ productoId: r.producto_id as string, cantidad: Number(r.cantidad) }))
+    .filter((r) => r.cantidad > 0);
 }
 
 /** Get-or-create idempotente — mismo criterio que

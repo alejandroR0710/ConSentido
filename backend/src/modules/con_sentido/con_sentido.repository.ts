@@ -172,11 +172,33 @@ export async function getProductoParaVenta(client: PoolClient, id: string) {
   return result.rowCount ? { ...result.rows[0], stock: Number(result.rows[0].stock) } : null;
 }
 
-/** Resta stock sin bajar de 0 (sin stock se deja vender igual — decisión del negocio). */
+/**
+ * Cuánto se le avisa al e-commerce cuando el stock del POS pasa de `antes` a `despues`. El POS
+ * puede quedar en negativo (venta sin stock, con observación) pero el e-commerce nunca baja de 0
+ * (decisión del negocio, 2026-10-02): el e-commerce refleja max(stock del POS, 0). Así, p. ej.,
+ * vender 1 con stock 0 (0 → -1) no le avisa nada, y un ajuste de -1 a 5 le suma 5, no 6.
+ */
+export function deltaEcommerce(antes: number, despues: number): number {
+  return Math.max(despues, 0) - Math.max(antes, 0);
+}
+
+/**
+ * Resta stock. Puede quedar en negativo: sin stock se deja vender igual (decisión del negocio),
+ * pero entonces la venta exige una observación que explique el descuadre del inventario.
+ */
 export async function descontarStock(client: PoolClient, productoId: string, cantidad: number) {
   await client.query(
-    `INSERT INTO inventario_productos (producto_id, cantidad_actual) VALUES ($1, 0)
-     ON CONFLICT (producto_id) DO UPDATE SET cantidad_actual = GREATEST(0, cantidad_actual - $2)`,
+    `INSERT INTO inventario_productos (producto_id, cantidad_actual) VALUES ($1, -$2)
+     ON CONFLICT (producto_id) DO UPDATE SET cantidad_actual = cantidad_actual - $2`,
+    [productoId, cantidad],
+  );
+}
+
+/** Devuelve stock al inventario (al anular una venta, ver caja.service.ts::anularVenta). */
+export async function reponerStock(client: PoolClient, productoId: string, cantidad: number) {
+  await client.query(
+    `INSERT INTO inventario_productos (producto_id, cantidad_actual) VALUES ($1, $2)
+     ON CONFLICT (producto_id) DO UPDATE SET cantidad_actual = cantidad_actual + $2`,
     [productoId, cantidad],
   );
 }
@@ -234,12 +256,14 @@ export async function crearVentaItem(
     descripcion?: string;
     categoria?: string;
     cantidad: number;
+    // Obligatoria si la venta dejó el producto en stock negativo.
+    observacionInventario?: string | null;
     precioUnitario: number;
   },
 ) {
   await executor.query(
-    `INSERT INTO con_sentido_venta_items (venta_id, producto_id, sku, producto, descripcion, categoria, cantidad, precio_unitario)
-     VALUES ($1, $7, $8, $2, $3, $4, $5, $6)`,
+    `INSERT INTO con_sentido_venta_items (venta_id, producto_id, sku, producto, descripcion, categoria, cantidad, precio_unitario, observacion_inventario)
+     VALUES ($1, $7, $8, $2, $3, $4, $5, $6, $9)`,
     [
       params.ventaId,
       params.producto,
@@ -249,6 +273,7 @@ export async function crearVentaItem(
       params.precioUnitario,
       params.productoId ?? null,
       params.sku ?? null,
+      params.observacionInventario ?? null,
     ],
   );
 }

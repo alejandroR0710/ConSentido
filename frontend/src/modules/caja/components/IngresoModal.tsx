@@ -45,6 +45,8 @@ interface LineaIngreso {
   // (ver SugerenciasProducto) — escribir después de elegir lo limpia, porque
   // el texto ya no coincide necesariamente con el producto del catálogo.
   productoId?: string;
+  // Obligatoria si la línea deja el producto en stock negativo (ver faltaStock).
+  observacionInventario?: string;
 }
 
 let siguienteKeyLinea = 1;
@@ -96,6 +98,21 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
   const [errorFactura, setErrorFactura] = useState<string | null>(null);
 
   const lineasValidas = lineas.filter((l) => l.nombre.trim().length > 0 && l.cantidad > 0);
+
+  // Sin stock suficiente se vende igual: el inventario queda en negativo y hay
+  // que explicar por qué no cuadró (mismo criterio que NuevaVentaModal).
+  const cantidadEnLineas = (productoId: string) =>
+    lineas.filter((l) => l.productoId === productoId).reduce((acc, l) => acc + l.cantidad, 0);
+  const stockResultante = (linea: LineaIngreso) => {
+    if (!linea.productoId) return null;
+    const producto = productos.find((p) => p.id === linea.productoId);
+    return producto ? Number(producto.stock) - cantidadEnLineas(linea.productoId) : null;
+  };
+  const faltaStock = (linea: LineaIngreso) => {
+    const resultante = stockResultante(linea);
+    return resultante !== null && resultante < 0;
+  };
+  const faltaObservacion = lineasValidas.some((l) => faltaStock(l) && !l.observacionInventario?.trim());
   const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0);
   const montoBruto = modoMonto === "productos" ? totalLineas : monto;
   const montoNeto = montoBruto * (1 - descuentoPorcentaje / 100);
@@ -111,7 +128,7 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
     !mixtoInvalido &&
     !faltaMontoRecibido &&
     !faltaReferenciaBanco(pago) &&
-    (modoMonto === "unico" || lineasValidas.length > 0);
+    (modoMonto === "unico" || (lineasValidas.length > 0 && !faltaObservacion));
 
   function actualizarLinea(key: number, cambios: Partial<LineaIngreso>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -136,6 +153,7 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
               cantidad: l.cantidad,
               precioUnitario: l.precioUnitario,
               productoId: l.productoId,
+              observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
             }))
           : undefined;
       const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
@@ -303,6 +321,26 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
                 >
                   ✕
                 </button>
+                {faltaStock(linea) && (
+                  <div className="w-full">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      ⚠️ En inventario hay {Number(productos.find((p) => p.id === linea.productoId)?.stock)}: quedará en{" "}
+                      {stockResultante(linea)}. Explica por qué no cuadra el inventario:
+                    </p>
+                    <textarea
+                      rows={2}
+                      maxLength={500}
+                      placeholder="Ej.: apareció en bodega, se hizo para esta venta, mala contada…"
+                      value={linea.observacionInventario ?? ""}
+                      onChange={(e) => actualizarLinea(linea.key, { observacionInventario: e.target.value })}
+                      className={`mt-1 w-full rounded-md border bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
+                        linea.observacionInventario?.trim()
+                          ? "border-brand-vanilla-dark dark:border-brand-green-700"
+                          : "border-red-400 dark:border-red-500"
+                      }`}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

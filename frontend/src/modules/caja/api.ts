@@ -24,6 +24,8 @@ export interface ItemIngresoInput {
   cantidad: number;
   precioUnitario: number;
   productoId?: string;
+  // Obligatoria si el producto queda en stock negativo.
+  observacionInventario?: string;
 }
 
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente

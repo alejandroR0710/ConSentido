@@ -117,8 +117,11 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
   }
 
+  // Siempre queda al menos una línea: si es la única, la ✕ la deja en blanco en vez de quitarla
+  // (antes la ✕ quedaba deshabilitada y un producto mal elegido en la primera línea no se podía
+  // quitar).
   function quitarLinea(key: number) {
-    setLineas((actual) => (actual.length > 1 ? actual.filter((l) => l.key !== key) : actual));
+    setLineas((actual) => (actual.length > 1 ? actual.filter((l) => l.key !== key) : [lineaVacia()]));
   }
 
   async function registrar() {
@@ -295,9 +298,8 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
                 <button
                   type="button"
                   onClick={() => quitarLinea(linea.key)}
-                  disabled={lineas.length === 1}
-                  className="rounded-md px-2 py-1 text-lg text-red-600 hover:bg-red-50 disabled:opacity-30 dark:hover:bg-red-950/30"
-                  aria-label="Quitar línea"
+                  className="rounded-md px-2 py-1 text-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  aria-label={lineas.length === 1 ? "Vaciar línea" : "Quitar línea"}
                 >
                   ✕
                 </button>

@@ -17,7 +17,7 @@ import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoModal } from "../components/EgresoModal";
-import { resumenAReciboProps } from "../factura";
+import { acumuladoDelTurno, resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
 import { agruparPorEtiqueta, labelMetodoPago } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
@@ -618,6 +618,7 @@ export function CajaPage() {
               etiqueta,
               monto,
             })),
+            acumulado: acumuladoDelTurno(resumen),
           })}
           onCerrar={() => setImprimirResumenTurno(false)}
         />

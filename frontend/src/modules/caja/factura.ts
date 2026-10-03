@@ -1,5 +1,5 @@
 import type { ReciboDetalleMovimiento, ReciboEtiquetaMonto, ReciboImprimibleProps } from "../../shared/components/ReciboImprimible";
-import type { FacturaVentaManual, MovimientoCaja } from "./api";
+import type { FacturaVentaManual, MovimientoCaja, ResumenTurno } from "./api";
 import { LABEL_POR_MODULO_SLUG } from "./moduloOrigen";
 
 /** Mismo criterio de nombre en los dos recibos que muestran un movimiento
@@ -81,6 +81,7 @@ export function resumenAReciboProps(params: {
   movimientos: MovimientoCaja[];
   ingresos: ReciboEtiquetaMonto[];
   egresos: ReciboEtiquetaMonto[];
+  acumulado?: ReciboEtiquetaMonto[];
 }): Omit<ReciboImprimibleProps, "anchoMm"> {
   const movimientosOrdenados = [...params.movimientos].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
@@ -101,5 +102,16 @@ export function resumenAReciboProps(params: {
     movimientosDetalle,
     resumenIngresos: params.ingresos,
     resumenEgresos: params.egresos,
+    resumenAcumulado: params.acumulado,
   };
+}
+
+/** Los mismos 3 totales que muestran las tarjetas de CajaPage (sin propinas,
+ *  que nunca cuentan para el cuadre de Caja). */
+export function acumuladoDelTurno(resumen: ResumenTurno): ReciboEtiquetaMonto[] {
+  return [
+    { etiqueta: "Ganancia en efectivo", monto: resumen.ingresosEfectivo - resumen.egresosEfectivo },
+    { etiqueta: "Banco", monto: resumen.saldos.banco },
+    { etiqueta: "Total general", monto: resumen.saldos.general },
+  ];
 }

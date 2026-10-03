@@ -5,7 +5,7 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { cajaApi, type ResumenTurno } from "../api";
-import { resumenAReciboProps } from "../factura";
+import { acumuladoDelTurno, resumenAReciboProps } from "../factura";
 import { LABEL_POR_MODULO_SLUG, agruparPorEtiqueta } from "../moduloOrigen";
 
 interface CerrarTurnoModalProps {
@@ -92,6 +92,7 @@ export function CerrarTurnoModal({ resumen, onCerrar, onCerrado }: CerrarTurnoMo
                 etiqueta,
                 monto,
               })),
+              acumulado: acumuladoDelTurno(resumen),
             })}
             onCerrar={() => setImprimir(false)}
           />

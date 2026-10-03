@@ -60,6 +60,9 @@ export interface ReciboImprimibleProps {
   movimientosDetalle?: ReciboDetalleMovimiento[];
   resumenIngresos?: ReciboEtiquetaMonto[];
   resumenEgresos?: ReciboEtiquetaMonto[];
+  // Cierre del resumen: los mismos totales que muestra la pantalla de Caja
+  // (efectivo, banco, total general). El último va resaltado.
+  resumenAcumulado?: ReciboEtiquetaMonto[];
   anchoMm: 58 | 80;
 }
 
@@ -101,6 +104,7 @@ export function ReciboImprimible({
   movimientosDetalle,
   resumenIngresos,
   resumenEgresos,
+  resumenAcumulado,
   anchoMm,
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
@@ -275,6 +279,21 @@ export function ReciboImprimible({
               <span>-{formatMoney(totalEgresos)}</span>
             </div>
           </div>
+
+          {resumenAcumulado && resumenAcumulado.length > 0 && (
+            <div className="border-t-2 border-black pt-1">
+              <div className="mb-1 font-bold">Acumulado del turno</div>
+              {resumenAcumulado.map((r, idx) => (
+                <div
+                  key={r.etiqueta}
+                  className={`flex justify-between ${idx === resumenAcumulado.length - 1 ? "text-[18px] font-bold" : ""}`}
+                >
+                  <span>{r.etiqueta}</span>
+                  <span>{formatMoney(r.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <table className="w-full text-[16px]">

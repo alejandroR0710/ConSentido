@@ -461,10 +461,23 @@ export async function getVentaManualParaFactura(ventaId: string) {
   const venta = ventaResult.rows[0];
 
   const [items, pagos, movimiento] = await Promise.all([
-    // SKU del producto del catálogo elegido en el autocompletar (solo los
-    // ingresos desde 2026-10-02 guardan producto_id; texto libre = sin SKU).
+    // SKU del producto del catálogo elegido en el autocompletar. Los ingresos
+    // anteriores a 2026-10-02 no guardaban producto_id: para esos se busca un
+    // producto de Con Sentido con el mismo nombre (el autocompletar copia el
+    // nombre tal cual). Solo para imprimir — no se enlaza la línea, porque al
+    // anular se devolvería stock que esas ventas nunca descontaron.
     pool.query(
-      `SELECT i.nombre, i.cantidad, i.precio_unitario, i.subtotal, p.sku
+      `SELECT i.nombre, i.cantidad, i.precio_unitario, i.subtotal,
+              COALESCE(
+                p.sku,
+                (SELECT pn.sku
+                   FROM productos pn
+                   JOIN modulos mn ON mn.id = pn.modulo_id
+                  WHERE i.producto_id IS NULL AND mn.slug = 'con_sentido'
+                    AND pn.nombre = i.nombre AND pn.sku IS NOT NULL
+                  ORDER BY pn.activo DESC
+                  LIMIT 1)
+              ) AS sku
          FROM caja_ingreso_items i
          LEFT JOIN productos p ON p.id = i.producto_id
         WHERE i.venta_id = $1

@@ -3,6 +3,9 @@ import { formatMoney } from "../format/money";
 
 export interface ReciboLinea {
   nombre: string;
+  // Productos del catálogo de Con Sentido; con que una línea lo tenga, el
+  // recibo muestra la columna SKU.
+  sku?: string | null;
   cantidad: number;
   precioUnitario: number;
   subtotal: number;
@@ -110,6 +113,7 @@ export function ReciboImprimible({
   // Comparte el layout simple de "movimiento" (una sola línea, sin columnas
   // de cantidad/precio) — un comprobante de propina también es un solo monto.
   const esLineaUnica = esMovimiento || esComprobantePropina;
+  const mostrarSku = !esLineaUnica && (items ?? []).some((item) => item.sku);
 
   const franjaTexto = esCotizacion
     ? "COTIZACIÓN — NO es una factura de venta"
@@ -276,6 +280,7 @@ export function ReciboImprimible({
         <table className="w-full text-[16px]">
           <thead>
             <tr className="border-b border-dashed border-black">
+              {mostrarSku && <th className="py-1 pr-1 text-left font-semibold">SKU</th>}
               <th className="py-1 text-left font-semibold">{esLineaUnica ? "Concepto" : "Producto"}</th>
               {!esLineaUnica && (
                 <>
@@ -289,6 +294,7 @@ export function ReciboImprimible({
           <tbody>
             {(items ?? []).map((item, idx) => (
               <tr key={idx}>
+                {mostrarSku && <td className="py-0.5 pr-1 align-top font-mono text-[13px]">{item.sku || "—"}</td>}
                 <td className="py-0.5 pr-1 align-top">{item.nombre}</td>
                 {!esLineaUnica && (
                   <>

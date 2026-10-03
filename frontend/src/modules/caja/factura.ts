@@ -46,6 +46,9 @@ export function facturaCajaAReciboProps(factura: FacturaVentaManual): Omit<Recib
       valor: factura.moduloOrigenSlug ? (LABEL_POR_MODULO_SLUG[factura.moduloOrigenSlug] ?? factura.moduloOrigenSlug) : "—",
     },
   ];
+  // En "Monto único" el motivo ya es el nombre de la única línea: no se repite.
+  const motivoEsLaLinea = factura.items.length === 1 && factura.items[0].nombre === factura.motivo;
+  if (factura.motivo && !motivoEsLaLinea) camposEncabezado.push({ etiqueta: "Motivo", valor: factura.motivo });
   if (factura.usuarioNombre) camposEncabezado.push({ etiqueta: "Registrado por", valor: factura.usuarioNombre });
 
   return {
@@ -55,6 +58,7 @@ export function facturaCajaAReciboProps(factura: FacturaVentaManual): Omit<Recib
     camposEncabezado,
     items: factura.items.map((item) => ({
       nombre: item.nombre,
+      sku: item.sku,
       cantidad: item.cantidad,
       precioUnitario: item.precioUnitario,
       subtotal: item.subtotal,

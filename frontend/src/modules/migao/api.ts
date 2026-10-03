@@ -496,6 +496,8 @@ export interface EntregaPropina {
  *  Mesa/mesero/comensal quedan `null` cuando la venta no es de Migao. */
 export interface FacturaItem {
   productoNombre: string;
+  // Solo productos de Con Sentido (Migao no maneja SKU).
+  sku?: string | null;
   cantidad: number;
   precioUnitario: number;
   subtotal: number;

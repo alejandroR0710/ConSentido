@@ -266,6 +266,7 @@ export async function obtenerFacturaVenta(ventaId: string) {
     comensalNumero: null,
     items: (venta.items as Array<Record<string, unknown>>).map((item) => ({
       productoNombre: item.producto as string,
+      sku: (item.sku as string | null) ?? null,
       cantidad: Number(item.cantidad),
       precioUnitario: Number(item.precio_unitario),
       subtotal: Number(item.subtotal),

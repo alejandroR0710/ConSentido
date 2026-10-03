@@ -222,7 +222,9 @@ export interface FacturaVentaManual {
   fecha: string;
   moduloOrigenSlug: string | null;
   usuarioNombre: string | null;
-  items: { nombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+  // Lo que se escribió en "Motivo" al registrar el ingreso.
+  motivo: string | null;
+  items: { nombre: string; sku: string | null; cantidad: number; precioUnitario: number; subtotal: number }[];
   subtotal: number;
   descuentoPorcentaje: number;
   descuentoMonto: number;

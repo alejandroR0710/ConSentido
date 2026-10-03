@@ -288,6 +288,7 @@ const SELECT_VENTA_CON_ITEMS = `
       CAST(CONCAT('[', GROUP_CONCAT(
         JSON_OBJECT(
           'producto', cvi.producto,
+          'sku', cvi.sku,
           'descripcion', cvi.descripcion,
           'categoria', cvi.categoria,
           'cantidad', cvi.cantidad,

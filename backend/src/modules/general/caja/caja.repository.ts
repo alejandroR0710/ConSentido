@@ -460,15 +460,29 @@ export async function getVentaManualParaFactura(ventaId: string) {
   if (!ventaResult.rowCount) return null;
   const venta = ventaResult.rows[0];
 
-  const [items, pagos] = await Promise.all([
+  const [items, pagos, movimiento] = await Promise.all([
+    // SKU del producto del catálogo elegido en el autocompletar (solo los
+    // ingresos desde 2026-10-02 guardan producto_id; texto libre = sin SKU).
     pool.query(
-      `SELECT nombre, cantidad, precio_unitario, subtotal FROM caja_ingreso_items WHERE venta_id = $1 ORDER BY id`,
+      `SELECT i.nombre, i.cantidad, i.precio_unitario, i.subtotal, p.sku
+         FROM caja_ingreso_items i
+         LEFT JOIN productos p ON p.id = i.producto_id
+        WHERE i.venta_id = $1
+        ORDER BY i.id`,
       [ventaId],
     ),
     pool.query(`SELECT metodo_pago, monto, referencia FROM pagos WHERE venta_id = $1 ORDER BY created_at`, [ventaId]),
+    // El motivo escrito al registrar el ingreso vive en su movimiento de Caja
+    // (un pago mixto son 2 movimientos con el mismo motivo).
+    pool.query(
+      `SELECT motivo FROM movimientos_caja
+        WHERE referencia_entidad = 'caja_ventas' AND referencia_id = $1 AND motivo IS NOT NULL
+        ORDER BY id LIMIT 1`,
+      [ventaId],
+    ),
   ]);
 
-  return { venta, items: items.rows, pagos: pagos.rows };
+  return { venta, items: items.rows, pagos: pagos.rows, motivo: (movimiento.rows[0]?.motivo as string | undefined) ?? null };
 }
 
 /** Borra permanentemente los egresos del turno indicado (solo ese turno, no

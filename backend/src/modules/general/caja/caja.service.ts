@@ -304,7 +304,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
 export async function obtenerFacturaVentaManual(ventaId: string) {
   const detalle = await repo.getVentaManualParaFactura(ventaId);
   if (!detalle) throw Errors.notFound("Venta no encontrada");
-  const { venta, items, pagos } = detalle;
+  const { venta, items, pagos, motivo } = detalle;
   const factura = await repo.getOrCrearFacturaVenta({
     ventaId: venta.id,
     subtotal: Number(venta.subtotal),
@@ -316,8 +316,10 @@ export async function obtenerFacturaVentaManual(ventaId: string) {
     fecha: venta.created_at,
     moduloOrigenSlug: venta.modulo_origen_slug as string | null,
     usuarioNombre: venta.usuario_nombre as string | null,
+    motivo: motivo?.trim() || null,
     items: items.map((i) => ({
       nombre: i.nombre as string,
+      sku: (i.sku as string | null) ?? null,
       cantidad: Number(i.cantidad),
       precioUnitario: Number(i.precio_unitario),
       subtotal: Number(i.subtotal),

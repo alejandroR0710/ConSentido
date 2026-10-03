@@ -23,6 +23,7 @@ export function facturaAReciboProps(factura: FacturaOrden): Omit<ReciboImprimibl
     camposEncabezado,
     items: factura.items.map((item) => ({
       nombre: item.productoNombre,
+      sku: item.sku ?? null,
       cantidad: item.cantidad,
       precioUnitario: item.precioUnitario,
       subtotal: item.subtotal,

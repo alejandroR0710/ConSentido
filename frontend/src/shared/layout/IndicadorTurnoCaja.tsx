@@ -1,17 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { cajaApi } from "../../modules/caja/api";
+import { ApiError } from "../api/client";
+import { cajaApi, type ResumenTurno } from "../../modules/caja/api";
+import { CerrarTurnoModal } from "../../modules/caja/components/CerrarTurnoModal";
 import { tieneAccesoTotal } from "../auth/roles";
 import { useAuth } from "../auth/useAuth";
 
 const POLL_MS = 20000;
 
-/** Píldora compacta en el header, visible en cualquier vista (no solo dentro de
- *  `/caja`), para que quien maneja caja sepa de un vistazo si ya hay un turno
- *  abierto sin tener que entrar a la página de Caja a averiguarlo. */
+/**
+ * Vive en el header global (visible en cualquier vista, no solo dentro de
+ * `/caja`). Sin turno abierto, es una píldora informativa que lleva a Caja
+ * para abrir uno. Con turno abierto, se vuelve el botón de "Cerrar turno":
+ * trae el resumen del turno (mismo que usa CajaPage) y abre el mismo modal
+ * de cierre, sin necesidad de navegar a la página de Caja primero.
+ */
 export function IndicadorTurnoCaja() {
   const { usuario } = useAuth();
   const [turnoAbierto, setTurnoAbierto] = useState<boolean | null>(null);
+  const [resumen, setResumen] = useState<ResumenTurno | null>(null);
+  const [cargandoResumen, setCargandoResumen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const puedeVer = usuario?.rol === "Cajero" || tieneAccesoTotal(usuario?.rol);
 
@@ -34,21 +43,57 @@ export function IndicadorTurnoCaja() {
     };
   }, [puedeVer]);
 
+  async function abrirCierre() {
+    setCargandoResumen(true);
+    setError(null);
+    try {
+      const turno = await cajaApi.obtenerTurnoActual();
+      if (!turno) {
+        setTurnoAbierto(false);
+        return;
+      }
+      setResumen(await cajaApi.obtenerResumenTurno(turno.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cargar el resumen del turno");
+    } finally {
+      setCargandoResumen(false);
+    }
+  }
+
   if (!puedeVer || turnoAbierto === null) return null;
 
+  if (!turnoAbierto) {
+    return (
+      <Link
+        to="/caja"
+        className="hidden items-center gap-1.5 rounded-full border border-brand-vanilla-dark px-2.5 py-1 text-xs font-medium text-brand-ink/60 sm:flex dark:border-brand-green-700 dark:text-brand-vanilla/60"
+      >
+        <span className="text-brand-ink/40">●</span>
+        Sin turno abierto
+      </Link>
+    );
+  }
+
   return (
-    <Link
-      to="/caja"
-      className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium sm:flex ${
-        turnoAbierto
-          ? "border-brand-green-600 text-brand-green-700 dark:border-brand-green-500 dark:text-brand-vanilla"
-          : "border-brand-vanilla-dark text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
-      }`}
-    >
-      <span className={turnoAbierto ? "text-brand-green-600 dark:text-brand-green-400" : "text-brand-ink/40"}>
-        ●
-      </span>
-      {turnoAbierto ? "Turno abierto" : "Sin turno abierto"}
-    </Link>
+    <>
+      <button
+        onClick={abrirCierre}
+        disabled={cargandoResumen}
+        className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60 sm:px-3 sm:text-sm"
+      >
+        <span aria-hidden>🔒</span>
+        <span className="hidden sm:inline">{cargandoResumen ? "Cargando..." : "Cerrar turno"}</span>
+      </button>
+      {error && <span className="hidden text-xs text-red-600 sm:inline">{error}</span>}
+      {resumen && (
+        <CerrarTurnoModal
+          resumen={resumen}
+          onCerrar={() => setResumen(null)}
+          onCerrado={async () => {
+            setTurnoAbierto(false);
+          }}
+        />
+      )}
+    </>
   );
 }

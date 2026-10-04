@@ -14,7 +14,6 @@ import { migaoApi } from "../../migao/api";
 import { AdministracionModal } from "../components/AdministracionModal";
 import { AnularVentaModal } from "../components/AnularVentaModal";
 import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
-import { CerrarTurnoModal } from "../components/CerrarTurnoModal";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoModal } from "../components/EgresoModal";
 import { acumuladoDelTurno, resumenAReciboProps } from "../factura";
@@ -62,16 +61,11 @@ export function CajaPage() {
   const [montoInicialBanco, setMontoInicialBanco] = useState(0);
   const [abriendo, setAbriendo] = useState(false);
 
-  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "cierre" | "reset" | "administracion" | null>(null);
+  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "reset" | "administracion" | null>(null);
   const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
   const [movimientoAEditarCompleto, setMovimientoAEditarCompleto] = useState<MovimientoCaja | null>(null);
   const [imprimirResumenTurno, setImprimirResumenTurno] = useState(false);
-  // Congela el resumen con el que se abrió "Cerrar turno": una vez el cierre
-  // se confirma, cargarResumenDeTurnoActual() deja `resumen` en null (ya no
-  // hay turno abierto) — sin esta copia aparte, el modal se desmontaría solo
-  // y nunca se vería la pantalla de "Turno cerrado, ¿imprimir?".
-  const [resumenParaCierre, setResumenParaCierre] = useState<ResumenTurno | null>(null);
 
   const turnoIdRef = useRef<string | null>(null);
   turnoIdRef.current = resumen?.turno.id ?? null;
@@ -163,17 +157,6 @@ export function CajaPage() {
               >
                 📅 Historial
               </Link>
-            )}
-            {resumen && !sinTurno && (
-              <button
-                onClick={() => {
-                  setResumenParaCierre(resumen);
-                  setModalAbierto("cierre");
-                }}
-                className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
-              >
-                Cerrar turno
-              </button>
             )}
           </div>
           <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
@@ -539,20 +522,6 @@ export function CajaPage() {
           categorias={categorias}
           onCerrar={() => setModalAbierto(null)}
           onRegistrado={cargarResumenDeTurnoActual}
-        />
-      )}
-
-      {modalAbierto === "cierre" && resumenParaCierre && (
-        <CerrarTurnoModal
-          resumen={resumenParaCierre}
-          onCerrar={() => {
-            setModalAbierto(null);
-            setResumenParaCierre(null);
-          }}
-          onCerrado={async (mensajeCierre) => {
-            setMensaje(mensajeCierre);
-            await cargarResumenDeTurnoActual();
-          }}
         />
       )}
 

@@ -26,6 +26,9 @@ export function DetallePedidoPage() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [observacionInventario, setObservacionInventario] = useState("");
   const [pidiendoObservacion, setPidiendoObservacion] = useState(false);
+  const [transportadoraInput, setTransportadoraInput] = useState("");
+  const [numeroGuiaInput, setNumeroGuiaInput] = useState("");
+  const [pidiendoEnvio, setPidiendoEnvio] = useState(false);
 
   const [modalAbonoAbierto, setModalAbonoAbierto] = useState(false);
   const [montoAbono, setMontoAbono] = useState(0);
@@ -53,26 +56,50 @@ export function DetallePedidoPage() {
 
   useRegistrarRefresco(cargar);
 
-  async function avanzarEstado(destino: Exclude<EstadoPedido, "pendiente">, observacion?: string) {
+  async function avanzarEstado(
+    destino: Exclude<EstadoPedido, "pendiente">,
+    extra?: { observacionInventario?: string; transportadora?: string; numeroGuia?: string },
+  ) {
     if (!id) return;
     setCambiandoEstado(true);
     setError(null);
     try {
-      await pedidosApi.cambiarEstado(id, destino, observacion);
+      await pedidosApi.cambiarEstado(id, destino, extra);
       setPidiendoObservacion(false);
       setObservacionInventario("");
+      setPidiendoEnvio(false);
+      setTransportadoraInput("");
+      setNumeroGuiaInput("");
       await cargar();
     } catch (err) {
       const mensaje = err instanceof ApiError ? err.message : "No se pudo cambiar el estado";
-      // Si el backend pide observación de inventario (stock negativo), se
-      // muestra el campo en vez de un simple mensaje de error.
+      // Si el backend pide observación de inventario (stock negativo) o
+      // transportadora/guía (al despachar), se muestra el campo en vez de un
+      // simple mensaje de error.
       if (mensaje.toLowerCase().includes("observación")) {
         setPidiendoObservacion(true);
+      }
+      if (mensaje.toLowerCase().includes("transportadora") || mensaje.toLowerCase().includes("guía")) {
+        setPidiendoEnvio(true);
       }
       setError(mensaje);
     } finally {
       setCambiandoEstado(false);
     }
+  }
+
+  function clicSiguienteEstado() {
+    if (!pedido) return;
+    const siguiente = SIGUIENTE_ESTADO[pedido.estado];
+    if (!siguiente) return;
+    // Transportadora/guía recién se piden al despachar (no al crear el
+    // pedido) — si todavía no están guardadas, se muestra el formulario en
+    // vez de avanzar directo.
+    if (siguiente.estado === "enviado" && (!pedido.transportadora || !pedido.numero_guia)) {
+      setPidiendoEnvio(true);
+      return;
+    }
+    avanzarEstado(siguiente.estado);
   }
 
   async function registrarAbono() {
@@ -122,7 +149,7 @@ export function DetallePedidoPage() {
       <div className="flex flex-wrap gap-2">
         {siguiente && (
           <button
-            onClick={() => avanzarEstado(siguiente.estado)}
+            onClick={clicSiguienteEstado}
             disabled={cambiandoEstado}
             className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
           >
@@ -156,11 +183,38 @@ export function DetallePedidoPage() {
             className="mb-2 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
           <button
-            onClick={() => siguiente && avanzarEstado(siguiente.estado, observacionInventario)}
+            onClick={() => siguiente && avanzarEstado(siguiente.estado, { observacionInventario })}
             disabled={!observacionInventario.trim()}
             className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             Confirmar con observación
+          </button>
+        </div>
+      )}
+
+      {pidiendoEnvio && (
+        <div className="rounded-md border border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/20">
+          <p className="mb-2 text-sm">Para marcar como enviado, indica la transportadora y el número de guía:</p>
+          <div className="mb-2 flex flex-wrap gap-2">
+            <input
+              value={transportadoraInput}
+              onChange={(e) => setTransportadoraInput(e.target.value)}
+              placeholder="Transportadora"
+              className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <input
+              value={numeroGuiaInput}
+              onChange={(e) => setNumeroGuiaInput(e.target.value)}
+              placeholder="Número de guía"
+              className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+          <button
+            onClick={() => avanzarEstado("enviado", { transportadora: transportadoraInput, numeroGuia: numeroGuiaInput })}
+            disabled={!transportadoraInput.trim() || !numeroGuiaInput.trim()}
+            className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Confirmar envío
           </button>
         </div>
       )}

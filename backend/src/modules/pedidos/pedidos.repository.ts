@@ -196,18 +196,29 @@ export async function actualizarPedido(id: string, input: EditarPedidoInput) {
 
 /** `timestampCampo` es el nombre de columna literal (alistado_en/enviado_en/
  *  entregado_en) — siempre uno de esos 3 valores fijos, nunca entrada del
- *  usuario, así que interpolarlo en el SQL es seguro. */
+ *  usuario, así que interpolarlo en el SQL es seguro. `transportadora`/
+ *  `numeroGuia` solo llegan al marcar "enviado" (ver cambiarEstadoPedido) —
+ *  con COALESCE no se pisan si el pedido ya los tenía de una edición previa. */
 export async function actualizarEstadoPedido(
   client: PoolClient,
   id: string,
-  params: { estado: string; timestampCampo?: "alistado_en" | "enviado_en" | "entregado_en"; proximaAlarmaEn: Date | null },
+  params: {
+    estado: string;
+    timestampCampo?: "alistado_en" | "enviado_en" | "entregado_en";
+    proximaAlarmaEn: Date | null;
+    transportadora?: string;
+    numeroGuia?: string;
+  },
 ) {
   const campoTimestamp = params.timestampCampo ? `, ${params.timestampCampo} = NOW()` : "";
-  await client.query(`UPDATE pedidos SET estado = $1, proxima_alarma_en = $2${campoTimestamp} WHERE id = $3`, [
-    params.estado,
-    params.proximaAlarmaEn,
-    id,
-  ]);
+  await client.query(
+    `UPDATE pedidos SET estado = $1, proxima_alarma_en = $2,
+       transportadora = COALESCE($4, transportadora),
+       numero_guia = COALESCE($5, numero_guia)
+       ${campoTimestamp}
+     WHERE id = $3`,
+    [params.estado, params.proximaAlarmaEn, id, params.transportadora ?? null, params.numeroGuia ?? null],
+  );
 }
 
 export async function crearAbono(

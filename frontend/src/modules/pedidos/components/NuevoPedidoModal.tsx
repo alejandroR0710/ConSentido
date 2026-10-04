@@ -47,8 +47,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   const [destinatarioTelefono, setDestinatarioTelefono] = useState("");
   const [direccionEnvio, setDireccionEnvio] = useState("");
   const [ciudadEnvio, setCiudadEnvio] = useState("");
-  const [transportadora, setTransportadora] = useState("");
-  const [numeroGuia, setNumeroGuia] = useState("");
   const [notasEntrega, setNotasEntrega] = useState("");
 
   const [conAbono, setConAbono] = useState(false);
@@ -95,8 +93,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
         destinatarioTelefono: destinatarioTelefono.trim() || undefined,
         direccionEnvio: direccionEnvio.trim() || undefined,
         ciudadEnvio: ciudadEnvio.trim() || undefined,
-        transportadora: transportadora.trim() || undefined,
-        numeroGuia: numeroGuia.trim() || undefined,
         notasEntrega: notasEntrega.trim() || undefined,
         items: lineasValidas.map((l) => ({
           nombre: l.nombre.trim(),
@@ -236,8 +232,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
             <input value={destinatarioTelefono} onChange={(e) => setDestinatarioTelefono(e.target.value)} placeholder="Teléfono de contacto" className={INPUT_CLASE} />
             <input value={ciudadEnvio} onChange={(e) => setCiudadEnvio(e.target.value)} placeholder="Ciudad" className={INPUT_CLASE} />
             <input value={direccionEnvio} onChange={(e) => setDireccionEnvio(e.target.value)} placeholder="Dirección" className={`${INPUT_CLASE} sm:col-span-2`} />
-            <input value={transportadora} onChange={(e) => setTransportadora(e.target.value)} placeholder="Transportadora" className={INPUT_CLASE} />
-            <input value={numeroGuia} onChange={(e) => setNumeroGuia(e.target.value)} placeholder="Número de guía" className={INPUT_CLASE} />
             <textarea
               value={notasEntrega}
               onChange={(e) => setNotasEntrega(e.target.value)}

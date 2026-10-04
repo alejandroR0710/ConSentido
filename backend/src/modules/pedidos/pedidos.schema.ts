@@ -13,15 +13,21 @@ const itemPedidoSchema = z.object({
 const ESTADOS_DESTINO = ["alistado", "enviado", "entregado", "cancelado"] as const;
 export type EstadoPedido = "pendiente" | (typeof ESTADOS_DESTINO)[number];
 
+// transportadora/numeroGuia NO van acá: recién se conocen al despachar, no
+// al crear el pedido — se capturan en cambiarEstadoPedidoSchema (al marcar
+// "enviado") y se pueden corregir después vía editarPedidoSchema.
 const camposEnvio = {
   destinatarioNombre: z.string().trim().max(150).optional(),
   destinatarioDocumento: z.string().trim().max(30).optional(),
   destinatarioTelefono: z.string().trim().max(30).optional(),
   direccionEnvio: z.string().trim().max(250).optional(),
   ciudadEnvio: z.string().trim().max(100).optional(),
+  notasEntrega: z.string().trim().optional(),
+};
+
+const camposTransporte = {
   transportadora: z.string().trim().max(100).optional(),
   numeroGuia: z.string().trim().max(100).optional(),
-  notasEntrega: z.string().trim().optional(),
 };
 
 export const crearPedidoSchema = z.object({
@@ -53,6 +59,7 @@ export const editarPedidoSchema = z.object({
   fechaEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida").optional(),
   responsableId: z.string().uuid().optional(),
   ...camposEnvio,
+  ...camposTransporte,
 });
 export type EditarPedidoInput = z.infer<typeof editarPedidoSchema>;
 
@@ -61,6 +68,9 @@ export const cambiarEstadoPedidoSchema = z.object({
   // Obligatoria solo si el producto queda en negativo al alistar — el
   // service la exige puntualmente (mismo criterio que Con Sentido).
   observacionInventario: z.string().trim().optional(),
+  // Obligatorias solo al marcar "enviado" (y solo si el pedido no las tenía
+  // ya guardadas de una edición anterior) — el service las exige puntualmente.
+  ...camposTransporte,
 });
 export type CambiarEstadoPedidoInput = z.infer<typeof cambiarEstadoPedidoSchema>;
 

@@ -104,8 +104,6 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
       destinatarioTelefono: input.destinatarioTelefono,
       direccionEnvio: input.direccionEnvio,
       ciudadEnvio: input.ciudadEnvio,
-      transportadora: input.transportadora,
-      numeroGuia: input.numeroGuia,
       notasEntrega: input.notasEntrega,
       costoEstimado,
       precioAcordado,
@@ -195,6 +193,17 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       throw Errors.conflict(`No se puede pasar de "${pedido.estado}" a "${input.estado}"`);
     }
 
+    // Transportadora/guía no se piden al crear el pedido — se vuelven
+    // obligatorias justo al despachar, salvo que ya se hayan guardado antes
+    // vía una edición (PATCH /pedidos/:id).
+    if (input.estado === "enviado") {
+      const transportadora = input.transportadora || pedido.transportadora;
+      const numeroGuia = input.numeroGuia || pedido.numero_guia;
+      if (!transportadora || !numeroGuia) {
+        throw Errors.badRequest("Para marcar como enviado hace falta la transportadora y el número de guía");
+      }
+    }
+
     // Observaciones de inventario negativo por ítem (si las hubo) — se
     // guardan en el historial para no perder por qué quedó en negativo cada
     // producto (antes se usaban solo para el aviso al e-commerce y se
@@ -257,6 +266,8 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       estado: input.estado,
       timestampCampo: TIMESTAMP_POR_ESTADO[input.estado],
       proximaAlarmaEn: siguienteAlarma,
+      transportadora: input.transportadora,
+      numeroGuia: input.numeroGuia,
     });
     await repo.insertHistorial(client, {
       pedidoId: id,

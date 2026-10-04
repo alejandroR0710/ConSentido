@@ -77,6 +77,9 @@ export interface ParametrosPedidos {
   intervalo_alarma_minutos: number;
 }
 
+// transportadora/numeroGuia NO van acá: recién se conocen al despachar, no
+// al crear el pedido — se piden al marcar "enviado" (ver cambiarEstado) y se
+// pueden corregir después con editar().
 export interface CrearPedidoInput {
   clienteId?: string;
   descripcion?: string;
@@ -86,12 +89,15 @@ export interface CrearPedidoInput {
   destinatarioTelefono?: string;
   direccionEnvio?: string;
   ciudadEnvio?: string;
-  transportadora?: string;
-  numeroGuia?: string;
   notasEntrega?: string;
   responsableId?: string;
   items: ItemPedidoInput[];
   abonoInicial?: { monto: number; metodoPago: "efectivo" | "banco"; referenciaBanco?: string };
+}
+
+export interface EditarPedidoInput extends Partial<Omit<CrearPedidoInput, "items" | "abonoInicial">> {
+  transportadora?: string;
+  numeroGuia?: string;
 }
 
 export interface RegistrarAbonoInput {
@@ -112,10 +118,13 @@ export const pedidosApi = {
   },
   obtener: (id: string) => apiFetch<PedidoDetalle>(`/pedidos/${id}`),
   crear: (input: CrearPedidoInput) => apiFetch<PedidoDetalle>("/pedidos", { method: "POST", body: input }),
-  editar: (id: string, input: Partial<Omit<CrearPedidoInput, "items" | "abonoInicial">>) =>
+  editar: (id: string, input: EditarPedidoInput) =>
     apiFetch<PedidoDetalle>(`/pedidos/${id}`, { method: "PATCH", body: input }),
-  cambiarEstado: (id: string, estado: Exclude<EstadoPedido, "pendiente">, observacionInventario?: string) =>
-    apiFetch<PedidoDetalle>(`/pedidos/${id}/estado`, { method: "POST", body: { estado, observacionInventario } }),
+  cambiarEstado: (
+    id: string,
+    estado: Exclude<EstadoPedido, "pendiente">,
+    extra?: { observacionInventario?: string; transportadora?: string; numeroGuia?: string },
+  ) => apiFetch<PedidoDetalle>(`/pedidos/${id}/estado`, { method: "POST", body: { estado, ...extra } }),
   registrarAbono: (id: string, input: RegistrarAbonoInput) =>
     apiFetch<PedidoDetalle>(`/pedidos/${id}/abonos`, { method: "POST", body: input }),
   obtenerParametros: () => apiFetch<ParametrosPedidos>("/pedidos/parametros"),

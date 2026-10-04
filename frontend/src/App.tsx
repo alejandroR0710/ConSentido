@@ -23,6 +23,8 @@ import { MeseroHistorialPage } from "./modules/migao/pages/MeseroHistorialPage";
 import { MeseroPage } from "./modules/migao/pages/MeseroPage";
 import { MigaoHistorialPage } from "./modules/migao/pages/MigaoHistorialPage";
 import { MigaoPage } from "./modules/migao/pages/MigaoPage";
+import { DetallePedidoPage } from "./modules/pedidos/pages/DetallePedidoPage";
+import { PedidosPage } from "./modules/pedidos/pages/PedidosPage";
 import { UsuariosPage } from "./modules/general/pages/UsuariosPage";
 import { CalculadoraVelasPage } from "./modules/velas/pages/CalculadoraVelasPage";
 import { RequireAuth } from "./shared/auth/RequireAuth";
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="/migao/cotizaciones" element={<CotizacionesPage />} />
         <Route path="/cocina" element={<CocinaPage />} />
         <Route path="/cocina/historial" element={<CocinaHistorialPage />} />
+        <Route path="/pedidos" element={<PedidosPage />} />
+        <Route path="/pedidos/:id" element={<DetallePedidoPage />} />
         <Route path="/menu" element={<MenuPage />} />
         <Route path="/usuarios" element={<UsuariosPage />} />
       </Route>

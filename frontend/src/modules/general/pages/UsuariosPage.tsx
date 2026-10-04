@@ -133,10 +133,14 @@ export function UsuariosPage() {
                     <td className="px-3 py-2">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          u.activo ? "bg-brand-green-50 text-brand-green-700" : "bg-red-100 text-red-700"
+                          u.deleted_at
+                            ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                            : u.activo
+                              ? "bg-brand-green-50 text-brand-green-700"
+                              : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {u.activo ? "activo" : "inactivo"}
+                        {u.deleted_at ? "eliminado" : u.activo ? "activo" : "inactivo"}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right">

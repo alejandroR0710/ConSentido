@@ -8,6 +8,7 @@ export interface UsuarioListado {
   rol_id: number;
   rol_nombre: string;
   activo: boolean;
+  deleted_at: string | null;
   ultimo_login: string | null;
   created_at: string;
 }
@@ -19,7 +20,7 @@ export interface Rol {
 
 export async function listUsuarios(): Promise<UsuarioListado[]> {
   const result = await pool.query(
-    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.rol_id, r.nombre AS rol_nombre, u.activo, u.ultimo_login, u.created_at
+    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.rol_id, r.nombre AS rol_nombre, u.activo, u.deleted_at, u.ultimo_login, u.created_at
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
       ORDER BY u.nombre ASC`,
@@ -29,7 +30,7 @@ export async function listUsuarios(): Promise<UsuarioListado[]> {
 
 export async function getUsuarioById(id: string): Promise<UsuarioListado | null> {
   const result = await pool.query(
-    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.rol_id, r.nombre AS rol_nombre, u.activo, u.ultimo_login, u.created_at
+    `SELECT u.id, u.nombre, u.email, u.numero_documento, u.rol_id, r.nombre AS rol_nombre, u.activo, u.deleted_at, u.ultimo_login, u.created_at
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
       WHERE u.id = $1`,
@@ -58,7 +59,7 @@ export async function crearUsuario(params: {
   const result = await pool.query(
     `INSERT INTO usuarios (nombre, email, numero_documento, password_hash, rol_id)
      VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, nombre, email, numero_documento, rol_id, activo, ultimo_login, created_at`,
+     RETURNING id, nombre, email, numero_documento, rol_id, activo, deleted_at, ultimo_login, created_at`,
     [params.nombre, params.email, params.numeroDocumento, params.passwordHash, params.rolId],
   );
   const rol = await getRolById(params.rolId);
@@ -92,7 +93,12 @@ export async function actualizarUsuario(
   if (params.nombre !== undefined) agregar("nombre", params.nombre);
   if (params.passwordHash !== undefined) agregar("password_hash", params.passwordHash);
   if (params.rolId !== undefined) agregar("rol_id", params.rolId);
-  if (params.activo !== undefined) agregar("activo", params.activo);
+  if (params.activo !== undefined) {
+    agregar("activo", params.activo);
+    // Reactivar una cuenta marcada como eliminada (deleted_at) la saca de
+    // ese estado — no tendría sentido quedar "activa" y "eliminada" a la vez.
+    if (params.activo === true) agregar("deleted_at", null);
+  }
   if (params.identificador) {
     agregar("email", params.identificador.tipo === "email" ? params.identificador.valor : null);
     agregar("numero_documento", params.identificador.tipo === "documento" ? params.identificador.valor : null);
@@ -106,8 +112,21 @@ export async function actualizarUsuario(
 }
 
 /** Borrado físico — solo tiene éxito si el usuario nunca tuvo actividad (las FK
- *  sin ON DELETE CASCADE lo impiden con un 23503). Con historial, usar "Desactivar". */
+ *  sin ON DELETE CASCADE lo impiden con un 23503). Si falla por eso, el
+ *  service cae a eliminarUsuarioSuave en su lugar. */
 export async function eliminarUsuario(id: string): Promise<boolean> {
   const result = await pool.query(`DELETE FROM usuarios WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Borrado suave: el usuario sigue existiendo (todo su historial sigue
+ *  apuntando a su id sin tocar ninguna otra tabla), pero queda marcado como
+ *  eliminado — también se desactiva, así los mismos checks de login que ya
+ *  existen (auth.service.ts) le bloquean el acceso sin cambios ahí. */
+export async function eliminarUsuarioSuave(id: string): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE usuarios SET deleted_at = NOW(), activo = false WHERE id = $1 AND deleted_at IS NULL`,
+    [id],
+  );
   return (result.rowCount ?? 0) > 0;
 }

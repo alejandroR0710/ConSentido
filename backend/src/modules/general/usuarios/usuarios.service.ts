@@ -106,7 +106,15 @@ export async function editarUsuario(id: string, input: EditarUsuarioInput, actor
   }
 }
 
-export async function eliminarUsuario(id: string, actor: ActorUsuario) {
+/**
+ * Intenta borrar al usuario físicamente; si tiene actividad registrada en
+ * cualquier otra tabla (órdenes, ventas, caja, pedidos...), las FK sin
+ * ON DELETE CASCADE rechazan ese DELETE (23503) — en ese caso, en vez de
+ * fallar, se cae a un borrado suave (deleted_at + activo=false): el usuario
+ * sigue vinculado en todo su historial tal cual estaba, solo queda marcado
+ * como eliminado.
+ */
+export async function eliminarUsuario(id: string, actor: ActorUsuario): Promise<{ tipo: "fisico" | "suave" }> {
   const objetivo = await repo.getUsuarioById(id);
   if (!objetivo) throw Errors.notFound("Usuario no encontrado");
 
@@ -119,14 +127,17 @@ export async function eliminarUsuario(id: string, actor: ActorUsuario) {
     throw Errors.forbidden("Solo Super Root puede eliminar cuentas Root o Super Root");
   }
 
+  if (objetivo.deleted_at) return { tipo: "suave" }; // ya estaba eliminado — idempotente
+
   try {
     const borrado = await repo.eliminarUsuario(id);
     if (!borrado) throw Errors.notFound("Usuario no encontrado");
+    return { tipo: "fisico" };
   } catch (err) {
     if (err instanceof Error && (err as { code?: string }).code === "23503") {
-      throw Errors.conflict(
-        'No se puede eliminar: ya tiene actividad registrada (órdenes, movimientos, etc.). Usa "Desactivar" en su lugar.',
-      );
+      const marcado = await repo.eliminarUsuarioSuave(id);
+      if (!marcado) throw Errors.notFound("Usuario no encontrado");
+      return { tipo: "suave" };
     }
     throw err;
   }

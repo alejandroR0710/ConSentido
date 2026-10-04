@@ -193,6 +193,11 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
           >
             {cambiandoEstado ? "Actualizando..." : objetivo.activo ? "Desactivar" : "Reactivar cuenta"}
           </button>
+          {objetivo.deleted_at && (
+            <p className="mb-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Esta cuenta está marcada como eliminada — "Reactivar" también le quita esa marca.
+            </p>
+          )}
 
           <button
             onClick={() => setConfirmandoEliminar(true)}
@@ -207,9 +212,10 @@ export function EditarUsuarioModal({ usuario: objetivo, roles, onCerrar, onGuard
       {confirmandoEliminar && (
         <Modal titulo="Eliminar usuario" onCerrar={() => !eliminando && setConfirmandoEliminar(false)} maxWidth="sm:max-w-sm">
           <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
-            ¿Seguro que quieres eliminar a <span className="font-semibold">"{objetivo.nombre}"</span>? Esta acción no
-            se puede deshacer. Si ya tiene actividad registrada (órdenes, movimientos de caja, etc.), la eliminación
-            se rechazará y deberás usar "Desactivar" en su lugar.
+            ¿Seguro que quieres eliminar a <span className="font-semibold">"{objetivo.nombre}"</span>? Si nunca tuvo
+            actividad, se borra por completo. Si ya tiene actividad registrada (órdenes, movimientos de caja, etc.),
+            en vez de borrarse quedará marcado como "eliminado" — no podrá iniciar sesión, pero su historial se
+            conserva intacto.
           </p>
           <div className="flex gap-2">
             <button

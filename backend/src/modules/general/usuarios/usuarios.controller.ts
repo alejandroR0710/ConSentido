@@ -30,6 +30,6 @@ export async function editarUsuarioController(req: Request, res: Response) {
 }
 
 export async function eliminarUsuarioController(req: Request, res: Response) {
-  await service.eliminarUsuario(req.params.id, actorDe(req));
-  return ok(res, { eliminado: true });
+  const resultado = await service.eliminarUsuario(req.params.id, actorDe(req));
+  return ok(res, { eliminado: true, tipo: resultado.tipo });
 }

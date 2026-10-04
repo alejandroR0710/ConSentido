@@ -135,6 +135,7 @@ export interface Usuario {
   rol_id: number;
   rol_nombre: string;
   activo: boolean;
+  deleted_at: string | null;
   ultimo_login: string | null;
   created_at: string;
 }
@@ -167,5 +168,6 @@ export const usuariosApi = {
       identificador?: string;
     },
   ) => apiFetch<Usuario>(`/usuarios/${id}`, { method: "PATCH", body: input }),
-  eliminar: (id: string) => apiFetch<{ eliminado: boolean }>(`/usuarios/${id}`, { method: "DELETE" }),
+  eliminar: (id: string) =>
+    apiFetch<{ eliminado: boolean; tipo: "fisico" | "suave" }>(`/usuarios/${id}`, { method: "DELETE" }),
 };

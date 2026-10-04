@@ -71,6 +71,10 @@ CREATE TABLE usuarios (
   password_hash     TEXT NOT NULL,
   rol_id            INT NOT NULL,
   activo            BOOLEAN NOT NULL DEFAULT true,
+  -- Se llena cuando "Eliminar" no pudo borrar físicamente al tener actividad
+  -- registrada (ver usuarios.service.ts::eliminarUsuario) — el usuario sigue
+  -- vinculado en todo su historial, solo queda marcado como eliminado.
+  deleted_at        DATETIME(6) NULL,
   ultimo_login      DATETIME(6),
   created_at        DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at        DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),

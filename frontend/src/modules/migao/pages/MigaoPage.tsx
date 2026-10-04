@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
@@ -234,6 +234,25 @@ export function MigaoPage() {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el detalle de la orden");
     }
   }
+
+  // Deep link desde el aviso de "cuentas abiertas" al cerrar turno (ver
+  // OrdenesAbiertasAviso.tsx) — abre esa cuenta puntual al entrar, sin que
+  // haya que buscarla a mano en el plano/lista de mesas.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const ordenId = searchParams.get("orden");
+    if (!ordenId) return;
+    seleccionarOrden(ordenId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("orden");
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function volverALista() {
     setOrdenSeleccionadaId(null);

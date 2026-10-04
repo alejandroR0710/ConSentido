@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { cajaApi, type ResumenTurno } from "../../modules/caja/api";
 import { CerrarTurnoModal } from "../../modules/caja/components/CerrarTurnoModal";
+import { OrdenesAbiertasAviso } from "../../modules/caja/components/OrdenesAbiertasAviso";
+import { migaoApi, type OrdenResumen } from "../../modules/migao/api";
 import { tieneAccesoTotal } from "../auth/roles";
 import { useAuth } from "../auth/useAuth";
 
@@ -21,6 +23,7 @@ export function IndicadorTurnoCaja() {
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [cargandoResumen, setCargandoResumen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ordenesAbiertas, setOrdenesAbiertas] = useState<OrdenResumen[] | null>(null);
 
   const puedeVer = usuario?.rol === "Cajero" || tieneAccesoTotal(usuario?.rol);
 
@@ -47,6 +50,14 @@ export function IndicadorTurnoCaja() {
     setCargandoResumen(true);
     setError(null);
     try {
+      // Antes de ofrecer el cierre, se revisa si quedan cuentas abiertas en
+      // Migao — cerrarlas primero evita que sus cobros (y lo que generarían
+      // en Caja) se queden huérfanos del turno que se está cerrando.
+      const abiertas = await migaoApi.listarOrdenesAbiertas();
+      if (abiertas.length > 0) {
+        setOrdenesAbiertas(abiertas);
+        return;
+      }
       const turno = await cajaApi.obtenerTurnoActual();
       if (!turno) {
         setTurnoAbierto(false);
@@ -85,6 +96,9 @@ export function IndicadorTurnoCaja() {
         <span className="hidden sm:inline">{cargandoResumen ? "Cargando..." : "Cerrar turno"}</span>
       </button>
       {error && <span className="hidden text-xs text-red-600 sm:inline">{error}</span>}
+      {ordenesAbiertas && (
+        <OrdenesAbiertasAviso ordenes={ordenesAbiertas} onCerrar={() => setOrdenesAbiertas(null)} />
+      )}
       {resumen && (
         <CerrarTurnoModal
           resumen={resumen}

@@ -3,6 +3,7 @@ import { Errors } from "../../../shared/utils/app-error";
 import { deltaEcommerce, getProductoParaVenta, reponerStock } from "../../con_sentido/con_sentido.repository";
 import { descontarParaVenta, motivoVenta } from "../../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../../integracion_ecommerce/salida";
+import { listOrdenesAbiertas } from "../../migao/migao.repository";
 import { descomponerPago, exigirMontoRecibidoEfectivo, exigirReferenciaBanco } from "../../../shared/utils/pago-mixto";
 import * as repo from "./caja.repository";
 import {
@@ -39,6 +40,20 @@ export async function cerrarTurno(turnoId: string, input: CerrarTurnoInput) {
   const turno = await repo.getTurnoById(turnoId);
   if (!turno) throw Errors.notFound("Turno de caja no encontrado");
   if (turno.estado === "cerrado") throw Errors.conflict("Este turno ya está cerrado");
+
+  // El frontend ya revisa esto antes de ofrecer el cierre (ver
+  // IndicadorTurnoCaja.tsx) y manda a cobrar cada cuenta primero — este es
+  // el respaldo del lado del servidor por si el estado cambió justo en el
+  // medio (otra cuenta se abrió después de esa revisión).
+  const ordenesAbiertas = await listOrdenesAbiertas();
+  if (ordenesAbiertas.length > 0) {
+    const etiquetas = ordenesAbiertas
+      .map((o) => (o.mesa_numero ? `Mesa ${o.mesa_numero}` : o.nombre ?? "cuenta sin mesa"))
+      .join(", ");
+    throw Errors.conflict(
+      `No se puede cerrar el turno: hay ${ordenesAbiertas.length} cuenta(s) abierta(s) en Migao (${etiquetas}). Cierra esas cuentas primero.`,
+    );
+  }
 
   const { ingresosEfectivo, egresosEfectivo, ingresosBanco, egresosBanco } =
     await repo.sumMovimientosPorTurno(turnoId);

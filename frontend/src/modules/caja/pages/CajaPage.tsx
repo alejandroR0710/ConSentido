@@ -164,6 +164,17 @@ export function CajaPage() {
                 📅 Historial
               </Link>
             )}
+            {resumen && !sinTurno && (
+              <button
+                onClick={() => {
+                  setResumenParaCierre(resumen);
+                  setModalAbierto("cierre");
+                }}
+                className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                Cerrar turno
+              </button>
+            )}
           </div>
           <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
             Un solo turno para todo el negocio. Cada turno arranca con la base que escribas — no se hereda nada del
@@ -500,16 +511,6 @@ export function CajaPage() {
               </div>
             )}
           </div>
-
-          <button
-            onClick={() => {
-              setResumenParaCierre(resumen);
-              setModalAbierto("cierre");
-            }}
-            className="w-full max-w-xs rounded-md border border-red-300 px-4 py-2 font-medium text-red-600 hover:bg-red-50"
-          >
-            Cerrar turno
-          </button>
         </>
       )}
 

@@ -23,7 +23,7 @@ export async function listUsuarios(): Promise<UsuarioListado[]> {
     `SELECT u.id, u.nombre, u.email, u.numero_documento, u.rol_id, r.nombre AS rol_nombre, u.activo, u.deleted_at, u.ultimo_login, u.created_at
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
-      ORDER BY u.nombre ASC`,
+      ORDER BY (u.deleted_at IS NOT NULL) ASC, u.nombre ASC`,
   );
   return result.rows;
 }

@@ -135,7 +135,8 @@ WHERE p.codigo IN (
   'pedidos.ver',
   'pedidos.crear',
   'pedidos.cambiar_estado',
-  'con_sentido.clientes.ver'
+  'con_sentido.clientes.ver',
+  'con_sentido.productos.ver'
 );
 
 -- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo.
@@ -185,7 +186,8 @@ WHERE p.codigo IN (
   'pedidos.ver',
   'pedidos.crear',
   'pedidos.cambiar_estado',
-  'con_sentido.clientes.ver'
+  'con_sentido.clientes.ver',
+  'con_sentido.productos.ver'
 );
 
 -- Usuario Super Root

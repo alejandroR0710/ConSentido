@@ -27,10 +27,16 @@ ALTER TABLE pedidos
 
 -- El enum de estado nunca tuvo datos reales (el módulo no existía) — se
 -- redefine limpio. El nombre del CHECK inline lo pone MySQL solo: se busca
--- por catálogo en vez de adivinarlo.
-SET @chk := (SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedidos'
-               AND CONSTRAINT_TYPE = 'CHECK' LIMIT 1);
+-- por catálogo en vez de adivinarlo (hoy `pedidos` solo tiene este CHECK,
+-- pero se filtra por CHECK_CLAUSE igual, por las mismas dudas que en
+-- pedido_abonos más abajo).
+SET @chk := (SELECT tc.CONSTRAINT_NAME
+             FROM information_schema.TABLE_CONSTRAINTS tc
+             JOIN information_schema.CHECK_CONSTRAINTS cc
+               ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+             WHERE tc.TABLE_SCHEMA = DATABASE() AND tc.TABLE_NAME = 'pedidos'
+               AND tc.CONSTRAINT_TYPE = 'CHECK' AND cc.CHECK_CLAUSE LIKE '%estado%'
+             LIMIT 1);
 SET @sql := CONCAT('ALTER TABLE pedidos DROP CHECK ', @chk);
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
@@ -81,9 +87,17 @@ CREATE INDEX idx_pedido_historial_pedido ON pedido_historial(pedido_id);
 
 -- --- pedido_abonos: el metodo_pago existente no coincide con Caja General
 -- (efectivo/banco) — se acota para poder generar un ingreso real.
-SET @chk2 := (SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedido_abonos'
-                AND CONSTRAINT_TYPE = 'CHECK' LIMIT 1);
+-- pedido_abonos tiene DOS checks (monto > 0 y metodo_pago IN (...)) — hay que
+-- identificar el de metodo_pago por su CHECK_CLAUSE, no por LIMIT 1 a ciegas
+-- (con dos candidatos, un LIMIT 1 sin filtrar podría soltar el de "monto > 0"
+-- en vez del que se quiere reemplazar, dejando el dinero sin esa protección).
+SET @chk2 := (SELECT tc.CONSTRAINT_NAME
+              FROM information_schema.TABLE_CONSTRAINTS tc
+              JOIN information_schema.CHECK_CONSTRAINTS cc
+                ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+              WHERE tc.TABLE_SCHEMA = DATABASE() AND tc.TABLE_NAME = 'pedido_abonos'
+                AND tc.CONSTRAINT_TYPE = 'CHECK' AND cc.CHECK_CLAUSE LIKE '%metodo_pago%'
+              LIMIT 1);
 SET @sql2 := CONCAT('ALTER TABLE pedido_abonos DROP CHECK ', @chk2);
 PREPARE stmt2 FROM @sql2; EXECUTE stmt2; DEALLOCATE PREPARE stmt2;
 
@@ -131,4 +145,16 @@ FROM roles r
 CROSS JOIN permisos p
 WHERE r.nombre IN ('Cajero', 'Administrador')
   AND p.codigo = 'con_sentido.clientes.ver'
+  AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+
+-- Y necesitan ver el catálogo de productos para que el autocompletar de
+-- ítems del pedido (SugerenciasProducto) funcione — sin esto, cada ítem
+-- queda como texto libre sin productoId y el alistamiento nunca descuenta
+-- stock para ellos (hoy ese permiso también es exclusivo de Super Root/Root).
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permisos p
+WHERE r.nombre IN ('Cajero', 'Administrador')
+  AND p.codigo = 'con_sentido.productos.ver'
   AND NOT EXISTS (SELECT 1 FROM roles_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);

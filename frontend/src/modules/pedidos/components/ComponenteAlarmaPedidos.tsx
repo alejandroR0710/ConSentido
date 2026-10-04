@@ -1,21 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { reproducirAlerta } from "../../migao/beep";
 import { pedidosApi, type Pedido } from "../api";
 
 const POLL_MS = 60000;
+const INTERVALO_POR_DEFECTO_MS = 30 * 60000;
 
 /**
  * Vive montado en el layout general (ver AppShell.tsx), solo para Root/Super
- * Root. Consulta cada minuto si hay pedidos vencidos (mismo intervalo que el
- * scheduler del backend, que reprograma `proxima_alarma_en` cada vez que
- * avisa) — si hay alguno, suena la alerta y muestra la ventana. Si se
- * cierra sin cambiar el estado del pedido, vuelve a aparecer en el
- * siguiente ciclo porque el pedido sigue contando como "vencido".
+ * Root. Revisa cada minuto si hay pedidos vencidos — la lista mostrada se
+ * mantiene siempre al día (el backend la calcula sin depender de cuándo
+ * corrió su propio scheduler de push), pero el sonido/reapertura solo se
+ * repite cada `intervalo_alarma_minutos` (no en cada poll de 60s) para que
+ * la alarma suene "cada cierto tiempo" y no cada minuto. Si se cierra sin
+ * cambiar el estado del pedido, vuelve a sonar y abrirse en el siguiente
+ * ciclo porque el pedido sigue contando como "vencido".
  */
 export function ComponenteAlarmaPedidos() {
   const [vencidos, setVencidos] = useState<Pedido[]>([]);
   const [cerrado, setCerrado] = useState(false);
+  const intervaloMsRef = useRef(INTERVALO_POR_DEFECTO_MS);
+  const ultimoSonidoRef = useRef(0);
+
+  useEffect(() => {
+    pedidosApi
+      .obtenerParametros()
+      .then((p) => {
+        intervaloMsRef.current = p.intervalo_alarma_minutos * 60000;
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelado = false;
@@ -24,8 +38,14 @@ export function ComponenteAlarmaPedidos() {
         const resultado = await pedidosApi.listar({ vencidos: true });
         if (cancelado) return;
         if (resultado.length > 0) {
-          reproducirAlerta();
-          setCerrado(false);
+          const ahora = Date.now();
+          if (ahora - ultimoSonidoRef.current >= intervaloMsRef.current) {
+            reproducirAlerta();
+            setCerrado(false);
+            ultimoSonidoRef.current = ahora;
+          }
+        } else {
+          ultimoSonidoRef.current = 0;
         }
         setVencidos(resultado);
       } catch {

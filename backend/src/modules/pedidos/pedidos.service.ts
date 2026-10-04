@@ -195,6 +195,12 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       throw Errors.conflict(`No se puede pasar de "${pedido.estado}" a "${input.estado}"`);
     }
 
+    // Observaciones de inventario negativo por ítem (si las hubo) — se
+    // guardan en el historial para no perder por qué quedó en negativo cada
+    // producto (antes se usaban solo para el aviso al e-commerce y se
+    // descartaban, ver Review Focus del plan).
+    const observacionesInventario: Record<string, string> = {};
+
     if (input.estado === "alistado") {
       const items = await repo.getItemsPorPedido(id, client);
       for (const item of items) {
@@ -206,6 +212,7 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
           observacion: input.observacionInventario,
         });
         if (!descontado) continue; // ya no está en el catálogo — no bloquea el alistamiento
+        if (descontado.observacion) observacionesInventario[item.nombre] = descontado.observacion;
         if (descontado.producto.ecommerce_product_id && descontado.deltaEcommerce !== 0) {
           await encolarDeltaStock(client, {
             productId: descontado.producto.ecommerce_product_id,
@@ -254,7 +261,11 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
     await repo.insertHistorial(client, {
       pedidoId: id,
       accion: "cambio_estado",
-      detalle: { de: pedido.estado, a: input.estado },
+      detalle: {
+        de: pedido.estado,
+        a: input.estado,
+        ...(Object.keys(observacionesInventario).length ? { observacionesInventario } : {}),
+      },
       usuarioId,
     });
 
@@ -273,7 +284,10 @@ export async function registrarAbono(id: string, input: RegistrarAbonoPedidoInpu
   try {
     await client.query("BEGIN");
 
-    const pedido = await repo.getPedidoById(id, client);
+    // FOR UPDATE: bloquea la fila hasta el COMMIT, para que dos abonos
+    // simultáneos (doble clic, dos cajeros) no lean el mismo saldo pendiente
+    // y ambos pasen la validación de abajo.
+    const pedido = await repo.getPedidoParaCambiarEstado(client, id);
     if (!pedido) throw Errors.notFound("Pedido no encontrado");
     if (pedido.estado === "cancelado") throw Errors.conflict("Este pedido está cancelado");
 

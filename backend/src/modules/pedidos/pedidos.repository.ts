@@ -25,7 +25,16 @@ export async function listPedidos(filtros: FiltrosListarPedidos) {
     params.push(filtros.estado);
   }
   if (filtros.vencidos) {
-    condiciones.push(`p.proxima_alarma_en IS NOT NULL AND p.proxima_alarma_en <= NOW()`);
+    // No se usa proxima_alarma_en acá: ese campo lo adelanta el scheduler de
+    // alarma.ts apenas lo nota vencido (cada 60s), así que solo queda <= NOW()
+    // durante una ventana angosta de hasta 60s por ciclo — un listado que
+    // dependiera de eso podría "perderse" el vencimiento si consulta justo
+    // después de que el scheduler ya lo reprogramó. Acá se recalcula directo
+    // desde cuándo empezó a correr el reloj de este estado, así que el
+    // resultado es siempre correcto sin importar cuándo corrió el scheduler.
+    condiciones.push(
+      `p.estado IN ('pendiente', 'alistado') AND TIMESTAMPDIFF(MINUTE, COALESCE(p.alistado_en, p.created_at), NOW()) >= (SELECT intervalo_alarma_minutos FROM pedidos_parametros WHERE id = true)`,
+    );
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
   const result = await pool.query(`${SELECT_PEDIDO} ${where} ORDER BY p.created_at DESC`, params);

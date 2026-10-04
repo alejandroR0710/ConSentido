@@ -990,42 +990,59 @@ CREATE TABLE facturas (
 -- ============================================================================
 
 CREATE TABLE pedidos (
-  id              CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-  cliente_id      CHAR(36) NOT NULL,
-  descripcion     TEXT NOT NULL,
-  fecha_entrega   DATE NOT NULL,
-  costo_estimado  DECIMAL(12,2) NOT NULL DEFAULT 0,
-  precio_acordado DECIMAL(12,2) NOT NULL DEFAULT 0,
-  estado          VARCHAR(20) NOT NULL DEFAULT 'pendiente'
-                  CHECK (estado IN ('pendiente','en_produccion','listo','entregado','cancelado')),
-  responsable_id  CHAR(36),
-  created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  updated_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  id                      CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  cliente_id              CHAR(36) NULL,
+  descripcion             TEXT NOT NULL,
+  fecha_entrega           DATE NOT NULL,
+  destinatario_nombre     VARCHAR(150) NULL,
+  destinatario_documento  VARCHAR(30) NULL,
+  destinatario_telefono   VARCHAR(30) NULL,
+  direccion_envio         VARCHAR(250) NULL,
+  ciudad_envio            VARCHAR(100) NULL,
+  transportadora          VARCHAR(100) NULL,
+  numero_guia             VARCHAR(100) NULL,
+  notas_entrega           TEXT NULL,
+  costo_estimado          DECIMAL(12,2) NOT NULL DEFAULT 0,
+  precio_acordado         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  estado                  VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+                           CHECK (estado IN ('pendiente','alistado','enviado','entregado','cancelado')),
+  responsable_id          CHAR(36) NULL,
+  creado_por_id           CHAR(36) NULL,
+  alistado_en             DATETIME(6) NULL,
+  enviado_en              DATETIME(6) NULL,
+  entregado_en            DATETIME(6) NULL,
+  proxima_alarma_en       DATETIME(6) NULL,
+  created_at              DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at              DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (responsable_id) REFERENCES usuarios(id),
+  FOREIGN KEY (creado_por_id) REFERENCES usuarios(id),
   INDEX idx_pedidos_cliente (cliente_id),
-  INDEX idx_pedidos_estado_fecha (estado, fecha_entrega)
+  INDEX idx_pedidos_estado_fecha (estado, fecha_entrega),
+  INDEX idx_pedidos_proxima_alarma (proxima_alarma_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 ALTER TABLE facturas ADD CONSTRAINT fk_facturas_pedido FOREIGN KEY (pedido_id) REFERENCES pedidos(id);
+CREATE UNIQUE INDEX idx_facturas_pedido_unica ON facturas(pedido_id);
 
 CREATE TABLE pedido_items (
-  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  pedido_id   CHAR(36) NOT NULL,
-  insumo_id   CHAR(36),
-  producto_id CHAR(36),
-  cantidad    DECIMAL(12,3) NOT NULL DEFAULT 1,
-  CHECK (insumo_id IS NOT NULL OR producto_id IS NOT NULL),
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  pedido_id       CHAR(36) NOT NULL,
+  producto_id     CHAR(36) NULL,
+  sku             VARCHAR(50) NULL,
+  nombre          VARCHAR(150) NOT NULL,
+  cantidad        DECIMAL(12,3) NOT NULL DEFAULT 1 CHECK (cantidad > 0),
+  precio_unitario DECIMAL(12,2) NOT NULL DEFAULT 0,
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
-  FOREIGN KEY (insumo_id) REFERENCES insumos(id),
   FOREIGN KEY (producto_id) REFERENCES productos(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE INDEX idx_pedido_items_pedido ON pedido_items(pedido_id);
 
 CREATE TABLE pedido_abonos (
   id          CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   pedido_id   CHAR(36) NOT NULL,
   monto       DECIMAL(12,2) NOT NULL CHECK (monto > 0),
-  metodo_pago VARCHAR(30) NOT NULL CHECK (metodo_pago IN ('efectivo','tarjeta','transferencia','otro')),
+  metodo_pago VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
   usuario_id  CHAR(36),
   created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
@@ -1034,16 +1051,23 @@ CREATE TABLE pedido_abonos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 CREATE TABLE pedido_historial (
-  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-  pedido_id       CHAR(36) NOT NULL,
-  estado_anterior VARCHAR(20),
-  estado_nuevo    VARCHAR(20) NOT NULL,
-  usuario_id      CHAR(36),
-  created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  pedido_id   CHAR(36) NOT NULL,
+  accion      VARCHAR(30) NOT NULL,
+  detalle     JSON NULL,
+  usuario_id  CHAR(36) NULL,
+  created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
   INDEX idx_pedido_historial_pedido (pedido_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE pedidos_parametros (
+  id                        BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  intervalo_alarma_minutos  INT NOT NULL DEFAULT 30,
+  updated_at                DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+);
+INSERT INTO pedidos_parametros (id) VALUES (true);
 
 -- ============================================================================
 -- 8. SEED MINIMO DE MODULOS

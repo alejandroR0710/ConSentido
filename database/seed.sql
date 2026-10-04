@@ -77,7 +77,13 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   -- Calculadora de precio de concreto: igual que la de velas, exclusiva de
   -- Root/Super Root.
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_concreto',         'concreto.ver'),
-  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_concreto', 'concreto.administrar');
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_concreto', 'concreto.administrar'),
+  -- Pedidos/encargos: Cajero/Administrador/Root/Super Root ven y crean;
+  -- el intervalo de la alarma solo lo administra Root/Super Root.
+  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'ver',                    'pedidos.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'crear',                  'pedidos.crear'),
+  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'cambiar_estado',         'pedidos.cambiar_estado'),
+  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'administrar_parametros', 'pedidos.administrar_parametros');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES
@@ -125,7 +131,11 @@ WHERE p.codigo IN (
   'migao.mesas.ver',
   'migao.cotizaciones.ver',
   'migao.cotizaciones.crear',
-  'migao.cotizaciones.eliminar'
+  'migao.cotizaciones.eliminar',
+  'pedidos.ver',
+  'pedidos.crear',
+  'pedidos.cambiar_estado',
+  'con_sentido.clientes.ver'
 );
 
 -- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo.
@@ -171,7 +181,11 @@ WHERE p.codigo IN (
   'insumos.insumos.editar',
   'migao.productos.ver',
   'migao.productos.crear',
-  'migao.productos.editar'
+  'migao.productos.editar',
+  'pedidos.ver',
+  'pedidos.crear',
+  'pedidos.cambiar_estado',
+  'con_sentido.clientes.ver'
 );
 
 -- Usuario Super Root

@@ -4,6 +4,7 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { cajaApi } from "../../caja/api";
 import { facturaCajaAReciboProps } from "../../caja/factura";
 import { conSentidoApi } from "../../con_sentido/api";
+import { pedidosApi } from "../../pedidos/api";
 import { migaoApi } from "../api";
 import { facturaAReciboProps } from "../factura";
 
@@ -16,7 +17,8 @@ type OrigenFactura =
   | { tipo: "orden"; id: string }
   | { tipo: "venta"; id: string }
   | { tipo: "venta_con_sentido"; id: string }
-  | { tipo: "venta_caja"; id: string };
+  | { tipo: "venta_caja"; id: string }
+  | { tipo: "pedido"; id: string };
 
 interface BotonFacturaProps {
   origen: OrigenFactura;
@@ -47,7 +49,9 @@ export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonF
           ? await migaoApi.obtenerFactura(origen.id)
           : origen.tipo === "venta"
             ? await migaoApi.obtenerFacturaPorVenta(origen.id)
-            : await conSentidoApi.obtenerFactura(origen.id);
+            : origen.tipo === "pedido"
+              ? await pedidosApi.obtenerFactura(origen.id)
+              : await conSentidoApi.obtenerFactura(origen.id);
       setRecibo(facturaAReciboProps(factura));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar la factura");

@@ -6,6 +6,7 @@ import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
+import { BotonFactura } from "../../migao/components/BotonFactura";
 import { pedidosApi, type EstadoPedido, type PedidoDetalle } from "../api";
 
 const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, { estado: Exclude<EstadoPedido, "pendiente">; etiqueta: string }>> = {
@@ -110,6 +111,10 @@ export function DetallePedidoPage() {
           Estado actual: <span className="font-semibold capitalize">{pedido.estado}</span>
           {pedido.cliente_nombre ? ` · Cliente: ${pedido.cliente_nombre}` : ""}
         </p>
+        <BotonFactura
+          origen={{ tipo: "pedido", id: pedido.id }}
+          className="mt-2 rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+        />
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -1,4 +1,5 @@
 import { apiFetch } from "../../shared/api/client";
+import type { FacturaOrden } from "../migao/api";
 
 export type EstadoPedido = "pendiente" | "alistado" | "enviado" | "entregado" | "cancelado";
 
@@ -120,4 +121,5 @@ export const pedidosApi = {
   obtenerParametros: () => apiFetch<ParametrosPedidos>("/pedidos/parametros"),
   actualizarParametros: (intervaloAlarmaMinutos: number) =>
     apiFetch<ParametrosPedidos>("/pedidos/parametros", { method: "PUT", body: { intervaloAlarmaMinutos } }),
+  obtenerFactura: (id: string) => apiFetch<FacturaOrden>(`/pedidos/${id}/factura`),
 };

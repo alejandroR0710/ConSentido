@@ -254,3 +254,22 @@ export async function reprogramarAlarma(id: string, minutos: number) {
     [id, minutos],
   );
 }
+
+/** Get-or-create idempotente — mismo patrón que con_sentido.repository.ts::
+ *  getOrCrearFactura, comparte la misma facturas_numero_seq. El índice único
+ *  en pedido_id (ver migración 2026-10-04) blinda contra doble clic. */
+export async function getOrCrearFacturaPedido(
+  params: { pedidoId: string; subtotal: number; total: number },
+  executor: Executor = pool,
+) {
+  const insert = await executor.query(
+    `INSERT INTO facturas (pedido_id, numero, tipo, subtotal, total)
+     VALUES ($1, 'F-' || lpad(nextval('facturas_numero_seq'), 6, '0'), 'factura', $2, $3)
+     ON CONFLICT (pedido_id) WHERE pedido_id IS NOT NULL DO NOTHING
+     RETURNING *`,
+    [params.pedidoId, params.subtotal, params.total],
+  );
+  if (insert.rowCount) return insert.rows[0];
+  const existente = await executor.query(`SELECT * FROM facturas WHERE pedido_id = $1`, [params.pedidoId]);
+  return existente.rows[0];
+}

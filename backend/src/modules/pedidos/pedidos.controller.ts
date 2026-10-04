@@ -47,3 +47,7 @@ export async function actualizarParametrosPedidosController(req: Request, res: R
   const data = actualizarParametrosPedidosSchema.parse(req.body);
   return ok(res, await service.actualizarParametros(data.intervaloAlarmaMinutos));
 }
+
+export async function obtenerFacturaPedidoController(req: Request, res: Response) {
+  return ok(res, await service.obtenerFacturaPedido(req.params.id));
+}

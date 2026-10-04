@@ -328,3 +328,40 @@ export const actualizarParametros = (intervaloAlarmaMinutos: number) => repo.act
 
 /** Usada por el chequeo periódico de alarmas (Task 6) — nunca por una ruta HTTP. */
 export const listarPedidosVencidos = () => repo.listPedidosVencidos();
+
+/**
+ * Factura imprimible del pedido — mismo formato normalizado que
+ * con_sentido.service.ts::obtenerFacturaVenta (mesa/mesero/comensal/propina
+ * quedan null, acá no aplican) para reusar el mismo componente de impresión
+ * del frontend. Sin descuento en este flujo: subtotal y total son iguales.
+ */
+export async function obtenerFacturaPedido(id: string) {
+  const pedido = await repo.getPedidoById(id);
+  if (!pedido) throw Errors.notFound("Pedido no encontrado");
+
+  const [items, abonos] = await Promise.all([repo.getItemsPorPedido(id), repo.getAbonosPorPedido(id)]);
+  const monto = Number(pedido.precio_acordado);
+  const factura = await repo.getOrCrearFacturaPedido({ pedidoId: id, subtotal: monto, total: monto });
+
+  return {
+    numeroFactura: factura.numero as string,
+    fecha: pedido.created_at as string,
+    mesaNumero: null,
+    mesaPiso: null,
+    meseroNombre: null,
+    comensalNumero: null,
+    items: items.map((i) => ({
+      productoNombre: i.nombre as string,
+      sku: i.sku as string | null,
+      cantidad: Number(i.cantidad),
+      precioUnitario: Number(i.precio_unitario),
+      subtotal: Number(i.subtotal),
+    })),
+    subtotal: monto,
+    descuentoPorcentaje: 0,
+    descuentoMonto: 0,
+    total: monto,
+    pagos: abonos.map((a) => ({ metodoPago: a.metodo_pago as string, monto: Number(a.monto), referencia: null as string | null })),
+    propina: null,
+  };
+}

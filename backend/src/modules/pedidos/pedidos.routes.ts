@@ -8,6 +8,7 @@ import {
   crearPedidoController,
   editarPedidoController,
   listarPedidosController,
+  obtenerFacturaPedidoController,
   obtenerParametrosPedidosController,
   obtenerPedidoController,
   registrarAbonoPedidoController,
@@ -29,6 +30,7 @@ pedidosRouter.put(
 pedidosRouter.get("/", asyncHandler(listarPedidosController));
 pedidosRouter.post("/", requirePermission("pedidos.crear"), asyncHandler(crearPedidoController));
 pedidosRouter.get("/:id", asyncHandler(obtenerPedidoController));
+pedidosRouter.get("/:id/factura", asyncHandler(obtenerFacturaPedidoController));
 pedidosRouter.patch("/:id", requirePermission("pedidos.crear"), asyncHandler(editarPedidoController));
 pedidosRouter.post(
   "/:id/estado",

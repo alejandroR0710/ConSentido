@@ -13,7 +13,7 @@ El objetivo es construir el módulo completo: registrar lo que pide una persona 
 
 Dentro de esta spec:
 - CRUD de pedidos con ítems de catálogo o texto libre
-- Cliente opcional (se puede crear al vuelo, como en Con Sentido)
+- Cliente opcional (se elige de los clientes ya registrados; sin crear uno nuevo desde este flujo — esa decisión se tomó explícita en el brainstorming, reemplaza la idea inicial de "crear al vuelo")
 - Datos de envío/destinatario
 - Flujo de 5 estados con descuento de inventario al alistar
 - Abonos parciales, cada uno generando su ingreso en Caja General
@@ -180,10 +180,10 @@ Se registra en `server.ts` junto a `iniciarEnvioPeriodico()` (misma línea donde
 Nuevo módulo `frontend/src/modules/pedidos/` (api.ts + pages/ + components/), mismo patrón que `con_sentido`/`concreto`.
 
 - **`PedidosPage.tsx`**: tabs de estado + filtro "Vencidos", tabla de pedidos, botón "+ Nuevo pedido"
-- **`NuevoPedidoModal.tsx`**: buscador/creador de cliente (opcional), líneas de ítems reusando `SugerenciasProducto` (ya construido para Caja) + opción de línea manual, campos de envío, fecha de entrega, abono inicial opcional
+- **`NuevoPedidoModal.tsx`**: selector de cliente existente (opcional, sin crear uno nuevo desde acá), líneas de ítems reusando `SugerenciasProducto` (ya construido para Caja) + opción de línea manual, campos de envío, fecha de entrega, abono inicial opcional
 - **`DetallePedidoPage.tsx`**: ítems, botones de avance de estado (según permiso), historial, abonos + botón de agregar, datos de envío, botón de factura
-- **`ComponenteAlarmaPedidos.tsx`**: vive en `AppShell.tsx`, solo se monta si el rol es Root/Super Root; hace `setInterval` cada 60 s a `GET /pedidos/alarma`; si hay resultados, abre un modal con la lista + reproduce un sonido (`<audio>` con un archivo corto, mismo criterio que las notificaciones push ya usadas en Cocina)
-- Se conecta la ruta `/pedidos` en `App.tsx` (hoy el link del menú no tiene adónde ir) y la entrada de `modules-meta.ts`
+- **`ComponenteAlarmaPedidos.tsx`**: vive en `AppShell.tsx`, solo se monta si el rol es Root/Super Root; hace `setInterval` cada 60 s a `GET /pedidos/alarma`; si hay resultados, abre un modal con la lista + reproduce un sonido generado con Web Audio API (reusa `migao/beep.ts::reproducirAlerta`, ya construido para alertas de demora en Cocina — sin archivo de audio nuevo)
+- Se conecta la ruta `/pedidos` en `App.tsx` (hoy el link del menú no tiene adónde ir); la entrada de `modules-meta.ts` ya existe desde antes, sin cambios
 
 ## Permisos
 

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { desbloquearAudio } from "../../modules/migao/beep";
+import { ComponenteAlarmaPedidos } from "../../modules/pedidos/components/ComponenteAlarmaPedidos";
 import { useAuth } from "../auth/useAuth";
+import { tieneAccesoTotal } from "../auth/roles";
 import { Modal } from "../components/Modal";
 import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
 import { BotonLeadExterno } from "./BotonLeadExterno";
@@ -50,6 +52,7 @@ export function AppShell() {
 
   return (
     <RefrescoProvider>
+      {tieneAccesoTotal(usuario.rol) && <ComponenteAlarmaPedidos />}
       <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
         <header className="flex items-center justify-between border-b border-brand-vanilla-dark px-4 py-3 dark:border-brand-green-700">
           <div className="flex min-w-0 flex-1 items-center gap-2">

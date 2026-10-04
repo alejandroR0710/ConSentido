@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createApp } from "./app";
 import { iniciarEnvioPeriodico } from "./modules/integracion_ecommerce/salida";
+import { iniciarRevisionAlarmasPedidos } from "./modules/pedidos/alarma";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -9,6 +10,8 @@ const app = createApp();
 // Wi-Fi puedan llegar al backend por la IP local de esta máquina.
 // Avisos de stock pendientes para el e-commerce: se reintentan cada minuto.
 iniciarEnvioPeriodico();
+// Alarma de pedidos estancados: se revisa cada minuto.
+iniciarRevisionAlarmasPedidos();
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`SIsteMAPOS backend escuchando en http://0.0.0.0:${port} (accesible en tu red local)`);

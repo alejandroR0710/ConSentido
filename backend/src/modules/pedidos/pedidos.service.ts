@@ -6,6 +6,7 @@ import { descontarParaVenta, motivoVenta } from "../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import { exigirReferenciaBanco } from "../../shared/utils/pago-mixto";
 import { getRolById } from "../general/usuarios/usuarios.repository";
+import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as repo from "./pedidos.repository";
 import {
   CambiarEstadoPedidoInput,
@@ -28,6 +29,25 @@ const TRANSICIONES_VALIDAS: Record<string, string[]> = {
 };
 
 const ROLES_CANCELAR_ENVIADO = new Set(["Root", "Super Root"]);
+
+// Mismos roles que pueden ver el módulo (permiso pedidos.ver) — todos se
+// enteran apenas entra un pedido nuevo, no solo cuando ya lleva rato sin
+// moverse (eso sigue siendo exclusivo de Root/Super Root, ver alarma.ts).
+const ROLES_NOTIFICAR_PEDIDO_CREADO = ["Cajero", "Administrador", "Root", "Super Root"];
+
+/** Fire-and-forget: nunca debe tumbar la creación del pedido si el push
+ *  falla (ej. sin claves VAPID configuradas, enviarATodosDeRol ya retorna
+ *  temprano sin lanzar). */
+async function notificarPedidoCreado(pedidoId: string, descripcion: string, fechaEntrega: string) {
+  const payload = {
+    titulo: "Nuevo pedido",
+    cuerpo: `${descripcion} — entrega ${fechaEntrega}`,
+    url: `/pedidos/${pedidoId}`,
+  };
+  await Promise.all(
+    ROLES_NOTIFICAR_PEDIDO_CREADO.map((rol) => notificacionesService.enviarATodosDeRol(rol, payload)),
+  );
+}
 
 const TIMESTAMP_POR_ESTADO: Record<string, "alistado_en" | "enviado_en" | "entregado_en" | undefined> = {
   alistado: "alistado_en",
@@ -157,6 +177,9 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
     }
 
     await client.query("COMMIT");
+    void notificarPedidoCreado(pedido.id, descripcion, input.fechaEntrega).catch((err) =>
+      console.error("[pedidos] error notificando pedido creado", err),
+    );
     return construirDetallePedido(pedido.id);
   } catch (err) {
     await client.query("ROLLBACK");

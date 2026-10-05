@@ -49,9 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // encontraba con la sesión rota (parecía logueado pero las acciones
     // fallaban) hasta cerrar sesión y volver a entrar a mano. Refrescar apenas
     // vuelve a primer plano evita llegar a ese estado.
-    // Si el refresh falla acá (ej. pasaron las 10h de sesión), es mejor cerrar
-    // la sesión de una vez y mostrar el login limpio, que dejar al usuario con
-    // la app abierta pero rota — que fue justo la queja original.
+    // Si el refresh falla acá (el dispositivo estuvo más de REFRESH_TOKEN_TTL_HOURS
+    // sin usarse — hoy 30 días, ver jwt.ts), es mejor cerrar la sesión de una
+    // vez y mostrar el login limpio, que dejar al usuario con la app abierta
+    // pero rota — que fue justo la queja original. Este refresh en sí mismo
+    // es lo que desliza la ventana hacia adelante, así que en uso normal
+    // nunca se llega a este caso.
     async function reintentarORefrescar() {
       const ok = await restaurarSesion();
       if (!ok) {

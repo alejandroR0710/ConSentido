@@ -57,8 +57,13 @@ export async function me(usuarioId: string) {
 }
 
 /**
- * Renueva el access token sin extender la sesión más allá de las 10 horas del login
- * original: loginAt viaja dentro del refresh token y se preserva en cada reemisión.
+ * Renueva el access token y DESLIZA la ventana de la sesión hacia adelante
+ * (el nuevo refresh token cuenta desde ahora, no desde el login original) —
+ * mientras el dispositivo se use al menos una vez dentro de SESSION_TTL_MS,
+ * la sesión no se cierra sola. El chequeo de abajo solo dispara si el
+ * refresh token mismo ya venció (dispositivo abandonado más de esa
+ * ventana) — jwt.verify ya lo habría rechazado por su propio `exp`, esto es
+ * nada más un mensaje más claro que el genérico de verifyRefreshToken.
  */
 export async function refresh(refreshToken: string) {
   let payload: { usuarioId: string; loginAt: number };
@@ -78,10 +83,11 @@ export async function refresh(refreshToken: string) {
   }
 
   const modulos = await findModulosPermitidos(usuario.id, usuario.rolId);
+  const loginAt = Date.now();
 
   return {
     accessToken: signAccessToken({ usuarioId: usuario.id, rolId: usuario.rolId, modulos }),
-    refreshToken: signRefreshToken(usuario.id, payload.loginAt),
-    sessionExpiresAt: payload.loginAt + SESSION_TTL_MS,
+    refreshToken: signRefreshToken(usuario.id, loginAt),
+    sessionExpiresAt: loginAt + SESSION_TTL_MS,
   };
 }

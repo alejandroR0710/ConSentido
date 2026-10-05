@@ -36,18 +36,33 @@ interface DatosNotificacionPush {
   url?: string;
 }
 
+// lib.dom.d.ts todavía no declara `vibrate` en NotificationOptions, aunque
+// el navegador sí lo soporta (extensión de la spec) — se completa a mano.
+type NotificationOptionsConVibrate = NotificationOptions & { vibrate?: number[] };
+
 /** Notificaciones push (Web Push/VAPID): llegan aunque la pestaña esté
  *  cerrada o el celular bloqueado — ver notificaciones.service.ts en el
  *  backend, que es quien dispara esto (pedido nuevo en Cocina, orden lista
- *  en Mesero). */
+ *  en Mesero, alarma de pedidos). El sonido/vibración en segundo plano los
+ *  controla el sistema operativo, no esta página — la API de Notification
+ *  no permite elegir un audio propio (eso sí lo hace beep.ts, pero solo
+ *  funciona con la app abierta en primer plano). `vibrate` + `tag` +
+ *  `renotify` son lo que sí está en nuestras manos para que no pase
+ *  desapercibida: que vibre siempre y que una alarma repetida para el MISMO
+ *  pedido reemplace la anterior en vez de apilarse, pero sin dejar de sonar/
+ *  vibrar cada vez. */
 self.addEventListener("push", (event) => {
   const datos: DatosNotificacionPush = event.data?.json() ?? {};
+  const url = datos.url ?? "/";
   event.waitUntil(
     self.registration.showNotification(datos.titulo ?? "Con Sentido", {
       body: datos.cuerpo,
       icon: "/icons/icon.svg",
-      data: { url: datos.url ?? "/" },
-    }),
+      data: { url },
+      vibrate: [200, 100, 200],
+      tag: url,
+      renotify: true,
+    } as NotificationOptionsConVibrate),
   );
 });
 

@@ -232,14 +232,31 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       }
     }
 
-    // Transportadora/guía no se piden al crear el pedido — se vuelven
-    // obligatorias justo al despachar, salvo que ya se hayan guardado antes
-    // vía una edición (PATCH /pedidos/:id).
+    // El método de envío (y sus campos) no se piden al crear el pedido — se
+    // vuelven obligatorios justo al despachar, salvo que ya se hayan
+    // guardado antes vía una edición (PATCH /pedidos/:id). Cada método exige
+    // datos distintos; "recoge_tienda" no necesita ninguno extra.
     if (input.estado === "enviado") {
-      const transportadora = input.transportadora || pedido.transportadora;
-      const numeroGuia = input.numeroGuia || pedido.numero_guia;
-      if (!transportadora || !numeroGuia) {
-        throw Errors.badRequest("Para marcar como enviado hace falta la transportadora y el número de guía");
+      const metodoEnvio = input.metodoEnvio || pedido.metodo_envio;
+      if (!metodoEnvio) {
+        throw Errors.badRequest(
+          "Elige cómo se va a entregar el pedido: transportadora, recoge en tienda, o plataforma de recogida",
+        );
+      }
+      if (metodoEnvio === "transportadora") {
+        const transportadora = input.transportadora || pedido.transportadora;
+        const numeroGuia = input.numeroGuia || pedido.numero_guia;
+        if (!transportadora || !numeroGuia) {
+          throw Errors.badRequest("Para marcar como enviado por transportadora hace falta su nombre y el número de guía");
+        }
+      } else if (metodoEnvio === "plataforma") {
+        const conductorNombre = input.conductorNombre || pedido.conductor_nombre;
+        const conductorPlaca = input.conductorPlaca || pedido.conductor_placa;
+        if (!conductorNombre || !conductorPlaca) {
+          throw Errors.badRequest(
+            "Para marcar como enviado por plataforma hace falta el nombre del conductor y la placa del vehículo",
+          );
+        }
       }
     }
 
@@ -332,8 +349,12 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       estado: input.estado,
       timestampCampo: TIMESTAMP_POR_ESTADO[input.estado],
       proximaAlarmaEn: siguienteAlarma,
+      metodoEnvio: input.metodoEnvio,
       transportadora: input.transportadora,
       numeroGuia: input.numeroGuia,
+      conductorNombre: input.conductorNombre,
+      conductorPlaca: input.conductorPlaca,
+      conductorDescripcion: input.conductorDescripcion,
     });
     await repo.insertHistorial(client, {
       pedidoId: id,

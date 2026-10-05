@@ -1005,6 +1005,12 @@ CREATE TABLE pedidos (
   ciudad_envio            VARCHAR(100) NULL,
   transportadora          VARCHAR(100) NULL,
   numero_guia             VARCHAR(100) NULL,
+  -- Cómo se entregó al marcar "enviado" — null hasta ese momento.
+  metodo_envio            VARCHAR(20) NULL
+                           CHECK (metodo_envio IN ('transportadora','recoge_tienda','plataforma')),
+  conductor_nombre        VARCHAR(150) NULL,
+  conductor_placa         VARCHAR(20) NULL,
+  conductor_descripcion   TEXT NULL,
   notas_entrega           TEXT NULL,
   costo_estimado          DECIMAL(12,2) NOT NULL DEFAULT 0,
   precio_acordado         DECIMAL(12,2) NOT NULL DEFAULT 0,

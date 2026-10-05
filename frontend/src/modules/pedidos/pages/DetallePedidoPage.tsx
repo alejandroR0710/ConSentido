@@ -9,7 +9,7 @@ import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { BotonFactura } from "../../migao/components/BotonFactura";
-import { pedidosApi, type EstadoPedido, type PedidoDetalle } from "../api";
+import { pedidosApi, type EstadoPedido, type MetodoEnvioPedido, type PedidoDetalle } from "../api";
 
 const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, { estado: Exclude<EstadoPedido, "pendiente">; etiqueta: string }>> = {
   pendiente: { estado: "alistado", etiqueta: "Marcar como Alistado" },
@@ -29,8 +29,12 @@ export function DetallePedidoPage() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [observacionInventario, setObservacionInventario] = useState("");
   const [pidiendoObservacion, setPidiendoObservacion] = useState(false);
+  const [metodoEnvioInput, setMetodoEnvioInput] = useState<MetodoEnvioPedido | null>(null);
   const [transportadoraInput, setTransportadoraInput] = useState("");
   const [numeroGuiaInput, setNumeroGuiaInput] = useState("");
+  const [conductorNombreInput, setConductorNombreInput] = useState("");
+  const [conductorPlacaInput, setConductorPlacaInput] = useState("");
+  const [conductorDescripcionInput, setConductorDescripcionInput] = useState("");
   const [pidiendoEnvio, setPidiendoEnvio] = useState(false);
 
   const [modalAbonoAbierto, setModalAbonoAbierto] = useState(false);
@@ -61,7 +65,15 @@ export function DetallePedidoPage() {
 
   async function avanzarEstado(
     destino: Exclude<EstadoPedido, "pendiente">,
-    extra?: { observacionInventario?: string; transportadora?: string; numeroGuia?: string },
+    extra?: {
+      observacionInventario?: string;
+      metodoEnvio?: MetodoEnvioPedido;
+      transportadora?: string;
+      numeroGuia?: string;
+      conductorNombre?: string;
+      conductorPlaca?: string;
+      conductorDescripcion?: string;
+    },
   ) {
     if (!id) return;
     setCambiandoEstado(true);
@@ -71,18 +83,27 @@ export function DetallePedidoPage() {
       setPidiendoObservacion(false);
       setObservacionInventario("");
       setPidiendoEnvio(false);
+      setMetodoEnvioInput(null);
       setTransportadoraInput("");
       setNumeroGuiaInput("");
+      setConductorNombreInput("");
+      setConductorPlacaInput("");
+      setConductorDescripcionInput("");
       await cargar();
     } catch (err) {
       const mensaje = err instanceof ApiError ? err.message : "No se pudo cambiar el estado";
       // Si el backend pide observación de inventario (stock negativo) o
-      // transportadora/guía (al despachar), se muestra el campo en vez de un
-      // simple mensaje de error.
+      // datos del método de envío (al despachar), se muestra el campo en vez
+      // de un simple mensaje de error.
       if (mensaje.toLowerCase().includes("observación")) {
         setPidiendoObservacion(true);
       }
-      if (mensaje.toLowerCase().includes("transportadora") || mensaje.toLowerCase().includes("guía")) {
+      if (
+        mensaje.toLowerCase().includes("transportadora") ||
+        mensaje.toLowerCase().includes("guía") ||
+        mensaje.toLowerCase().includes("conductor") ||
+        mensaje.toLowerCase().includes("entregar el pedido")
+      ) {
         setPidiendoEnvio(true);
       }
       setError(mensaje);
@@ -95,10 +116,10 @@ export function DetallePedidoPage() {
     if (!pedido) return;
     const siguiente = SIGUIENTE_ESTADO[pedido.estado];
     if (!siguiente) return;
-    // Transportadora/guía recién se piden al despachar (no al crear el
-    // pedido) — si todavía no están guardadas, se muestra el formulario en
+    // El método de envío recién se pide al despachar (no al crear el
+    // pedido) — si todavía no está guardado, se muestra el formulario en
     // vez de avanzar directo.
-    if (siguiente.estado === "enviado" && (!pedido.transportadora || !pedido.numero_guia)) {
+    if (siguiente.estado === "enviado" && !pedido.metodo_envio) {
       setPidiendoEnvio(true);
       return;
     }
@@ -136,6 +157,10 @@ export function DetallePedidoPage() {
   // botón que Cajero/Administrador no podrían usar).
   const puedeCancelar =
     pedido.estado === "pendiente" || pedido.estado === "alistado" || (pedido.estado === "enviado" && tieneAccesoTotal(usuario?.rol));
+  const faltaDatosEnvio =
+    !metodoEnvioInput ||
+    (metodoEnvioInput === "transportadora" && (!transportadoraInput.trim() || !numeroGuiaInput.trim())) ||
+    (metodoEnvioInput === "plataforma" && (!conductorNombreInput.trim() || !conductorPlacaInput.trim()));
 
   return (
     <div className="flex flex-col gap-6">
@@ -208,24 +233,88 @@ export function DetallePedidoPage() {
 
       {pidiendoEnvio && (
         <div className="rounded-md border border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/20">
-          <p className="mb-2 text-sm">Para marcar como enviado, indica la transportadora y el número de guía:</p>
-          <div className="mb-2 flex flex-wrap gap-2">
-            <input
-              value={transportadoraInput}
-              onChange={(e) => setTransportadoraInput(e.target.value)}
-              placeholder="Transportadora"
-              className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-            />
-            <input
-              value={numeroGuiaInput}
-              onChange={(e) => setNumeroGuiaInput(e.target.value)}
-              placeholder="Número de guía"
-              className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-            />
+          <p className="mb-2 text-sm">¿Cómo se va a entregar este pedido?</p>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {(
+              [
+                { valor: "transportadora", etiqueta: "Transportadora" },
+                { valor: "recoge_tienda", etiqueta: "Recoge en tienda" },
+                { valor: "plataforma", etiqueta: "Plataforma de recogida" },
+              ] as const
+            ).map((opcion) => (
+              <button
+                key={opcion.valor}
+                type="button"
+                onClick={() => setMetodoEnvioInput(opcion.valor)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                  metodoEnvioInput === opcion.valor
+                    ? "bg-amber-600 text-white"
+                    : "border border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                }`}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
           </div>
+
+          {metodoEnvioInput === "transportadora" && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              <input
+                value={transportadoraInput}
+                onChange={(e) => setTransportadoraInput(e.target.value)}
+                placeholder="Transportadora"
+                className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+              <input
+                value={numeroGuiaInput}
+                onChange={(e) => setNumeroGuiaInput(e.target.value)}
+                placeholder="Número de guía"
+                className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+            </div>
+          )}
+
+          {metodoEnvioInput === "plataforma" && (
+            <div className="mb-2 flex flex-col gap-2">
+              <input
+                value={conductorNombreInput}
+                onChange={(e) => setConductorNombreInput(e.target.value)}
+                placeholder="Nombre del conductor"
+                className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+              <input
+                value={conductorPlacaInput}
+                onChange={(e) => setConductorPlacaInput(e.target.value)}
+                placeholder="Placa del vehículo"
+                className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+              <input
+                value={conductorDescripcionInput}
+                onChange={(e) => setConductorDescripcionInput(e.target.value)}
+                placeholder="Descripción (opcional)"
+                className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+            </div>
+          )}
+
+          {metodoEnvioInput === "recoge_tienda" && (
+            <p className="mb-2 text-xs text-amber-700/80 dark:text-amber-400/80">
+              El cliente recoge el pedido en tienda — no se necesita más información.
+            </p>
+          )}
+
           <button
-            onClick={() => avanzarEstado("enviado", { transportadora: transportadoraInput, numeroGuia: numeroGuiaInput })}
-            disabled={!transportadoraInput.trim() || !numeroGuiaInput.trim()}
+            onClick={() =>
+              avanzarEstado("enviado", {
+                metodoEnvio: metodoEnvioInput ?? undefined,
+                transportadora: metodoEnvioInput === "transportadora" ? transportadoraInput : undefined,
+                numeroGuia: metodoEnvioInput === "transportadora" ? numeroGuiaInput : undefined,
+                conductorNombre: metodoEnvioInput === "plataforma" ? conductorNombreInput : undefined,
+                conductorPlaca: metodoEnvioInput === "plataforma" ? conductorPlacaInput : undefined,
+                conductorDescripcion: metodoEnvioInput === "plataforma" ? conductorDescripcionInput : undefined,
+              })
+            }
+            disabled={faltaDatosEnvio}
             className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             Confirmar envío
@@ -263,7 +352,16 @@ export function DetallePedidoPage() {
             {pedido.destinatario_documento && <p>Doc: {pedido.destinatario_documento}</p>}
             {pedido.destinatario_telefono && <p>Tel: {pedido.destinatario_telefono}</p>}
             {pedido.direccion_envio && <p>{pedido.direccion_envio}{pedido.ciudad_envio ? `, ${pedido.ciudad_envio}` : ""}</p>}
-            {pedido.transportadora && <p>{pedido.transportadora} — Guía: {pedido.numero_guia ?? "—"}</p>}
+            {pedido.metodo_envio === "transportadora" && pedido.transportadora && (
+              <p>{pedido.transportadora} — Guía: {pedido.numero_guia ?? "—"}</p>
+            )}
+            {pedido.metodo_envio === "recoge_tienda" && <p>Recoge en tienda</p>}
+            {pedido.metodo_envio === "plataforma" && (
+              <p>
+                Recogido por plataforma — {pedido.conductor_nombre} (placa {pedido.conductor_placa})
+                {pedido.conductor_descripcion ? ` — ${pedido.conductor_descripcion}` : ""}
+              </p>
+            )}
             {pedido.notas_entrega && <p className="mt-1 italic">{pedido.notas_entrega}</p>}
           </div>
         </div>

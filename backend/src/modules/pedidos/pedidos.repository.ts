@@ -173,7 +173,11 @@ export async function actualizarPedido(id: string, input: EditarPedidoInput) {
        transportadora = COALESCE($9, transportadora),
        numero_guia = COALESCE($10, numero_guia),
        notas_entrega = COALESCE($11, notas_entrega),
-       responsable_id = COALESCE($12, responsable_id)
+       responsable_id = COALESCE($12, responsable_id),
+       metodo_envio = COALESCE($13, metodo_envio),
+       conductor_nombre = COALESCE($14, conductor_nombre),
+       conductor_placa = COALESCE($15, conductor_placa),
+       conductor_descripcion = COALESCE($16, conductor_descripcion)
      WHERE id = $1
      RETURNING id`,
     [
@@ -189,6 +193,10 @@ export async function actualizarPedido(id: string, input: EditarPedidoInput) {
       input.numeroGuia ?? null,
       input.notasEntrega ?? null,
       input.responsableId ?? null,
+      input.metodoEnvio ?? null,
+      input.conductorNombre ?? null,
+      input.conductorPlaca ?? null,
+      input.conductorDescripcion ?? null,
     ],
   );
   return result.rowCount ? result.rows[0].id : null;
@@ -196,9 +204,9 @@ export async function actualizarPedido(id: string, input: EditarPedidoInput) {
 
 /** `timestampCampo` es el nombre de columna literal (alistado_en/enviado_en/
  *  entregado_en) — siempre uno de esos 3 valores fijos, nunca entrada del
- *  usuario, así que interpolarlo en el SQL es seguro. `transportadora`/
- *  `numeroGuia` solo llegan al marcar "enviado" (ver cambiarEstadoPedido) —
- *  con COALESCE no se pisan si el pedido ya los tenía de una edición previa. */
+ *  usuario, así que interpolarlo en el SQL es seguro. Los campos de envío
+ *  solo llegan al marcar "enviado" (ver cambiarEstadoPedido) — con COALESCE
+ *  no se pisan si el pedido ya los tenía de una edición previa. */
 export async function actualizarEstadoPedido(
   client: PoolClient,
   id: string,
@@ -206,18 +214,36 @@ export async function actualizarEstadoPedido(
     estado: string;
     timestampCampo?: "alistado_en" | "enviado_en" | "entregado_en";
     proximaAlarmaEn: Date | null;
+    metodoEnvio?: string;
     transportadora?: string;
     numeroGuia?: string;
+    conductorNombre?: string;
+    conductorPlaca?: string;
+    conductorDescripcion?: string;
   },
 ) {
   const campoTimestamp = params.timestampCampo ? `, ${params.timestampCampo} = NOW()` : "";
   await client.query(
     `UPDATE pedidos SET estado = $1, proxima_alarma_en = $2,
-       transportadora = COALESCE($4, transportadora),
-       numero_guia = COALESCE($5, numero_guia)
+       metodo_envio = COALESCE($4, metodo_envio),
+       transportadora = COALESCE($5, transportadora),
+       numero_guia = COALESCE($6, numero_guia),
+       conductor_nombre = COALESCE($7, conductor_nombre),
+       conductor_placa = COALESCE($8, conductor_placa),
+       conductor_descripcion = COALESCE($9, conductor_descripcion)
        ${campoTimestamp}
      WHERE id = $3`,
-    [params.estado, params.proximaAlarmaEn, id, params.transportadora ?? null, params.numeroGuia ?? null],
+    [
+      params.estado,
+      params.proximaAlarmaEn,
+      id,
+      params.metodoEnvio ?? null,
+      params.transportadora ?? null,
+      params.numeroGuia ?? null,
+      params.conductorNombre ?? null,
+      params.conductorPlaca ?? null,
+      params.conductorDescripcion ?? null,
+    ],
   );
 }
 

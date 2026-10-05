@@ -25,9 +25,20 @@ const camposEnvio = {
   notasEntrega: z.string().trim().optional(),
 };
 
+const METODOS_ENVIO = ["transportadora", "recoge_tienda", "plataforma"] as const;
+export type MetodoEnvioPedido = (typeof METODOS_ENVIO)[number];
+
+// Cada método de envío trae sus propios campos — cuáles son obligatorios
+// (transportadora+numeroGuia, o conductorNombre+conductorPlaca) lo exige el
+// service según el metodoEnvio elegido, no acá (recoge_tienda no necesita
+// ninguno de estos campos).
 const camposTransporte = {
+  metodoEnvio: z.enum(METODOS_ENVIO).optional(),
   transportadora: z.string().trim().max(100).optional(),
   numeroGuia: z.string().trim().max(100).optional(),
+  conductorNombre: z.string().trim().max(150).optional(),
+  conductorPlaca: z.string().trim().max(20).optional(),
+  conductorDescripcion: z.string().trim().optional(),
 };
 
 export const crearPedidoSchema = z.object({
@@ -68,8 +79,9 @@ export const cambiarEstadoPedidoSchema = z.object({
   // Obligatoria solo si el producto queda en negativo al alistar — el
   // service la exige puntualmente (mismo criterio que Con Sentido).
   observacionInventario: z.string().trim().optional(),
-  // Obligatorias solo al marcar "enviado" (y solo si el pedido no las tenía
-  // ya guardadas de una edición anterior) — el service las exige puntualmente.
+  // Obligatorios solo al marcar "enviado", y según metodoEnvio (y solo si el
+  // pedido no los tenía ya guardados de una edición anterior) — el service
+  // los exige puntualmente.
   ...camposTransporte,
 });
 export type CambiarEstadoPedidoInput = z.infer<typeof cambiarEstadoPedidoSchema>;

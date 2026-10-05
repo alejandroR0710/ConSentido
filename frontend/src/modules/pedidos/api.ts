@@ -2,6 +2,7 @@ import { apiFetch } from "../../shared/api/client";
 import type { FacturaOrden } from "../migao/api";
 
 export type EstadoPedido = "pendiente" | "alistado" | "enviado" | "entregado" | "cancelado";
+export type MetodoEnvioPedido = "transportadora" | "recoge_tienda" | "plataforma";
 
 export interface ItemPedidoInput {
   nombre: string;
@@ -51,6 +52,10 @@ export interface Pedido {
   ciudad_envio: string | null;
   transportadora: string | null;
   numero_guia: string | null;
+  metodo_envio: MetodoEnvioPedido | null;
+  conductor_nombre: string | null;
+  conductor_placa: string | null;
+  conductor_descripcion: string | null;
   notas_entrega: string | null;
   costo_estimado: string;
   precio_acordado: string;
@@ -96,8 +101,12 @@ export interface CrearPedidoInput {
 }
 
 export interface EditarPedidoInput extends Partial<Omit<CrearPedidoInput, "items" | "abonoInicial">> {
+  metodoEnvio?: MetodoEnvioPedido;
   transportadora?: string;
   numeroGuia?: string;
+  conductorNombre?: string;
+  conductorPlaca?: string;
+  conductorDescripcion?: string;
 }
 
 export interface RegistrarAbonoInput {
@@ -123,7 +132,15 @@ export const pedidosApi = {
   cambiarEstado: (
     id: string,
     estado: Exclude<EstadoPedido, "pendiente">,
-    extra?: { observacionInventario?: string; transportadora?: string; numeroGuia?: string },
+    extra?: {
+      observacionInventario?: string;
+      metodoEnvio?: MetodoEnvioPedido;
+      transportadora?: string;
+      numeroGuia?: string;
+      conductorNombre?: string;
+      conductorPlaca?: string;
+      conductorDescripcion?: string;
+    },
   ) => apiFetch<PedidoDetalle>(`/pedidos/${id}/estado`, { method: "POST", body: { estado, ...extra } }),
   registrarAbono: (id: string, input: RegistrarAbonoInput) =>
     apiFetch<PedidoDetalle>(`/pedidos/${id}/abonos`, { method: "POST", body: input }),

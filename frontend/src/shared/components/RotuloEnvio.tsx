@@ -59,27 +59,27 @@ export function RotuloEnvio({
         textRendering: "optimizeLegibility",
       }}
     >
-      <p className="text-[8px] uppercase tracking-wide">Con Sentido — El Rinconcito del Migao</p>
+      <p className="text-[10px] uppercase tracking-wide">Con Sentido — El Rinconcito del Migao</p>
       <div className="w-full border-t-2 border-black" />
-      <p className="text-[7px] uppercase">Para</p>
-      <p className="text-[18px] font-bold leading-tight">{destinatarioNombre ?? "Sin destinatario"}</p>
-      {destinatarioDocumento && <p className="text-[10px]">Doc: {destinatarioDocumento}</p>}
+      <p className="text-[9px] uppercase">Para</p>
+      <p className="text-[26px] font-bold leading-tight">{destinatarioNombre ?? "Sin destinatario"}</p>
+      {destinatarioDocumento && <p className="text-[14px]">Doc: {destinatarioDocumento}</p>}
       {(direccionEnvio || ciudadEnvio) && (
-        <p className="text-[11px] leading-tight">
+        <p className="text-[15px] leading-tight">
           {direccionEnvio}
           {direccionEnvio && ciudadEnvio ? ", " : ""}
           {ciudadEnvio}
         </p>
       )}
-      {destinatarioTelefono && <p className="text-[11px]">Tel: {destinatarioTelefono}</p>}
+      {destinatarioTelefono && <p className="text-[15px]">Tel: {destinatarioTelefono}</p>}
       <div className="w-full border-t border-dashed border-black" />
-      <p className="text-[10px]">{descripcion}</p>
+      <p className="text-[13px]">{descripcion}</p>
       {metodoEnvio === "transportadora" && transportadora && (
-        <p className="text-[10px] font-bold">
+        <p className="text-[13px] font-bold">
           {transportadora} — Guía: {numeroGuia ?? "—"}
         </p>
       )}
-      <p className="text-[9px]">Entrega: {formatearFechaCorta(fechaEntrega)}</p>
+      <p className="text-[12px]">Entrega: {formatearFechaCorta(fechaEntrega)}</p>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { RotuloEnvio, type RotuloEnvioProps } from "./RotuloEnvio";
@@ -6,7 +6,7 @@ import { RotuloEnvio, type RotuloEnvioProps } from "./RotuloEnvio";
 // Mismo ancho de papel que ya elige el cajero para facturas (ModalImprimir.tsx)
 // — es la misma impresora térmica, no hace sentido pedirlo dos veces.
 const CLAVE_ANCHO = "recibo-ancho-mm";
-const LARGO_ETIQUETA_MM = 100;
+const LARGO_ETIQUETA_MM = 150;
 
 function obtenerAnchoGuardado(): 58 | 80 {
   return window.localStorage.getItem(CLAVE_ANCHO) === "58" ? 58 : 80;
@@ -31,6 +31,13 @@ type ModalImprimirRotuloProps = Omit<RotuloEnvioProps, "anchoMm" | "largoMm" | "
  */
 export function ModalImprimirRotulo({ onCerrar, ...rotulo }: ModalImprimirRotuloProps) {
   const [anchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
+
+  // Mismo criterio que ModalImprimir.tsx: dispara el diálogo nativo solo al
+  // abrir, así solo queda un clic (el del navegador) en vez de dos.
+  useEffect(() => {
+    window.print();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Modal titulo="Rótulo de envío" onCerrar={onCerrar} maxWidth="sm:max-w-sm">

@@ -31,4 +31,14 @@
   #recibo-imprimible thead {
     display: table-row-group;
   }
+
+  /* Rótulo de envío (ver RotuloEnvio.tsx/ModalImprimirRotulo.tsx) — mismo
+   * truco de visibilidad, pero SIN forzar position/top/left/width como
+   * #recibo-imprimible: ese componente ya se posiciona y rota él mismo
+   * (está pensado para salir "horizontal" en la impresora térmica angosta),
+   * forzarle esas propiedades acá rompería esa rotación. */
+  #rotulo-imprimible,
+  #rotulo-imprimible * {
+    visibility: visible;
+  }
 }

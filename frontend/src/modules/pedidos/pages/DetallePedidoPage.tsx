@@ -5,6 +5,7 @@ import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { Modal } from "../../../shared/components/Modal";
+import { ModalImprimirRotulo } from "../../../shared/components/ModalImprimirRotulo";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
@@ -36,6 +37,7 @@ export function DetallePedidoPage() {
   const [conductorPlacaInput, setConductorPlacaInput] = useState("");
   const [conductorDescripcionInput, setConductorDescripcionInput] = useState("");
   const [pidiendoEnvio, setPidiendoEnvio] = useState(false);
+  const [imprimiendoRotulo, setImprimiendoRotulo] = useState(false);
 
   const [modalAbonoAbierto, setModalAbonoAbierto] = useState(false);
   const [montoAbono, setMontoAbono] = useState(0);
@@ -171,10 +173,18 @@ export function DetallePedidoPage() {
           Estado actual: <span className="font-semibold capitalize">{pedido.estado}</span>
           {pedido.cliente_nombre ? ` · Cliente: ${pedido.cliente_nombre}` : ""}
         </p>
-        <BotonFactura
-          origen={{ tipo: "pedido", id: pedido.id }}
-          className="mt-2 rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <BotonFactura
+            origen={{ tipo: "pedido", id: pedido.id }}
+            className="rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          />
+          <button
+            onClick={() => setImprimiendoRotulo(true)}
+            className="rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            🏷️ Rótulo de envío
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -443,6 +453,22 @@ export function DetallePedidoPage() {
             {guardandoAbono ? "Guardando..." : "Registrar abono"}
           </button>
         </Modal>
+      )}
+
+      {imprimiendoRotulo && (
+        <ModalImprimirRotulo
+          onCerrar={() => setImprimiendoRotulo(false)}
+          destinatarioNombre={pedido.destinatario_nombre}
+          destinatarioDocumento={pedido.destinatario_documento}
+          destinatarioTelefono={pedido.destinatario_telefono}
+          direccionEnvio={pedido.direccion_envio}
+          ciudadEnvio={pedido.ciudad_envio}
+          descripcion={pedido.descripcion}
+          fechaEntrega={pedido.fecha_entrega}
+          metodoEnvio={pedido.metodo_envio}
+          transportadora={pedido.transportadora}
+          numeroGuia={pedido.numero_guia}
+        />
       )}
     </div>
   );

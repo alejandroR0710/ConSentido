@@ -232,6 +232,12 @@ export async function crearAbono(
   return result.rows[0];
 }
 
+/** Borra un abono por completo — usado al cancelar un pedido ya enviado
+ *  (Root/Super Root), junto con la reversión de su ingreso en Caja. */
+export async function borrarAbono(client: PoolClient, abonoId: string) {
+  await client.query(`DELETE FROM pedido_abonos WHERE id = $1`, [abonoId]);
+}
+
 /** Info de un producto del catálogo de Con Sentido para armar un ítem de
  *  pedido (nombre/sku/costo de referencia) — de solo lectura, sin bloquear
  *  fila: el stock de verdad se descuenta recién al alistar (ver stock-venta.ts). */

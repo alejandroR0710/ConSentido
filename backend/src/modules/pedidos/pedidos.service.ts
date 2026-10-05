@@ -5,6 +5,7 @@ import { deltaEcommerce, getProductoParaVenta, reponerStock } from "../con_senti
 import { descontarParaVenta, motivoVenta } from "../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import { exigirReferenciaBanco } from "../../shared/utils/pago-mixto";
+import { getRolById } from "../general/usuarios/usuarios.repository";
 import * as repo from "./pedidos.repository";
 import {
   CambiarEstadoPedidoInput,
@@ -14,14 +15,19 @@ import {
 } from "./pedidos.schema";
 
 // Transiciones válidas — nunca se salta un paso ni se retrocede (salvo
-// cancelar, posible desde cualquier estado no terminal).
+// cancelar, posible desde cualquier estado no terminal). Cancelar desde
+// "enviado" es exclusivo de Root/Super Root (ver ROLES_CANCELAR_ENVIADO
+// abajo) — el resto de las transiciones no distingue rol, eso ya lo filtra
+// el permiso pedidos.cambiar_estado.
 const TRANSICIONES_VALIDAS: Record<string, string[]> = {
   pendiente: ["alistado", "cancelado"],
   alistado: ["enviado", "cancelado"],
-  enviado: ["entregado"],
+  enviado: ["entregado", "cancelado"],
   entregado: [],
   cancelado: [],
 };
+
+const ROLES_CANCELAR_ENVIADO = new Set(["Root", "Super Root"]);
 
 const TIMESTAMP_POR_ESTADO: Record<string, "alistado_en" | "enviado_en" | "entregado_en" | undefined> = {
   alistado: "alistado_en",
@@ -180,7 +186,7 @@ export async function editarPedido(id: string, input: EditarPedidoInput, usuario
  * apaga según el estado destino (ver TIMESTAMP_POR_ESTADO y la lista de
  * estados "en alarma" en pedidos.repository.ts::listPedidosVencidos).
  */
-export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedidoInput, usuarioId: string) {
+export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedidoInput, usuarioId: string, rolId: number) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -191,6 +197,16 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
     const destinosValidos = TRANSICIONES_VALIDAS[pedido.estado] ?? [];
     if (!destinosValidos.includes(input.estado)) {
       throw Errors.conflict(`No se puede pasar de "${pedido.estado}" a "${input.estado}"`);
+    }
+
+    // Cancelar un pedido que ya se despachó revierte dinero ya cobrado (ver
+    // más abajo) — exclusivo de Root/Super Root, igual que anular una venta
+    // en Caja General.
+    if (input.estado === "cancelado" && pedido.estado === "enviado") {
+      const rol = await getRolById(rolId);
+      if (!rol || !ROLES_CANCELAR_ENVIADO.has(rol.nombre)) {
+        throw Errors.forbidden("Solo Root o Super Root puede cancelar un pedido que ya fue enviado");
+      }
     }
 
     // Transportadora/guía no se piden al crear el pedido — se vuelven
@@ -236,7 +252,10 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       }
     }
 
-    if (input.estado === "cancelado" && pedido.estado === "alistado") {
+    // El stock se descontó al pasar a "alistado" — si el pedido llegó a
+    // "enviado" sin cambiar de ahí, nunca se devolvió, así que cancelar
+    // desde cualquiera de los dos estados tiene que revertirlo igual.
+    if (input.estado === "cancelado" && (pedido.estado === "alistado" || pedido.estado === "enviado")) {
       const items = await repo.getItemsPorPedido(id, client);
       for (const item of items) {
         if (!item.producto_id) continue;
@@ -258,6 +277,30 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
       }
     }
 
+    // Cancelar un envío también revierte el dinero ya abonado — se borra
+    // cada abono y su ingreso en Caja (con su propia auditoría ahí, ver
+    // anularMovimientosPorReferencia), dejando el pedido con saldo pendiente
+    // completo de nuevo, "como estaba" antes de cualquier pago. Los pagos de
+    // un pedido pendiente/alistado (Cajero/Administrador también pueden
+    // cancelar esos) NO se tocan acá — ese es otro caso, fuera de este cambio.
+    const turnoIdsAfectados: string[] = [];
+    let abonosRevertidos: { monto: string; metodoPago: string }[] = [];
+    if (input.estado === "cancelado" && pedido.estado === "enviado") {
+      const abonos = await repo.getAbonosPorPedido(id, client);
+      for (const abono of abonos) {
+        const turnoIds = await cajaService.anularMovimientosPorReferencia(
+          client,
+          "pedido_abonos",
+          abono.id,
+          `Cancelación de pedido enviado — ${pedido.descripcion}`,
+          usuarioId,
+        );
+        turnoIdsAfectados.push(...turnoIds);
+        await repo.borrarAbono(client, abono.id);
+      }
+      abonosRevertidos = abonos.map((a) => ({ monto: a.monto, metodoPago: a.metodo_pago }));
+    }
+
     // La alarma solo sigue activa en pendiente/alistado (ver Global Constraints).
     const siguienteAlarma =
       input.estado === "alistado" ? await calcularProximaAlarma() : null;
@@ -276,11 +319,18 @@ export async function cambiarEstadoPedido(id: string, input: CambiarEstadoPedido
         de: pedido.estado,
         a: input.estado,
         ...(Object.keys(observacionesInventario).length ? { observacionesInventario } : {}),
+        ...(abonosRevertidos.length ? { abonosRevertidos } : {}),
       },
       usuarioId,
     });
 
     await client.query("COMMIT");
+    // Después del COMMIT, nunca dentro (mismo cuidado que anularVenta): si
+    // alguno de esos abonos quedó atribuido a un turno que ya está cerrado,
+    // sus totales guardados quedarían desactualizados sin este recálculo.
+    if (turnoIdsAfectados.length) {
+      await cajaService.recalcularCierresSiEstanCerrados([...new Set(turnoIdsAfectados)]);
+    }
     return construirDetallePedido(id);
   } catch (err) {
     await client.query("ROLLBACK");

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
@@ -21,6 +23,7 @@ function formatearFechaHora(fechaIso: string) {
 
 export function DetallePedidoPage() {
   const { id } = useParams<{ id: string }>();
+  const { usuario } = useAuth();
   const [pedido, setPedido] = useState<PedidoDetalle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -127,7 +130,12 @@ export function DetallePedidoPage() {
   if (!pedido) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
 
   const siguiente = SIGUIENTE_ESTADO[pedido.estado];
-  const puedeCancelar = pedido.estado === "pendiente" || pedido.estado === "alistado";
+  // Cancelar un pedido ya enviado revierte stock Y los abonos ya cobrados —
+  // por eso es exclusivo de Root/Super Root, igual que anular una venta en
+  // Caja General (el backend lo exige igual, esto solo evita ofrecer un
+  // botón que Cajero/Administrador no podrían usar).
+  const puedeCancelar =
+    pedido.estado === "pendiente" || pedido.estado === "alistado" || (pedido.estado === "enviado" && tieneAccesoTotal(usuario?.rol));
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,9 +168,15 @@ export function DetallePedidoPage() {
           <button
             onClick={() => {
               const aviso =
-                pedido.totalAbonado > 0
-                  ? `Este pedido ya tiene ${formatMoney(pedido.totalAbonado)} abonado(s), que NO se revierten solos en Caja General. ¿Cancelar igual?`
-                  : "¿Cancelar este pedido?";
+                pedido.estado === "enviado"
+                  ? `Este pedido ya se envió${
+                      pedido.totalAbonado > 0 ? ` y tiene ${formatMoney(pedido.totalAbonado)} abonado(s)` : ""
+                    }. Al cancelarlo se devuelve el stock descontado${
+                      pedido.totalAbonado > 0 ? " y se eliminan esos abonos de Caja General" : ""
+                    }, dejando todo como estaba antes. ¿Cancelar igual?`
+                  : pedido.totalAbonado > 0
+                    ? `Este pedido ya tiene ${formatMoney(pedido.totalAbonado)} abonado(s), que NO se revierten solos en Caja General. ¿Cancelar igual?`
+                    : "¿Cancelar este pedido?";
               if (confirm(aviso)) avanzarEstado("cancelado");
             }}
             disabled={cambiandoEstado}

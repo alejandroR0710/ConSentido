@@ -663,6 +663,58 @@ async function recalcularCierreTurno(turnoId: string) {
 }
 
 /**
+ * Reversa genérica de los movimientos_caja que haya generado una referencia
+ * externa (ej. un abono de pedido) — mismo patrón de auditoría que
+ * anularVenta: la edición se inserta ANTES de borrar (si se invierte el
+ * orden, el DELETE rompe la FK que exige movimientos_caja_ediciones). No
+ * toca `ventas`/`pagos`/stock — eso es responsabilidad del módulo que
+ * llama (ahí sí varía según qué generó el movimiento). Devuelve los
+ * turno_id afectados para que el llamador decida si hace falta recalcular
+ * algún cierre ya hecho.
+ */
+export async function anularMovimientosPorReferencia(
+  client: PoolClient,
+  referenciaEntidad: string,
+  referenciaId: string,
+  nota: string,
+  usuarioId: string,
+): Promise<string[]> {
+  const movimientos = await repo.listMovimientosPorReferencia(referenciaEntidad, referenciaId);
+  if (movimientos.length === 0) return [];
+
+  for (const m of movimientos) {
+    const fecha = new Date(m.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+    await repo.insertEdicionHistorial(
+      {
+        movimientoId: m.id,
+        fecha,
+        accion: "anulado",
+        datosAntes: m,
+        datosDespues: { estado: "anulada", referencia_entidad: referenciaEntidad, referencia_id: referenciaId },
+        nota,
+        usuarioId,
+      },
+      client,
+    );
+  }
+
+  await repo.borrarMovimientosPorReferencia(client, referenciaEntidad, referenciaId);
+
+  return [...new Set(movimientos.map((m) => m.turno_id as string))];
+}
+
+/** Para cada turno YA CERRADO de la lista, recalcula sus totales (uno
+ *  abierto no necesita nada: calcula en vivo). Se llama DESPUÉS del COMMIT
+ *  de quien anuló algo, nunca dentro de esa misma transacción (mismo
+ *  cuidado que anularVenta). */
+export async function recalcularCierresSiEstanCerrados(turnoIds: string[]) {
+  for (const turnoId of turnoIds) {
+    const turno = await repo.getTurnoById(turnoId);
+    if (turno?.estado === "cerrado") await recalcularCierreTurno(turnoId);
+  }
+}
+
+/**
  * Agrega un ingreso/egreso a un día YA cerrado (ej. se olvidó registrar un
  * gasto ese día). Exclusivo de Root/Super Root (general.caja.editar_movimiento).
  * Solo funciona si ese día calendario tiene exactamente un turno y ya está

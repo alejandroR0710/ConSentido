@@ -31,7 +31,7 @@ export async function editarPedidoController(req: Request, res: Response) {
 
 export async function cambiarEstadoPedidoController(req: Request, res: Response) {
   const data = cambiarEstadoPedidoSchema.parse(req.body);
-  return ok(res, await service.cambiarEstadoPedido(req.params.id, data, req.auth!.usuarioId));
+  return ok(res, await service.cambiarEstadoPedido(req.params.id, data, req.auth!.usuarioId, req.auth!.rolId));
 }
 
 export async function registrarAbonoPedidoController(req: Request, res: Response) {

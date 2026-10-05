@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
-import { BannerNotificaciones } from "../../../shared/push/BannerNotificaciones";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
 import { labelArea } from "../areas";
@@ -217,8 +216,6 @@ export function CocinaPage() {
           🔇 Toca aquí para activar el sonido de avisos de esta pantalla
         </button>
       )}
-
-      <BannerNotificaciones />
 
       {loading ? (
         <p className="text-brand-ink/60">Cargando...</p>

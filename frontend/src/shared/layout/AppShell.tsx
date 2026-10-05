@@ -5,6 +5,7 @@ import { ComponenteAlarmaPedidos } from "../../modules/pedidos/components/Compon
 import { useAuth } from "../auth/useAuth";
 import { tieneAccesoTotal } from "../auth/roles";
 import { Modal } from "../components/Modal";
+import { BannerNotificaciones } from "../push/BannerNotificaciones";
 import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
 import { BotonLeadExterno } from "./BotonLeadExterno";
 import { IndicadorTurnoCaja } from "./IndicadorTurnoCaja";
@@ -91,6 +92,13 @@ export function AppShell() {
               header en mobile y los overflow-x-auto de las tablas nunca se
               activaban. */}
           <main className="min-h-[calc(100svh-57px)] min-w-0 flex-1 p-4">
+            {/* Global: antes solo vivía en Cocina/Mesero, así que Cajero,
+                Administrador, Root y Super Root nunca veían cómo activar
+                notificaciones — sus pushes de Pedidos se mandaban al vacío,
+                sin ninguna suscripción que los recibiera. */}
+            <div className="mb-4">
+              <BannerNotificaciones />
+            </div>
             <Outlet />
           </main>
         </div>

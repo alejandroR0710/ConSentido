@@ -143,3 +143,34 @@ export function reproducirAlerta() {
     /* se omite el sonido, no es crítico */
   }
 }
+
+/** Alerta del módulo de Pedidos (pendiente/enviado atrasado) — a propósito
+ *  distinta de reproducirAlerta() de arriba (esa sigue siendo la de demora
+ *  en Cocina, no se tocó): onda triangular en vez de cuadrada (más suave al
+ *  oído) y un patrón de sirena de 2 tonos alternados en vez de un solo tono
+ *  repetido, para que se distinga de oído de cualquier otra alarma de la app. */
+export function reproducirAlertaPedidos() {
+  const ctx = obtenerContexto();
+  if (!ctx) return;
+  try {
+    const patron = [
+      { frecuencia: 740, offset: 0 },
+      { frecuencia: 1040, offset: 0.3 },
+      { frecuencia: 740, offset: 0.6 },
+      { frecuencia: 1040, offset: 0.9 },
+    ];
+    patron.forEach(({ frecuencia, offset }) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "triangle";
+      oscillator.frequency.value = frecuencia;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + offset);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(ctx.currentTime + offset);
+      oscillator.stop(ctx.currentTime + offset + 0.3);
+    });
+  } catch {
+    /* se omite el sonido, no es crítico */
+  }
+}

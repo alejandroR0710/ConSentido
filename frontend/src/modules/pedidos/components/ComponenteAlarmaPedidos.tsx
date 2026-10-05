@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { reproducirAlerta } from "../../migao/beep";
+import { reproducirAlertaPedidos } from "../../migao/beep";
 import { pedidosApi, type Pedido } from "../api";
 
 const POLL_MS = 60000;
@@ -40,7 +40,7 @@ export function ComponenteAlarmaPedidos() {
         if (resultado.length > 0) {
           const ahora = Date.now();
           if (ahora - ultimoSonidoRef.current >= intervaloMsRef.current) {
-            reproducirAlerta();
+            reproducirAlertaPedidos();
             setCerrado(false);
             ultimoSonidoRef.current = ahora;
           }

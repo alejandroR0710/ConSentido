@@ -15,6 +15,12 @@ export function facturaAReciboProps(factura: FacturaOrden): Omit<ReciboImprimibl
   }
   if (factura.meseroNombre) camposEncabezado.push({ etiqueta: "Mesero", valor: factura.meseroNombre });
   if (factura.comensalNumero != null) camposEncabezado.push({ etiqueta: "Comensal", valor: `#${factura.comensalNumero}` });
+  if (factura.fechaDespacho) {
+    camposEncabezado.push({
+      etiqueta: "Despacho",
+      valor: new Date(factura.fechaDespacho).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" }),
+    });
+  }
 
   return {
     tipo: "factura",

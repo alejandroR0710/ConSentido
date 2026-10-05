@@ -38,10 +38,10 @@ const ROLES_NOTIFICAR_PEDIDO_CREADO = ["Cajero", "Administrador", "Root", "Super
 /** Fire-and-forget: nunca debe tumbar la creación del pedido si el push
  *  falla (ej. sin claves VAPID configuradas, enviarATodosDeRol ya retorna
  *  temprano sin lanzar). */
-async function notificarPedidoCreado(pedidoId: string, descripcion: string, fechaEntrega: string) {
+async function notificarPedidoCreado(pedidoId: string, descripcion: string) {
   const payload = {
     titulo: "Nuevo pedido",
-    cuerpo: `${descripcion} — entrega ${fechaEntrega}`,
+    cuerpo: descripcion,
     url: `/pedidos/${pedidoId}`,
   };
   await Promise.all(
@@ -124,7 +124,6 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
     const pedido = await repo.crearPedido(client, {
       clienteId: input.clienteId ?? null,
       descripcion,
-      fechaEntrega: input.fechaEntrega,
       destinatarioNombre: input.destinatarioNombre,
       destinatarioDocumento: input.destinatarioDocumento,
       destinatarioTelefono: input.destinatarioTelefono,
@@ -177,7 +176,7 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
     }
 
     await client.query("COMMIT");
-    void notificarPedidoCreado(pedido.id, descripcion, input.fechaEntrega).catch((err) =>
+    void notificarPedidoCreado(pedido.id, descripcion).catch((err) =>
       console.error("[pedidos] error notificando pedido creado", err),
     );
     return construirDetallePedido(pedido.id);
@@ -469,6 +468,9 @@ export async function obtenerFacturaPedido(id: string) {
     mesaPiso: null,
     meseroNombre: null,
     comensalNumero: null,
+    // "Despacho", no "Entrega": ya no se le pide esa fecha al crear el
+    // pedido — lo relevante para la factura/rótulo es cuándo se alistó.
+    fechaDespacho: pedido.alistado_en as string | null,
     items: items.map((i) => ({
       productoNombre: i.nombre as string,
       sku: i.sku as string | null,

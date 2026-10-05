@@ -9,7 +9,9 @@ export interface RotuloEnvioProps {
   direccionEnvio: string | null;
   ciudadEnvio: string | null;
   descripcion: string;
-  fechaEntrega: string;
+  // Fecha en que el pedido se marcó "alistado" — se muestra como "Despacho"
+  // (ya no se captura una "fecha de entrega" al crear el pedido).
+  fechaAlistado: string | null;
   metodoEnvio: string | null;
   transportadora: string | null;
   numeroGuia: string | null;
@@ -36,7 +38,7 @@ export function RotuloEnvio({
   direccionEnvio,
   ciudadEnvio,
   descripcion,
-  fechaEntrega,
+  fechaAlistado,
   metodoEnvio,
   transportadora,
   numeroGuia,
@@ -79,7 +81,7 @@ export function RotuloEnvio({
           {transportadora} — Guía: {numeroGuia ?? "—"}
         </p>
       )}
-      <p className="text-[12px]">Entrega: {formatearFechaCorta(fechaEntrega)}</p>
+      {fechaAlistado && <p className="text-[12px]">Despacho: {formatearFechaCorta(fechaAlistado)}</p>}
     </div>
   );
 }

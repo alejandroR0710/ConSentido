@@ -108,7 +108,6 @@ export async function crearPedido(
   params: {
     clienteId: string | null;
     descripcion: string;
-    fechaEntrega: string;
     costoEstimado: number;
     precioAcordado: number;
     responsableId: string | null;
@@ -118,16 +117,15 @@ export async function crearPedido(
 ) {
   const result = await client.query(
     `INSERT INTO pedidos (
-       cliente_id, descripcion, fecha_entrega, destinatario_nombre, destinatario_documento,
+       cliente_id, descripcion, destinatario_nombre, destinatario_documento,
        destinatario_telefono, direccion_envio, ciudad_envio, transportadora, numero_guia,
        notas_entrega, costo_estimado, precio_acordado, responsable_id, creado_por_id,
        proxima_alarma_en
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     [
       params.clienteId,
       params.descripcion,
-      params.fechaEntrega,
       params.destinatarioNombre ?? null,
       params.destinatarioDocumento ?? null,
       params.destinatarioTelefono ?? null,
@@ -164,26 +162,24 @@ export async function actualizarPedido(id: string, input: EditarPedidoInput) {
   const result = await pool.query(
     `UPDATE pedidos SET
        descripcion = COALESCE($2, descripcion),
-       fecha_entrega = COALESCE($3, fecha_entrega),
-       destinatario_nombre = COALESCE($4, destinatario_nombre),
-       destinatario_documento = COALESCE($5, destinatario_documento),
-       destinatario_telefono = COALESCE($6, destinatario_telefono),
-       direccion_envio = COALESCE($7, direccion_envio),
-       ciudad_envio = COALESCE($8, ciudad_envio),
-       transportadora = COALESCE($9, transportadora),
-       numero_guia = COALESCE($10, numero_guia),
-       notas_entrega = COALESCE($11, notas_entrega),
-       responsable_id = COALESCE($12, responsable_id),
-       metodo_envio = COALESCE($13, metodo_envio),
-       conductor_nombre = COALESCE($14, conductor_nombre),
-       conductor_placa = COALESCE($15, conductor_placa),
-       conductor_descripcion = COALESCE($16, conductor_descripcion)
+       destinatario_nombre = COALESCE($3, destinatario_nombre),
+       destinatario_documento = COALESCE($4, destinatario_documento),
+       destinatario_telefono = COALESCE($5, destinatario_telefono),
+       direccion_envio = COALESCE($6, direccion_envio),
+       ciudad_envio = COALESCE($7, ciudad_envio),
+       transportadora = COALESCE($8, transportadora),
+       numero_guia = COALESCE($9, numero_guia),
+       notas_entrega = COALESCE($10, notas_entrega),
+       responsable_id = COALESCE($11, responsable_id),
+       metodo_envio = COALESCE($12, metodo_envio),
+       conductor_nombre = COALESCE($13, conductor_nombre),
+       conductor_placa = COALESCE($14, conductor_placa),
+       conductor_descripcion = COALESCE($15, conductor_descripcion)
      WHERE id = $1
      RETURNING id`,
     [
       id,
       input.descripcion ?? null,
-      input.fechaEntrega ?? null,
       input.destinatarioNombre ?? null,
       input.destinatarioDocumento ?? null,
       input.destinatarioTelefono ?? null,

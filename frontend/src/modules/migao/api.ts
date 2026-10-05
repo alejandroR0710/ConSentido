@@ -514,6 +514,9 @@ export interface FacturaOrden {
   mesaPiso: number | null;
   meseroNombre: string | null;
   comensalNumero: number | null;
+  // Exclusivo de Pedidos: fecha en que se marcó "alistado", mostrada como
+  // "Despacho" en el recibo — el resto de los módulos nunca la mandan.
+  fechaDespacho?: string | null;
   items: FacturaItem[];
   subtotal: number;
   descuentoPorcentaje: number;

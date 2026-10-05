@@ -26,12 +26,11 @@ const ESTILO_ESTADO: Record<EstadoPedido, string> = {
   cancelado: "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400",
 };
 
-/** `fechaIso` ya es 'YYYY-MM-DD' en hora Colombia — se arma con el constructor
- *  de 3 argumentos para que quede en hora LOCAL del navegador sin correrse un
- *  día (mismo criterio que HistorialConsumoInventarioModal.tsx::formatearFechaLarga). */
-function formatearFecha(fechaIso: string) {
-  const [anio, mes, dia] = fechaIso.split("-").map(Number);
-  return new Date(anio, mes - 1, dia).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" });
+// alistado_en ya es un datetime completo (no un DATE puro como fecha_entrega),
+// así que new Date() lo interpreta bien sin el ajuste de zona horaria que sí
+// necesita un 'YYYY-MM-DD' simple.
+function formatearFechaDespacho(fechaIso: string) {
+  return new Date(fechaIso).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function PedidosPage() {
@@ -112,7 +111,7 @@ export function PedidosPage() {
               <tr>
                 <th className="px-3 py-2">Pedido</th>
                 <th className="px-3 py-2">Destinatario</th>
-                <th className="px-3 py-2">Entrega</th>
+                <th className="px-3 py-2">Despacho</th>
                 <th className="px-3 py-2">Estado</th>
                 <th className="px-3 py-2 text-right">Total</th>
               </tr>
@@ -136,7 +135,7 @@ export function PedidosPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">{p.destinatario_nombre ?? "—"}</td>
-                    <td className="px-3 py-2">{formatearFecha(p.fecha_entrega)}</td>
+                    <td className="px-3 py-2">{p.alistado_en ? formatearFechaDespacho(p.alistado_en) : "—"}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTILO_ESTADO[p.estado]}`}>
                         {p.estado}

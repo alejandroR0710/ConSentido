@@ -997,7 +997,9 @@ CREATE TABLE pedidos (
   id                      CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   cliente_id              CHAR(36) NULL,
   descripcion             TEXT NOT NULL,
-  fecha_entrega           DATE NOT NULL,
+  -- Ya no se pide al crear el pedido — la factura/rótulo usan alistado_en
+  -- ("Despacho") en su lugar. Nullable, columna conservada para pedidos viejos.
+  fecha_entrega           DATE NULL,
   destinatario_nombre     VARCHAR(150) NULL,
   destinatario_documento  VARCHAR(30) NULL,
   destinatario_telefono   VARCHAR(30) NULL,

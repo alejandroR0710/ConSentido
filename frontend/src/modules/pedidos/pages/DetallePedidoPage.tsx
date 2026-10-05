@@ -464,7 +464,7 @@ export function DetallePedidoPage() {
           direccionEnvio={pedido.direccion_envio}
           ciudadEnvio={pedido.ciudad_envio}
           descripcion={pedido.descripcion}
-          fechaEntrega={pedido.fecha_entrega}
+          fechaAlistado={pedido.alistado_en}
           metodoEnvio={pedido.metodo_envio}
           transportadora={pedido.transportadora}
           numeroGuia={pedido.numero_guia}

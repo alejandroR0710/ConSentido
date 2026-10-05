@@ -39,7 +39,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   const [clienteId, setClienteId] = useState("");
   const [responsableId, setResponsableId] = useState("");
   const [descripcion, setDescripcion] = useState("");
-  const [fechaEntrega, setFechaEntrega] = useState("");
   const [lineas, setLineas] = useState<LineaPedido[]>([lineaVacia()]);
 
   const [destinatarioNombre, setDestinatarioNombre] = useState("");
@@ -67,9 +66,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   const total = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0);
   const faltaReferenciaAbono = conAbono && metodoAbono === "banco" && !/^[A-Za-z0-9]{4}$/.test(referenciaBancoAbono);
   const puedeGuardar =
-    lineasValidas.length > 0 &&
-    fechaEntrega.length > 0 &&
-    (!conAbono || (montoAbono > 0 && montoAbono <= total && !faltaReferenciaAbono));
+    lineasValidas.length > 0 && (!conAbono || (montoAbono > 0 && montoAbono <= total && !faltaReferenciaAbono));
 
   function actualizarLinea(key: number, cambios: Partial<LineaPedido>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -87,7 +84,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
         clienteId: clienteId || undefined,
         responsableId: responsableId || undefined,
         descripcion: descripcion.trim() || undefined,
-        fechaEntrega,
         destinatarioNombre: destinatarioNombre.trim() || undefined,
         destinatarioDocumento: destinatarioDocumento.trim() || undefined,
         destinatarioTelefono: destinatarioTelefono.trim() || undefined,
@@ -142,11 +138,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
               ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium">Fecha de entrega</label>
-            <input type="date" value={fechaEntrega} onChange={(e) => setFechaEntrega(e.target.value)} className={INPUT_CLASE} />
-          </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium">Descripción (opcional — se arma sola si la dejas vacía)</label>
             <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className={INPUT_CLASE} />
           </div>

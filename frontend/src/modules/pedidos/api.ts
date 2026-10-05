@@ -44,7 +44,9 @@ export interface Pedido {
   cliente_nombre: string | null;
   cliente_telefono: string | null;
   descripcion: string;
-  fecha_entrega: string;
+  // Ya no se pide al crear el pedido — queda null salvo pedidos viejos.
+  // La factura/rótulo usan alistado_en ("Despacho") en su lugar.
+  fecha_entrega: string | null;
   destinatario_nombre: string | null;
   destinatario_documento: string | null;
   destinatario_telefono: string | null;
@@ -88,7 +90,6 @@ export interface ParametrosPedidos {
 export interface CrearPedidoInput {
   clienteId?: string;
   descripcion?: string;
-  fechaEntrega: string;
   destinatarioNombre?: string;
   destinatarioDocumento?: string;
   destinatarioTelefono?: string;

@@ -46,7 +46,9 @@ export const crearPedidoSchema = z.object({
   // Si no la escriben, el service la arma sola a partir de los nombres de
   // los ítems (mismo criterio que con_sentido.service.ts para el "motivo").
   descripcion: z.string().trim().max(500).optional(),
-  fechaEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+  // Ya no se pide "fecha de entrega": en la factura/rótulo se muestra la
+  // fecha en que el pedido se marcó "alistado" (ver alistado_en), con la
+  // etiqueta "Despacho" en vez de "Entrega".
   responsableId: z.string().uuid().optional(),
   items: z.array(itemPedidoSchema).min(1, "Agrega al menos un ítem al pedido"),
   abonoInicial: z
@@ -67,7 +69,6 @@ export type CrearPedidoInput = z.infer<typeof crearPedidoSchema>;
 // endpoint, con su propia lógica de stock/alarma).
 export const editarPedidoSchema = z.object({
   descripcion: z.string().trim().min(1).max(500).optional(),
-  fechaEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida").optional(),
   responsableId: z.string().uuid().optional(),
   ...camposEnvio,
   ...camposTransporte,

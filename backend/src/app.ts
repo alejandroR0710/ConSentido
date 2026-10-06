@@ -14,6 +14,7 @@ import { notificacionesRouter } from "./modules/general/notificaciones/notificac
 import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
 import { pedidosRouter } from "./modules/pedidos/pedidos.routes";
+import { valesRouter } from "./modules/vales/vales.routes";
 import { velasRouter } from "./modules/velas/velas.routes";
 import { errorHandler, notFoundHandler } from "./shared/middlewares/error-handler";
 import { obtenerCarpetaUploads } from "./shared/middlewares/upload.middleware";
@@ -93,6 +94,7 @@ export function createApp() {
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);
   app.use("/api/v1/pedidos", pedidosRouter);
+  app.use("/api/v1/vales", valesRouter);
 
   // Hosting (cPanel): el mismo proceso sirve el frontend compilado, así API
   // y página quedan en el mismo dominio (frontend construido con

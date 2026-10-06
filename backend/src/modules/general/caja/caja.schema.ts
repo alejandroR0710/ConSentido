@@ -2,7 +2,7 @@ import { z } from "zod";
 import { referenciaBancoSchema } from "../../../shared/utils/pago-mixto";
 
 const METODOS_PAGO = ["efectivo", "banco"] as const;
-const MODULO_ORIGEN_VALUES = ["insumos", "talleres", "con_sentido", "migao", "pedidos", "general"] as const;
+const MODULO_ORIGEN_VALUES = ["insumos", "talleres", "con_sentido", "migao", "pedidos", "general", "vales"] as const;
 
 export const abrirTurnoSchema = z.object({
   // Base declarada a mano por el cajero para el turno del día — no se hereda
@@ -85,6 +85,10 @@ const camposEgreso = {
   // agrupar egresos por módulo pero nunca se le daba la oportunidad de
   // guardarlo desde el formulario normal de "Registrar egreso".
   moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
+  // Solo lo usan llamadas internas de otro módulo (ej. Vales) — nunca viene
+  // del formulario de "Registrar egreso" de Caja General.
+  referenciaEntidad: z.string().max(80).optional(),
+  referenciaId: z.string().max(64).optional(),
 };
 export const registrarEgresoSchema = z.union([
   z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
@@ -99,14 +103,17 @@ export const registrarEgresoSchema = z.union([
 ]);
 export type RegistrarEgresoInput = z.infer<typeof registrarEgresoSchema>;
 
-// Egreso contra el ACUMULADO TOTAL histórico (no un turno ni un día) — sin
-// "mixto": es una reducción puntual de un solo método por vez, no hace
-// falta descomponerlo (ver caja.service.ts::registrarEgresoAcumulado).
-export const registrarEgresoAcumuladoSchema = z.object({
-  ...camposEgreso,
-  metodoPago: z.enum(["efectivo", "banco"]),
-  monto: z.number().positive(),
-});
+export const registrarEgresoAcumuladoSchema = z.union([
+  z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z
+    .object({
+      ...camposEgreso,
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
 export type RegistrarEgresoAcumuladoInput = z.infer<typeof registrarEgresoAcumuladoSchema>;
 
 export const crearCategoriaGastoSchema = z.object({

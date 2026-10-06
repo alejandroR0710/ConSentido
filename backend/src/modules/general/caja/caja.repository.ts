@@ -582,20 +582,26 @@ export async function insertIngreso(
   return result.rows[0];
 }
 
-export async function insertEgreso(params: {
-  turnoId: string;
-  categoriaGastoId: number;
-  monto: number;
-  metodoPago: string;
-  motivo: string;
-  usuarioId: string;
-  proveedorId?: string;
-  moduloOrigenSlug?: string;
-}) {
-  const result = await pool.query(
+export async function insertEgreso(
+  executor: Executor,
+  params: {
+    turnoId: string;
+    categoriaGastoId: number;
+    monto: number;
+    metodoPago: string;
+    motivo: string;
+    usuarioId: string;
+    proveedorId?: string;
+    moduloOrigenSlug?: string;
+    referenciaEntidad?: string;
+    referenciaId?: string;
+  },
+) {
+  const result = await executor.query(
     `INSERT INTO movimientos_caja
-       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id, modulo_origen_id)
-     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7, (SELECT id FROM modulos WHERE slug = $8))
+       (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id, modulo_origen_id,
+        referencia_entidad, referencia_id)
+     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7, (SELECT id FROM modulos WHERE slug = $8), $9, $10)
      RETURNING *`,
     [
       params.turnoId,
@@ -606,6 +612,8 @@ export async function insertEgreso(params: {
       params.usuarioId,
       params.proveedorId || null,
       params.moduloOrigenSlug ?? null,
+      params.referenciaEntidad ?? null,
+      params.referenciaId ?? null,
     ],
   );
   return result.rows[0];
@@ -613,20 +621,50 @@ export async function insertEgreso(params: {
 
 /** Egreso contra el ACUMULADO TOTAL histórico (no un turno ni un día) —
  *  vive aparte de movimientos_caja, nunca exige turno abierto. */
-export async function insertEgresoAcumulado(params: {
-  categoriaGastoId: number;
-  proveedorId?: string;
-  monto: number;
-  metodoPago: string;
-  motivo: string;
-  usuarioId: string;
-}) {
-  const result = await pool.query(
-    `INSERT INTO caja_egresos_acumulado (categoria_gasto_id, proveedor_id, monto, metodo_pago, motivo, usuario_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [params.categoriaGastoId, params.proveedorId || null, params.monto, params.metodoPago, params.motivo, params.usuarioId],
+export async function insertEgresoAcumulado(
+  executor: Executor,
+  params: {
+    categoriaGastoId: number;
+    proveedorId?: string;
+    monto: number;
+    metodoPago: string;
+    motivo: string;
+    usuarioId: string;
+    referenciaEntidad?: string;
+    referenciaId?: string;
+  },
+) {
+  const result = await executor.query(
+    `INSERT INTO caja_egresos_acumulado
+       (categoria_gasto_id, proveedor_id, monto, metodo_pago, motivo, usuario_id, referencia_entidad, referencia_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [
+      params.categoriaGastoId,
+      params.proveedorId || null,
+      params.monto,
+      params.metodoPago,
+      params.motivo,
+      params.usuarioId,
+      params.referenciaEntidad ?? null,
+      params.referenciaId ?? null,
+    ],
   );
   return result.rows[0];
+}
+
+/** Borra las filas de `caja_egresos_acumulado` con esa referencia — usado al
+ *  anular un vale cuya fuente fue "acumulado" (esa tabla no tiene su propia
+ *  auditoría de ediciones como sí tiene `movimientos_caja`, así que esto
+ *  borra directo; el registro del vale mismo documenta qué pasó). */
+export async function borrarEgresosAcumuladoPorReferencia(
+  client: PoolClient,
+  referenciaEntidad: string,
+  referenciaId: string,
+) {
+  await client.query(
+    `DELETE FROM caja_egresos_acumulado WHERE referencia_entidad = $1 AND referencia_id = $2`,
+    [referenciaEntidad, referenciaId],
+  );
 }
 
 /** Ingresos y egresos brutos de TODA la vida de movimientos_caja (sin

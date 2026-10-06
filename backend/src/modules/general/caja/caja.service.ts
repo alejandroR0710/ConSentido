@@ -351,13 +351,18 @@ export async function obtenerFacturaVentaManual(ventaId: string) {
   };
 }
 
-export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: string) {
-  const turno = await turnoAbiertoOrThrow(pool);
+/**
+ * Registra un egreso en el turno abierto. Acepta un `executor` (PoolClient)
+ * opcional para que otros módulos (ej. Vales) lo incluyan en su misma
+ * transacción — mismo criterio que `registrarIngreso`.
+ */
+export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: string, executor: Pool | PoolClient = pool) {
+  const turno = await turnoAbiertoOrThrow(executor);
   const partes = descomponerPago(input);
   const movimientos = [];
   for (const parte of partes) {
     movimientos.push(
-      await repo.insertEgreso({
+      await repo.insertEgreso(executor, {
         turnoId: turno.id,
         categoriaGastoId: input.categoriaGastoId,
         monto: parte.monto,
@@ -366,6 +371,8 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
         usuarioId,
         proveedorId: input.proveedorId,
         moduloOrigenSlug: input.moduloOrigenSlug,
+        referenciaEntidad: input.referenciaEntidad,
+        referenciaId: input.referenciaId,
       }),
     );
   }
@@ -373,16 +380,47 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
 }
 
 /** Egreso contra el ACUMULADO TOTAL histórico — a diferencia de
- *  registrarEgreso, no exige ningún turno abierto ni lo toca. */
-export async function registrarEgresoAcumulado(input: RegistrarEgresoAcumuladoInput, usuarioId: string) {
-  return repo.insertEgresoAcumulado({
-    categoriaGastoId: input.categoriaGastoId,
-    proveedorId: input.proveedorId,
-    monto: input.monto,
-    metodoPago: input.metodoPago,
-    motivo: input.motivo,
-    usuarioId,
-  });
+ *  registrarEgreso, no exige ningún turno abierto ni lo toca. Soporta pago
+ *  mixto igual que registrarEgreso (se descompone en 1-2 filas puras).
+ *  Acepta un `executor` opcional por el mismo motivo que registrarEgreso: un
+ *  llamador (ej. Vales) puede necesitar que esto corra dentro de SU MISMA
+ *  transacción, para que no quede un egreso huérfano si algo después falla
+ *  y hace rollback de lo demás. */
+export async function registrarEgresoAcumulado(
+  input: RegistrarEgresoAcumuladoInput,
+  usuarioId: string,
+  executor: Pool | PoolClient = pool,
+) {
+  const partes = descomponerPago(input);
+  const egresos = [];
+  for (const parte of partes) {
+    egresos.push(
+      await repo.insertEgresoAcumulado(executor, {
+        categoriaGastoId: input.categoriaGastoId,
+        proveedorId: input.proveedorId,
+        monto: parte.monto,
+        metodoPago: parte.metodoPago,
+        motivo: input.motivo,
+        usuarioId,
+        referenciaEntidad: input.referenciaEntidad,
+        referenciaId: input.referenciaId,
+      }),
+    );
+  }
+  return egresos;
+}
+
+/** Reversa de un egreso acumulado por referencia — ver anularMovimientosPorReferencia
+ *  para el caso equivalente de `movimientos_caja` (turno). Sin auditoría
+ *  dedicada: `caja_egresos_acumulado` no tiene su propia tabla de ediciones,
+ *  y el acumulado total se recalcula siempre en vivo (obtenerAcumuladoTotal),
+ *  así que no hay nada más que recalcular después de borrar. */
+export async function anularEgresoAcumuladoPorReferencia(
+  client: PoolClient,
+  referenciaEntidad: string,
+  referenciaId: string,
+) {
+  await repo.borrarEgresosAcumuladoPorReferencia(client, referenciaEntidad, referenciaId);
 }
 
 /** "Acumulado total": todo lo que ha entrado y salido de movimientos_caja

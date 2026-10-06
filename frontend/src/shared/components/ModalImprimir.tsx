@@ -11,6 +11,7 @@ const TITULO_POR_TIPO: Record<ReciboImprimibleProps["tipo"], string> = {
   movimiento: "Comprobante",
   resumen: "Resumen de caja",
   comprobante_propina: "Comprobante de propina",
+  vale: "Vale",
 };
 
 function obtenerAnchoGuardado(): 58 | 80 {

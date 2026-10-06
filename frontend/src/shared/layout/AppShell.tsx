@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { desbloquearAudio } from "../../modules/migao/beep";
 import { ComponenteAlarmaPedidos } from "../../modules/pedidos/components/ComponenteAlarmaPedidos";
 import { useAuth } from "../auth/useAuth";
@@ -72,6 +72,16 @@ export function AppShell() {
             <IndicadorTurnoCaja />
             <span className="hidden sm:inline">{usuario.nombre}</span>
             <BotonLeadExterno />
+            {tieneAccesoTotal(usuario.rol) && (
+              <Link
+                to="/vales"
+                aria-label="Vales"
+                title="Vales"
+                className="flex items-center justify-center rounded-md p-1.5 text-lg text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+              >
+                🧾
+              </Link>
+            )}
             <BotonRefrescar />
             <button
               onClick={() => logout()}

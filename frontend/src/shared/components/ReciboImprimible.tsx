@@ -40,7 +40,7 @@ export interface ReciboImprimibleProps {
   // "resumen": totalizado de un día o un turno (ver resumenIngresos/Egresos).
   // "comprobante_propina": vale de entrega de propina a una persona del
   // equipo, con espacio para que firme de recibido (ver HistorialPropinasPage).
-  tipo: "factura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina";
+  tipo: "factura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina" | "vale";
   // Solo aplica a tipo "movimiento": qué franja/color mostrar.
   variante?: "ingreso" | "egreso";
   folio?: string;
@@ -113,10 +113,11 @@ export function ReciboImprimible({
   const esMovimiento = tipo === "movimiento";
   const esResumen = tipo === "resumen";
   const esComprobantePropina = tipo === "comprobante_propina";
+  const esVale = tipo === "vale";
   const esEgreso = esMovimiento && variante === "egreso";
   // Comparte el layout simple de "movimiento" (una sola línea, sin columnas
   // de cantidad/precio) — un comprobante de propina también es un solo monto.
-  const esLineaUnica = esMovimiento || esComprobantePropina;
+  const esLineaUnica = esMovimiento || esComprobantePropina || esVale;
   const mostrarSku = !esLineaUnica && (items ?? []).some((item) => item.sku);
 
   const franjaTexto = esCotizacion
@@ -125,11 +126,13 @@ export function ReciboImprimible({
       ? "RESUMEN DE CAJA"
       : esComprobantePropina
         ? "COMPROBANTE DE ENTREGA DE PROPINA"
-        : esMovimiento
-          ? esEgreso
-            ? "COMPROBANTE DE EGRESO"
-            : "COMPROBANTE DE INGRESO"
-          : "FACTURA DE VENTA";
+        : esVale
+          ? "VALE"
+          : esMovimiento
+            ? esEgreso
+              ? "COMPROBANTE DE EGRESO"
+              : "COMPROBANTE DE INGRESO"
+            : "FACTURA DE VENTA";
   // Cotización: relleno sólido (no solo borde+texto de color) — un color
   // claro sobre blanco se convierte en un punteado casi invisible en la
   // impresora térmica (mismo problema que el peso de fuente, ver comentario
@@ -144,11 +147,13 @@ export function ReciboImprimible({
     ? "Cotización"
     : esComprobantePropina
       ? "Comprobante de propina"
-      : esMovimiento
-        ? "Comprobante"
-        : esResumen
-          ? null
-          : "Factura";
+      : esVale
+        ? "Vale"
+        : esMovimiento
+          ? "Comprobante"
+          : esResumen
+            ? null
+            : "Factura";
 
   const totalIngresos = (resumenIngresos ?? []).reduce((acc, r) => acc + r.monto, 0);
   const totalEgresos = (resumenEgresos ?? []).reduce((acc, r) => acc + r.monto, 0);
@@ -385,7 +390,7 @@ export function ReciboImprimible({
 
       {nota && <div className="mt-2 text-[16px] italic">Nota: {nota}</div>}
 
-      {esComprobantePropina && (
+      {(esComprobantePropina || esVale) && (
         <div className="mt-6 text-[16px]">
           <div className="border-t border-black pt-1 text-center">Firma de quien recibe</div>
           <div className="mt-1 text-center text-[13px]">C.C.: _______________________</div>
@@ -395,7 +400,7 @@ export function ReciboImprimible({
       <div className="mt-3 text-center text-[15px]">
         {esCotizacion
           ? "Precios sujetos a cambio. Válida por 15 días."
-          : esMovimiento || esResumen || esComprobantePropina
+          : esMovimiento || esResumen || esComprobantePropina || esVale
             ? "Documento interno — no es una factura de venta."
             : "¡Gracias por tu compra!"}
       </div>

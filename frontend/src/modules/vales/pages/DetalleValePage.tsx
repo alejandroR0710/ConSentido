@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
+import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { valesApi, type Vale } from "../api";
+import { valeAReciboProps } from "../factura";
 
 const LABEL_FUENTE: Record<string, string> = {
   turno: "Turno abierto",
@@ -23,6 +25,7 @@ export function DetalleValePage() {
   const [procesando, setProcesando] = useState(false);
   const [fuenteReposicion, setFuenteReposicion] = useState<"turno" | "acumulado">("turno");
   const [pidiendoReposicion, setPidiendoReposicion] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState(false);
 
   async function cargar() {
     if (!id) return;
@@ -91,6 +94,12 @@ export function DetalleValePage() {
           {vale.anulado_en && <span className="ml-2 font-semibold text-red-600">· ANULADO</span>}
           {vale.repuesto_en && !vale.anulado_en && <span className="ml-2 font-semibold text-blue-600">· Repuesto</span>}
         </p>
+        <button
+          onClick={() => setImprimiendo(true)}
+          className="mt-2 rounded-md border border-brand-vanilla-dark px-3 py-1.5 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+        >
+          🖨️ Imprimir vale
+        </button>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -152,6 +161,8 @@ export function DetalleValePage() {
           )}
         </div>
       </div>
+
+      {imprimiendo && <ModalImprimir {...valeAReciboProps(vale)} onCerrar={() => setImprimiendo(false)} />}
     </div>
   );
 }

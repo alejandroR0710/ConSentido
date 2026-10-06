@@ -26,6 +26,8 @@ import { MigaoPage } from "./modules/migao/pages/MigaoPage";
 import { DetallePedidoPage } from "./modules/pedidos/pages/DetallePedidoPage";
 import { PedidosPage } from "./modules/pedidos/pages/PedidosPage";
 import { UsuariosPage } from "./modules/general/pages/UsuariosPage";
+import { DetalleValePage } from "./modules/vales/pages/DetalleValePage";
+import { ValesPage } from "./modules/vales/pages/ValesPage";
 import { CalculadoraVelasPage } from "./modules/velas/pages/CalculadoraVelasPage";
 import { RequireAuth } from "./shared/auth/RequireAuth";
 import { AppShell } from "./shared/layout/AppShell";
@@ -67,6 +69,8 @@ export default function App() {
         <Route path="/cocina/historial" element={<CocinaHistorialPage />} />
         <Route path="/pedidos" element={<PedidosPage />} />
         <Route path="/pedidos/:id" element={<DetallePedidoPage />} />
+        <Route path="/vales" element={<ValesPage />} />
+        <Route path="/vales/:id" element={<DetalleValePage />} />
         <Route path="/menu" element={<MenuPage />} />
         <Route path="/usuarios" element={<UsuariosPage />} />
       </Route>

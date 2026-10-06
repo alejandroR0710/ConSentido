@@ -592,7 +592,19 @@ export async function crearCategoriaGasto(nombre: string, moduloOrigenSlug?: str
   return repo.crearCategoriaGasto(nombre, moduloOrigenSlug);
 }
 
+// La categoría "Vales" no la crea ningún usuario: la inserta la migración
+// del módulo y el código de vales.service.ts la busca después por este
+// nombre exacto (categoriaGastoValesId) — si Cajero (que ya tiene
+// general.caja.administrar_categorias) la renombra o le quita el módulo,
+// crear un vale empieza a fallar sin que nada en Caja avise por qué.
+const CATEGORIA_PROTEGIDA_VALES = "Vales";
+
 export async function actualizarCategoriaGasto(id: number, nombre: string, moduloOrigenSlug?: string) {
+  const categorias = await repo.listCategoriasGasto();
+  const actual = categorias.find((c) => c.id === id);
+  if (actual?.nombre === CATEGORIA_PROTEGIDA_VALES) {
+    throw Errors.conflict('La categoría "Vales" es de uso interno del módulo de Vales y no se puede renombrar ni reasignar de área.');
+  }
   return repo.actualizarCategoriaGasto(id, nombre, moduloOrigenSlug);
 }
 

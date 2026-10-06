@@ -42,7 +42,12 @@ export function NuevoValeModal({ onCerrar, onCreado }: NuevoValeModalProps) {
     usuariosApi.listar().then(setUsuarios).catch(() => {});
   }, []);
 
-  const duenosDisponibles = usuarios.filter((u) => ROLES_DUENO.has(u.rol_nombre));
+  // Un usuario eliminado (soft-delete) o desactivado no puede elegirse ni
+  // como dueño ni como destinatario vinculado — el backend también lo
+  // rechaza (ver vales.service.ts::usuarioActivo), esto es solo para que
+  // ni siquiera aparezca en la lista.
+  const usuariosActivos = usuarios.filter((u) => u.activo && !u.deleted_at);
+  const duenosDisponibles = usuariosActivos.filter((u) => ROLES_DUENO.has(u.rol_nombre));
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
   // Mismo criterio que EgresoModal.tsx (el precedente real de egresos): nunca
   // se valida faltaReferenciaBanco acá — con pedirReferenciaBanco={false} esa
@@ -90,7 +95,7 @@ export function NuevoValeModal({ onCerrar, onCreado }: NuevoValeModalProps) {
             <label className="mb-1 block text-xs font-medium">Vincular a un usuario existente (opcional)</label>
             <select value={destinatarioUsuarioId} onChange={(e) => setDestinatarioUsuarioId(e.target.value)} className={INPUT_CLASE}>
               <option value="">Sin vincular</option>
-              {usuarios.map((u) => (
+              {usuariosActivos.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.nombre}
                 </option>

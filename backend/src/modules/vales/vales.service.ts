@@ -24,6 +24,15 @@ async function categoriaGastoValesId(): Promise<number> {
   return id;
 }
 
+/** Un usuario eliminado (soft-delete) o desactivado no debe poder elegirse
+ *  como dueño ni como destinatario vinculado — `getUsuarioById` no filtra
+ *  esto (sigue encontrando la fila), así que hay que comprobarlo acá. El
+ *  frontend ya los oculta de los selectores, pero esto es lo que de verdad
+ *  lo impide si alguien llama la API directo. */
+function usuarioActivo(u: { activo: boolean; deleted_at: string | null }): boolean {
+  return u.activo && !u.deleted_at;
+}
+
 /** `monto`/`montoEfectivo`+`montoBanco` según el método — nunca los dos a la
  *  vez (mismo shape que descomponerPago espera). Solo se usa con el pago de
  *  un vale nuevo (CrearValeInput); la reposición construye su propio pago
@@ -55,10 +64,17 @@ export async function crearVale(input: CrearValeInput, usuarioId: string) {
   if (input.fuente === "dueno") {
     // input.duenoId ya viene garantizado por el refine del schema (Task 3).
     const dueno = await getUsuarioById(input.duenoId!);
-    if (!dueno || !ROLES_DUENO.has(dueno.rol_nombre)) {
-      throw Errors.badRequest("El dueño elegido no es una cuenta Root o Super Root válida");
+    if (!dueno || !ROLES_DUENO.has(dueno.rol_nombre) || !usuarioActivo(dueno)) {
+      throw Errors.badRequest("El dueño elegido no es una cuenta Root o Super Root activa y válida");
     }
     duenoId = dueno.id;
+  }
+
+  if (input.destinatarioUsuarioId) {
+    const destinatario = await getUsuarioById(input.destinatarioUsuarioId);
+    if (!destinatario || !usuarioActivo(destinatario)) {
+      throw Errors.badRequest("El usuario vinculado elegido no existe o ya no está activo");
+    }
   }
 
   const client = await pool.connect();

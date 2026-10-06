@@ -7,6 +7,16 @@ import { CrearValeInput, ReponerValeInput } from "./vales.schema";
 
 const ROLES_DUENO = new Set(["Root", "Super Root"]);
 const CATEGORIA_GASTO_VALES = "Vales";
+// `movimientos_caja.motivo` es TEXT, pero `caja_egresos_acumulado.motivo` es
+// VARCHAR(200) (ver database/mysql/schema.sql) — como un vale puede ir a
+// cualquiera de las dos según `fuente`, el motivo se recorta siempre al
+// mismo límite para que no falle con un 500 opaco solo en el caso acumulado
+// cuando el concepto (hasta 500 caracteres, ver vales.schema.ts) es largo.
+const MOTIVO_MAX_LEN = 200;
+
+function truncarMotivo(texto: string): string {
+  return texto.slice(0, MOTIVO_MAX_LEN);
+}
 
 async function categoriaGastoValesId(): Promise<number> {
   const id = await repo.getCategoriaGastoPorNombre(CATEGORIA_GASTO_VALES);
@@ -74,26 +84,24 @@ export async function crearVale(input: CrearValeInput, usuarioId: string) {
       await cajaService.registrarEgreso(
         {
           categoriaGastoId: await categoriaGastoValesId(),
-          motivo: `Vale ${vale.numero} — ${input.concepto}`,
+          motivo: truncarMotivo(`Vale ${vale.numero} — ${input.concepto}`),
           moduloOrigenSlug: "vales",
-          referenciaEntidad: "vales",
-          referenciaId: vale.id,
           ...pagoDesdeInput(input),
         },
         usuarioId,
         client,
+        { entidad: "vales", id: vale.id },
       );
     } else if (input.fuente === "acumulado") {
       await cajaService.registrarEgresoAcumulado(
         {
           categoriaGastoId: await categoriaGastoValesId(),
-          motivo: `Vale ${vale.numero} — ${input.concepto}`,
-          referenciaEntidad: "vales",
-          referenciaId: vale.id,
+          motivo: truncarMotivo(`Vale ${vale.numero} — ${input.concepto}`),
           ...pagoDesdeInput(input),
         },
         usuarioId,
         client,
+        { entidad: "vales", id: vale.id },
       );
     }
     // fuente === "dueno": no se toca Caja.
@@ -135,26 +143,24 @@ export async function marcarValeRepuesto(id: string, input: ReponerValeInput, us
       await cajaService.registrarEgreso(
         {
           categoriaGastoId: await categoriaGastoValesId(),
-          motivo: `Reposición vale ${vale.numero} — ${vale.pagado_a}`,
+          motivo: truncarMotivo(`Reposición vale ${vale.numero} — ${vale.pagado_a}`),
           moduloOrigenSlug: "vales",
-          referenciaEntidad: "vales_reposicion",
-          referenciaId: vale.id,
           ...pago,
         },
         usuarioId,
         client,
+        { entidad: "vales_reposicion", id: vale.id },
       );
     } else {
       await cajaService.registrarEgresoAcumulado(
         {
           categoriaGastoId: await categoriaGastoValesId(),
-          motivo: `Reposición vale ${vale.numero} — ${vale.pagado_a}`,
-          referenciaEntidad: "vales_reposicion",
-          referenciaId: vale.id,
+          motivo: truncarMotivo(`Reposición vale ${vale.numero} — ${vale.pagado_a}`),
           ...pago,
         },
         usuarioId,
         client,
+        { entidad: "vales_reposicion", id: vale.id },
       );
     }
 

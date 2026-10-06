@@ -33,5 +33,10 @@ export function valeAReciboProps(vale: Vale): Omit<ReciboImprimibleProps, "ancho
       ...(montoEfectivo > 0 ? [{ metodoPago: "efectivo", monto: montoEfectivo }] : []),
       ...(montoBanco > 0 ? [{ metodoPago: "banco", monto: montoBanco }] : []),
     ],
+    // Un vale anulado tiene que seguir siendo imprimible (sirve de constancia
+    // de que se anuló), pero NUNCA debe salir en blanco como si fuera válido
+    // para firmar — alguien podría reimprimirlo y hacerlo firmar de nuevo
+    // como si el pago siguiera vigente.
+    nota: vale.anulado_en ? `⚠ VALE ANULADO el ${new Date(vale.anulado_en).toLocaleString("es")} — este documento ya NO es válido.` : null,
   };
 }

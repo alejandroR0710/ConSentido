@@ -80,7 +80,10 @@ export function DetalleValePage() {
   if (error && !vale) return <p className="text-sm text-red-600">{error}</p>;
   if (!vale) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
 
-  const monto = Number(vale.monto_efectivo) + Number(vale.monto_banco);
+  const montoEfectivo = Number(vale.monto_efectivo);
+  const montoBanco = Number(vale.monto_banco);
+  const monto = montoEfectivo + montoBanco;
+  const esMixto = montoEfectivo > 0 && montoBanco > 0;
   const puedeReponer = vale.fuente === "dueno" && !vale.repuesto_en && !vale.anulado_en;
   const puedeAnular = !vale.anulado_en;
 
@@ -111,9 +114,23 @@ export function DetalleValePage() {
           {vale.destinatario_documento && <p><span className="font-semibold">Documento:</span> {vale.destinatario_documento}</p>}
           <p><span className="font-semibold">Concepto:</span> {vale.concepto}</p>
           <p><span className="font-semibold">Monto:</span> {formatMoney(monto)}</p>
+          {esMixto && (
+            <p className="pl-4 text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+              {formatMoney(montoEfectivo)} efectivo + {formatMoney(montoBanco)} banco
+            </p>
+          )}
           <p><span className="font-semibold">Fuente:</span> {LABEL_FUENTE[vale.fuente]}</p>
           {vale.fuente === "dueno" && vale.dueno_nombre && <p><span className="font-semibold">Dueño:</span> {vale.dueno_nombre}</p>}
           {vale.creado_por_nombre && <p><span className="font-semibold">Registrado por:</span> {vale.creado_por_nombre}</p>}
+          {vale.repuesto_en && (
+            <p>
+              <span className="font-semibold">Repuesto el:</span> {formatearFechaHora(vale.repuesto_en)}
+              {vale.fuente_reposicion && ` — vía ${LABEL_FUENTE[vale.fuente_reposicion]}`}
+            </p>
+          )}
+          {vale.anulado_en && (
+            <p className="font-semibold text-red-600">Anulado el: {formatearFechaHora(vale.anulado_en)}</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-3">

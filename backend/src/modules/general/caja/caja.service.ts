@@ -351,12 +351,30 @@ export async function obtenerFacturaVentaManual(ventaId: string) {
   };
 }
 
+/** Entidad/id a los que queda atado un egreso para poder revertirlo después
+ *  (ver anularMovimientosPorReferencia / anularEgresoAcumuladoPorReferencia)
+ *  — a propósito NUNCA viene del body de un request: si se aceptara del
+ *  cliente, cualquiera con `general.caja.registrar_egreso` podría etiquetar
+ *  un egreso cualquiera como si fuera de un vale (o una venta) ajena, y
+ *  anular esa otra entidad borraría silenciosamente este egreso. Solo lo
+ *  pasa código interno del servidor (ej. vales.service.ts) que ya construyó
+ *  el valor él mismo. */
+export interface ReferenciaEgreso {
+  entidad: string;
+  id: string;
+}
+
 /**
  * Registra un egreso en el turno abierto. Acepta un `executor` (PoolClient)
  * opcional para que otros módulos (ej. Vales) lo incluyan en su misma
  * transacción — mismo criterio que `registrarIngreso`.
  */
-export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: string, executor: Pool | PoolClient = pool) {
+export async function registrarEgreso(
+  input: RegistrarEgresoInput,
+  usuarioId: string,
+  executor: Pool | PoolClient = pool,
+  referencia?: ReferenciaEgreso,
+) {
   const turno = await turnoAbiertoOrThrow(executor);
   const partes = descomponerPago(input);
   const movimientos = [];
@@ -371,8 +389,8 @@ export async function registrarEgreso(input: RegistrarEgresoInput, usuarioId: st
         usuarioId,
         proveedorId: input.proveedorId,
         moduloOrigenSlug: input.moduloOrigenSlug,
-        referenciaEntidad: input.referenciaEntidad,
-        referenciaId: input.referenciaId,
+        referenciaEntidad: referencia?.entidad,
+        referenciaId: referencia?.id,
       }),
     );
   }
@@ -390,6 +408,7 @@ export async function registrarEgresoAcumulado(
   input: RegistrarEgresoAcumuladoInput,
   usuarioId: string,
   executor: Pool | PoolClient = pool,
+  referencia?: ReferenciaEgreso,
 ) {
   const partes = descomponerPago(input);
   const egresos = [];
@@ -402,8 +421,8 @@ export async function registrarEgresoAcumulado(
         metodoPago: parte.metodoPago,
         motivo: input.motivo,
         usuarioId,
-        referenciaEntidad: input.referenciaEntidad,
-        referenciaId: input.referenciaId,
+        referenciaEntidad: referencia?.entidad,
+        referenciaId: referencia?.id,
       }),
     );
   }

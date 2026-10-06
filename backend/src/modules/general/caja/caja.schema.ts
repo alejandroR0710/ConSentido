@@ -85,10 +85,6 @@ const camposEgreso = {
   // agrupar egresos por módulo pero nunca se le daba la oportunidad de
   // guardarlo desde el formulario normal de "Registrar egreso".
   moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
-  // Solo lo usan llamadas internas de otro módulo (ej. Vales) — nunca viene
-  // del formulario de "Registrar egreso" de Caja General.
-  referenciaEntidad: z.string().max(80).optional(),
-  referenciaId: z.string().max(64).optional(),
 };
 export const registrarEgresoSchema = z.union([
   z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),

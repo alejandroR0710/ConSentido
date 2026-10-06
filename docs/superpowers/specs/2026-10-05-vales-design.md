@@ -26,11 +26,14 @@ CREATE TABLE vales (
   concepto                  TEXT NOT NULL,
   monto_efectivo            DECIMAL(12,2) NOT NULL DEFAULT 0,
   monto_banco               DECIMAL(12,2) NOT NULL DEFAULT 0,
-  referencia_banco          VARCHAR(4) NULL,
   fuente                    VARCHAR(20) NOT NULL
                              CHECK (fuente IN ('turno', 'acumulado', 'dueno')),
   dueno_id                  CHAR(36) NULL,  -- solo si fuente='dueno'
   repuesto_en               DATETIME(6) NULL,
+  -- 'turno' | 'acumulado' — con qué se repuso (null hasta reponer). Al
+  -- anular hace falta saber esto para revertir en la tabla correcta,
+  -- igual que `fuente` lo dice para el movimiento original.
+  fuente_reposicion         VARCHAR(20) NULL,
   anulado_en                DATETIME(6) NULL,
   creado_por_id             CHAR(36) NOT NULL,
   created_at                DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -62,26 +65,35 @@ Permisos nuevos: `vales.ver`, `vales.crear`, `vales.marcar_repuesto`,
 ### 3.1 Crear un vale (`POST /vales`)
 
 Input: `pagadoA`, `destinatarioUsuarioId?`, `destinatarioDocumento?`, `concepto`,
-pago (mismo shape que `PagoInput` de `pago-mixto.ts`: `{metodoPago:"efectivo"|"banco", monto}` o `{metodoPago:"mixto", montoEfectivo, montoBanco}`, con `referenciaBanco` exigida vía `exigirReferenciaBanco` si hay parte en banco), `fuente: "turno"|"acumulado"|"dueno"`, `duenoId?` (obligatorio si `fuente==="dueno"`).
+pago (mismo shape que `PagoInput` de `pago-mixto.ts`: `{metodoPago:"efectivo"|"banco", monto}` o `{metodoPago:"mixto", montoEfectivo, montoBanco}` — **sin `referenciaBanco`**: esa regla es solo para pagos recibidos/ingresos, nunca para egresos; el precedente real, `EgresoModal.tsx`, ya usa `<SelectorMetodoPago pedirReferenciaBanco={false} />` por esto mismo), `fuente: "turno"|"acumulado"|"dueno"`, `duenoId?` (obligatorio si `fuente==="dueno"`).
 
 Según `fuente`:
 - **`"turno"`**: `cajaService.registrarEgreso({categoriaGastoId: <id de "Vales">, motivo: concepto, metodoPago, monto|montoEfectivo+montoBanco, moduloOrigenSlug: "vales"}, usuarioId)` — ya exige turno abierto y ya soporta mixto vía `descomponerPago`. Los movimientos quedan con `referencia_entidad='vales'`, `referencia_id=vale.id` — **confirmado**: la columna ya existe en `movimientos_caja` (la usan los ingresos), pero `insertEgreso`/`registrarEgreso` hoy no la reciben ni la insertan; hay que agregarles ese parámetro opcional (igual patrón que ya tiene el lado de ingreso).
-- **`"acumulado"`**: `cajaService.registrarEgresoAcumulado(...)` — **requiere ampliar esta función para que soporte pago mixto** (hoy solo acepta un `metodoPago` suelto): debe usar `descomponerPago` igual que `registrarEgreso` e insertar una fila de `caja_egresos_acumulado` por cada parte. Mismo criterio de referencia que el caso de turno.
+- **`"acumulado"`**: `cajaService.registrarEgresoAcumulado(...)` — **requiere ampliar esta función para que soporte pago mixto** (hoy solo acepta un `metodoPago` suelto): debe usar `descomponerPago` igual que `registrarEgreso` e insertar una fila de `caja_egresos_acumulado` por cada parte.
 - **`"dueno"`**: no se toca Caja. Solo se guarda el vale.
 
 Todo dentro de una transacción (igual que `crearPedido`/`cambiarEstadoPedido`): si el egreso falla (ej. no hay turno abierto), el vale no se crea.
 
+**Corrección tras verificar el código real (no estaba en la versión anterior
+de esta spec):** `caja_egresos_acumulado` **no tiene** columnas
+`referencia_entidad`/`referencia_id` como sí tiene `movimientos_caja` — hay
+que agregárselas en la misma migración de este módulo. Por eso el caso
+`"turno"` y el caso `"acumulado"` necesitan mecanismos de reversión
+DISTINTOS al anular (ver 3.3): no son la misma tabla.
+
 ### 3.2 Marcar como repuesto (`POST /vales/:id/reponer`)
 
-Solo si `fuente==="dueno"` y el vale no está repuesto ni anulado. Body: `fuenteReposicion: "turno"|"acumulado"` (nunca "dueno" — reponerle a un dueño con el dinero del mismo dueño no tiene sentido). Genera el egreso correspondiente por el mismo monto/método del vale original, con `referencia_entidad='vales_reposicion'` (distinta de `'vales'`, para poder diferenciar al anular cuál revertir), y guarda `repuesto_en`.
+Solo si `fuente==="dueno"` y el vale no está repuesto ni anulado. Body: `fuenteReposicion: "turno"|"acumulado"` (nunca "dueno" — reponerle a un dueño con el dinero del mismo dueño no tiene sentido). Genera el egreso correspondiente por el mismo monto/método del vale original, con `referencia_entidad='vales_reposicion'` (distinta de `'vales'`, para poder diferenciar al anular cuál revertir), y guarda `repuesto_en` + `fuente_reposicion` (para saber en qué tabla buscar al anular).
 
 ### 3.3 Anular (`POST /vales/:id/anular`)
 
-Solo si el vale no está anulado ya (si ya está repuesto, SÍ se puede anular — revierte ambos):
-1. Si `fuente` es `"turno"`/`"acumulado"`: `cajaService.anularMovimientosPorReferencia(client, 'vales', vale.id, nota, usuarioId)`.
-2. Si `repuesto_en` no es null: además `cajaService.anularMovimientosPorReferencia(client, 'vales_reposicion', vale.id, nota, usuarioId)`.
-3. Marca `anulado_en = NOW()`.
-4. Después del COMMIT: `cajaService.recalcularCierresSiEstanCerrados(turnoIdsAfectados)` para cualquier turno ya cerrado que haya quedado involucrado (función ya existente, construida para la cancelación de pedidos enviados).
+Solo si el vale no está anulado ya (si ya está repuesto, SÍ se puede anular — revierte ambos). La reversión depende de en qué tabla vive cada movimiento:
+
+1. Movimiento original (si `fuente==="turno"`): `cajaService.anularMovimientosPorReferencia(client, 'vales', vale.id, nota, usuarioId)` — ya trae su propia auditoría en `movimientos_caja_ediciones` y devuelve los `turnoId` afectados.
+2. Movimiento original (si `fuente==="acumulado"`): **nueva función** `cajaService.anularEgresoAcumuladoPorReferencia(client, 'vales', vale.id)` — borra la(s) fila(s) de `caja_egresos_acumulado` con esa referencia. Sin auditoría dedicada (esa tabla no tiene su propia tabla de ediciones, a diferencia de `movimientos_caja`): el propio registro del vale (`anulado_en`, `creado_por_id`) ya documenta qué pasó y cuándo — no se justifica construir una tabla de auditoría paralela solo para este caso. El acumulado total se recalcula siempre en vivo (`obtenerAcumuladoTotal`), así que no hace falta recalcular nada aparte.
+3. Si `repuesto_en` no es null, repetir 1 o 2 según `fuente_reposicion` (no `fuente`) para el movimiento de la reposición, con `referencia_entidad='vales_reposicion'`.
+4. Marca `anulado_en = NOW()`.
+5. Después del COMMIT: si algún paso usó `movimientos_caja` (turno), `cajaService.recalcularCierresSiEstanCerrados(turnoIdsAfectados)` para cualquier turno ya cerrado que haya quedado involucrado (función ya existente). El caso acumulado no lo necesita (punto 2).
 
 ### 3.4 Listar/obtener
 

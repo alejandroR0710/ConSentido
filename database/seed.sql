@@ -83,7 +83,17 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'ver',                    'pedidos.ver'),
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'crear',                  'pedidos.crear'),
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'cambiar_estado',         'pedidos.cambiar_estado'),
-  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'administrar_parametros', 'pedidos.administrar_parametros');
+  ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'administrar_parametros', 'pedidos.administrar_parametros'),
+  -- Vales: igual que pedidos.administrar_parametros, exclusivos de Root/Super
+  -- Root por OMISIÓN (ningún otro rol los lista abajo) — Super Root ya toma
+  -- TODOS los permisos (ver su INSERT sin filtro más abajo) y Root toma todos
+  -- menos una lista fija de botones de reinicio, así que no hace falta (ni
+  -- se debe) agregar un roles_permisos aparte para estos dos roles: ya lo
+  -- tendrían dos veces y roles_permisos tiene PK (rol_id, permiso_id).
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'ver',             'vales.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'crear',           'vales.crear'),
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_repuesto', 'vales.marcar_repuesto'),
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'anular',          'vales.anular');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES

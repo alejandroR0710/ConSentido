@@ -28,7 +28,7 @@ CREATE TABLE secuencias (
   valor  BIGINT NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
-INSERT INTO secuencias (nombre, valor) VALUES ('comensal_seq', 0), ('facturas_numero_seq', 0);
+INSERT INTO secuencias (nombre, valor) VALUES ('comensal_seq', 0), ('facturas_numero_seq', 0), ('vales_numero_seq', 0);
 
 -- ============================================================================
 -- 1. MODULO GENERAL TRANSVERSAL
@@ -258,6 +258,8 @@ CREATE TABLE caja_egresos_acumulado (
   metodo_pago        VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo','banco')),
   motivo             VARCHAR(200) NOT NULL,
   usuario_id         CHAR(36) NOT NULL,
+  referencia_entidad VARCHAR(80) NULL,
+  referencia_id      VARCHAR(64) NULL,
   created_at         DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (categoria_gasto_id) REFERENCES categorias_gasto(id),
   FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
@@ -1082,6 +1084,38 @@ CREATE TABLE pedidos_parametros (
 INSERT INTO pedidos_parametros (id) VALUES (true);
 
 -- ============================================================================
+-- 7.1 MODULO VALES
+-- ============================================================================
+
+CREATE TABLE vales (
+  id                        CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  numero                    VARCHAR(20) NOT NULL UNIQUE,
+  pagado_a                  VARCHAR(150) NOT NULL,
+  -- Enganche opcional a futuro (módulo de nóminas) — "pagado_a" sigue siendo
+  -- el dato real, esto nunca lo reemplaza.
+  destinatario_usuario_id   CHAR(36) NULL,
+  destinatario_documento    VARCHAR(30) NULL,
+  concepto                  TEXT NOT NULL,
+  monto_efectivo            DECIMAL(12,2) NOT NULL DEFAULT 0,
+  monto_banco               DECIMAL(12,2) NOT NULL DEFAULT 0,
+  fuente                    VARCHAR(20) NOT NULL
+                             CHECK (fuente IN ('turno', 'acumulado', 'dueno')),
+  dueno_id                  CHAR(36) NULL,
+  repuesto_en               DATETIME(6) NULL,
+  fuente_reposicion         VARCHAR(20) NULL,
+  anulado_en                DATETIME(6) NULL,
+  creado_por_id             CHAR(36) NOT NULL,
+  created_at                DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  FOREIGN KEY (destinatario_usuario_id) REFERENCES usuarios(id),
+  FOREIGN KEY (dueno_id) REFERENCES usuarios(id),
+  FOREIGN KEY (creado_por_id) REFERENCES usuarios(id),
+  CHECK (monto_efectivo + monto_banco > 0),
+  CHECK (fuente != 'dueno' OR dueno_id IS NOT NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE INDEX idx_vales_fuente ON vales(fuente);
+CREATE INDEX idx_vales_dueno ON vales(dueno_id);
+
+-- ============================================================================
 -- 8. SEED MINIMO DE MODULOS
 -- ============================================================================
 -- Nota: si vas a importar los datos migrados desde Supabase, el archivo de
@@ -1093,6 +1127,15 @@ INSERT INTO modulos (slug, nombre) VALUES
   ('talleres', 'Talleres / Experiencias'),
   ('con_sentido', 'Con Sentido'),
   ('migao', 'Migao (POS)'),
-  ('pedidos', 'Pedidos / Encargos');
+  ('pedidos', 'Pedidos / Encargos'),
+  ('vales', 'Vales');
+
+-- A diferencia del resto de categorías de gasto (libres, se crean desde la
+-- UI), esta la necesita el código del módulo Vales por nombre exacto (ver
+-- vales.service.ts::categoriaGastoValesId) — sin ella, crear un vale fallaría
+-- en una instalación nueva. Va después del INSERT de modulos de arriba
+-- porque depende de que el módulo 'vales' ya exista.
+INSERT INTO categorias_gasto (nombre, modulo_id) VALUES
+  ('Vales', (SELECT id FROM modulos WHERE slug = 'vales'));
 
 SET FOREIGN_KEY_CHECKS = 1;

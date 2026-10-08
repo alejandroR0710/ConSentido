@@ -93,7 +93,8 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'ver',             'vales.ver'),
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'crear',           'vales.crear'),
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_repuesto', 'vales.marcar_repuesto'),
-  ((SELECT id FROM modulos WHERE slug = 'vales'), 'anular',          'vales.anular');
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'anular',          'vales.anular'),
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_cobrado',  'vales.marcar_cobrado');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES

@@ -1091,6 +1091,7 @@ INSERT INTO pedidos_parametros (id) VALUES (true);
 CREATE TABLE vales (
   id                        CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   numero                    VARCHAR(20) NOT NULL UNIQUE,
+  tipo                      VARCHAR(20) NOT NULL DEFAULT 'pago',
   pagado_a                  VARCHAR(150) NOT NULL,
   -- Enganche opcional a futuro (módulo de nóminas) — "pagado_a" sigue siendo
   -- el dato real, esto nunca lo reemplaza.
@@ -1099,22 +1100,37 @@ CREATE TABLE vales (
   concepto                  TEXT NOT NULL,
   monto_efectivo            DECIMAL(12,2) NOT NULL DEFAULT 0,
   monto_banco               DECIMAL(12,2) NOT NULL DEFAULT 0,
-  fuente                    VARCHAR(20) NOT NULL
-                             CHECK (fuente IN ('turno', 'acumulado', 'dueno')),
+  -- Solo para tipo='deuda' SIN préstamo inicial (fuente=NULL) — cuánto debe,
+  -- independiente de cómo se vaya a pagar después.
+  monto_adeudado            DECIMAL(12,2) NULL,
+  -- NULL = deuda sin préstamo inicial (nunca tocó Caja); solo válido si tipo='deuda'.
+  fuente                    VARCHAR(20) NULL,
   dueno_id                  CHAR(36) NULL,
   repuesto_en               DATETIME(6) NULL,
   fuente_reposicion         VARCHAR(20) NULL,
+  -- Cuándo (y con qué método) se cobró una deuda — siempre contra el turno
+  -- abierto, no existe "ingreso acumulado" en este sistema.
+  cobrado_en                DATETIME(6) NULL,
+  monto_cobrado_efectivo    DECIMAL(12,2) NOT NULL DEFAULT 0,
+  monto_cobrado_banco       DECIMAL(12,2) NOT NULL DEFAULT 0,
   anulado_en                DATETIME(6) NULL,
   creado_por_id             CHAR(36) NOT NULL,
   created_at                DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   FOREIGN KEY (destinatario_usuario_id) REFERENCES usuarios(id),
   FOREIGN KEY (dueno_id) REFERENCES usuarios(id),
   FOREIGN KEY (creado_por_id) REFERENCES usuarios(id),
-  CHECK (monto_efectivo + monto_banco > 0),
-  CHECK (fuente != 'dueno' OR dueno_id IS NOT NULL)
+  CHECK (tipo IN ('pago','deuda')),
+  CHECK (fuente IS NULL OR fuente IN ('turno','acumulado','dueno')),
+  CHECK (fuente IS NOT NULL OR tipo = 'deuda'),
+  CHECK (fuente IS NULL OR monto_efectivo + monto_banco > 0),
+  CHECK (fuente IS NOT NULL OR (monto_adeudado IS NOT NULL AND monto_adeudado > 0)),
+  CHECK (fuente != 'dueno' OR dueno_id IS NOT NULL),
+  CHECK (cobrado_en IS NULL OR tipo = 'deuda'),
+  CHECK (cobrado_en IS NULL OR monto_cobrado_efectivo + monto_cobrado_banco > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 CREATE INDEX idx_vales_fuente ON vales(fuente);
 CREATE INDEX idx_vales_dueno ON vales(dueno_id);
+CREATE INDEX idx_vales_tipo ON vales(tipo);
 
 -- ============================================================================
 -- 8. SEED MINIMO DE MODULOS

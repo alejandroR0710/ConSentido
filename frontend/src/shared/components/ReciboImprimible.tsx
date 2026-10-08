@@ -42,7 +42,8 @@ export interface ReciboImprimibleProps {
   // equipo, con espacio para que firme de recibido (ver HistorialPropinasPage).
   tipo: "factura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina" | "vale";
   // Solo aplica a tipo "movimiento": qué franja/color mostrar.
-  variante?: "ingreso" | "egreso";
+  // Solo aplica a tipo "movimiento" ("ingreso"/"egreso") o tipo "vale" ("deuda").
+  variante?: "ingreso" | "egreso" | "deuda";
   folio?: string;
   fecha: string;
   camposEncabezado?: { etiqueta: string; valor: string }[];
@@ -114,6 +115,7 @@ export function ReciboImprimible({
   const esResumen = tipo === "resumen";
   const esComprobantePropina = tipo === "comprobante_propina";
   const esVale = tipo === "vale";
+  const esDeuda = esVale && variante === "deuda";
   const esEgreso = esMovimiento && variante === "egreso";
   // Comparte el layout simple de "movimiento" (una sola línea, sin columnas
   // de cantidad/precio) — un comprobante de propina también es un solo monto.
@@ -127,7 +129,9 @@ export function ReciboImprimible({
       : esComprobantePropina
         ? "COMPROBANTE DE ENTREGA DE PROPINA"
         : esVale
-          ? "VALE"
+          ? esDeuda
+            ? "DEUDA"
+            : "VALE"
           : esMovimiento
             ? esEgreso
               ? "COMPROBANTE DE EGRESO"
@@ -148,7 +152,9 @@ export function ReciboImprimible({
     : esComprobantePropina
       ? "Comprobante de propina"
       : esVale
-        ? "Vale"
+        ? esDeuda
+          ? "Deuda"
+          : "Vale"
         : esMovimiento
           ? "Comprobante"
           : esResumen
@@ -392,7 +398,9 @@ export function ReciboImprimible({
 
       {(esComprobantePropina || esVale) && (
         <div className="mt-6 text-[16px]">
-          <div className="border-t border-black pt-1 text-center">Firma de quien recibe</div>
+          <div className="border-t border-black pt-1 text-center">
+            {esDeuda ? "Firma de quien reconoce la deuda" : "Firma de quien recibe"}
+          </div>
           <div className="mt-1 text-center text-[13px]">C.C.: _______________________</div>
         </div>
       )}

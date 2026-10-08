@@ -4,6 +4,7 @@ import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   anularValeController,
+  cobrarValeController,
   crearValeController,
   listarValesController,
   marcarValeRepuestoController,
@@ -23,4 +24,5 @@ valesRouter.post(
   requirePermission("vales.marcar_repuesto"),
   asyncHandler(marcarValeRepuestoController),
 );
+valesRouter.post("/:id/cobrar", requirePermission("vales.marcar_cobrado"), asyncHandler(cobrarValeController));
 valesRouter.post("/:id/anular", requirePermission("vales.anular"), asyncHandler(anularValeController));

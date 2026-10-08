@@ -572,6 +572,7 @@ CREATE TABLE concreto_parametros (
   costo_pintura          DECIMAL(12,2) NOT NULL DEFAULT 400,
   costo_sellante         DECIMAL(12,2) NOT NULL DEFAULT 200,
   costo_lija             DECIMAL(12,2) NOT NULL DEFAULT 100,
+  costo_vinipel          DECIMAL(12,2) NOT NULL DEFAULT 500,
   costo_mano_obra        DECIMAL(12,2) NOT NULL DEFAULT 3000,
   multiplicador_precio   DECIMAL(6,2)  NOT NULL DEFAULT 3,
   redondeo               INT NOT NULL DEFAULT 100 CHECK (redondeo IN (0, 100, 500, 1000)),

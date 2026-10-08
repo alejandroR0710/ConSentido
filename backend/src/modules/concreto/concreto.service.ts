@@ -36,9 +36,13 @@ export async function calcular(input: CalcularConcretoInput) {
   const costoPintura = input.costoPintura ?? Number(p.costo_pintura);
   const costoSellante = input.costoSellante ?? Number(p.costo_sellante);
   const costoLija = input.costoLija ?? Number(p.costo_lija);
+  const costoVinipel = input.costoVinipel ?? Number(p.costo_vinipel);
   const costoManoObra = input.costoManoObra ?? Number(p.costo_mano_obra);
   const multiplicador = input.multiplicadorPrecio ?? Number(p.multiplicador_precio);
   const redondeo = input.redondeo ?? Number(p.redondeo);
+  // Empaques (caja, cinta, etc.): nunca se guarda como default, cada pieza
+  // lleva lo que le toque — si no viene, no hay ninguno para este cálculo.
+  const costoEmpaques = input.costoEmpaques ?? 0;
 
   const pesoFinalG = input.pesoFinalG;
   const cementoG = pesoFinalG * PORCENTAJE_CEMENTO;
@@ -48,7 +52,11 @@ export async function calcular(input: CalcularConcretoInput) {
   const costoMarmolina = marmolinaG * precioMarmolinaGramo;
   const costosAdicionales = costoAgua + costoPintura + costoSellante + costoLija + costoManoObra;
   const costoTotal = costoCemento + costoMarmolina + costosAdicionales;
-  const precioVenta = redondear(costoTotal * multiplicador, redondeo);
+  // Vinipel y empaques se suman DESPUÉS del multiplicador y el redondeo —
+  // son costos de paso, sin margen encima (mismo criterio que el empaque en
+  // la calculadora de velas: "no lleva multiplicador").
+  const costoVinipelYEmpaques = costoVinipel + costoEmpaques;
+  const precioVenta = redondear(costoTotal * multiplicador, redondeo) + costoVinipelYEmpaques;
 
   return {
     pesoFinalG,
@@ -65,6 +73,9 @@ export async function calcular(input: CalcularConcretoInput) {
     },
     costosAdicionales,
     costoTotal,
+    costoVinipel,
+    costoEmpaques,
+    costoVinipelYEmpaques,
     multiplicadorAplicado: multiplicador,
     redondeo,
     precioVenta,

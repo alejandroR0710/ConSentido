@@ -9,6 +9,7 @@ export interface ParametrosConcreto {
   costo_pintura: string;
   costo_sellante: string;
   costo_lija: string;
+  costo_vinipel: string;
   costo_mano_obra: string;
   multiplicador_precio: string;
   redondeo: number;
@@ -22,6 +23,7 @@ export interface ActualizarParametrosConcretoInput {
   costoPintura: number;
   costoSellante: number;
   costoLija: number;
+  costoVinipel: number;
   costoManoObra: number;
   multiplicadorPrecio: number;
   redondeo: 0 | 100 | 500 | 1000;
@@ -43,6 +45,12 @@ export interface CalculoConcreto {
   };
   costosAdicionales: number;
   costoTotal: number;
+  // Vinipel (guardado o editado en vivo) y empaques (siempre por pieza, ver
+  // CalcularConcretoInput) — se suman al precio de venta YA calculado, sin
+  // multiplicador, igual que el empaque de la calculadora de velas.
+  costoVinipel: number;
+  costoEmpaques: number;
+  costoVinipelYEmpaques: number;
   multiplicadorAplicado: number;
   redondeo: number;
   precioVenta: number;
@@ -52,6 +60,8 @@ export interface CalculoConcreto {
 // manda mientras se editan sin guardar, para ver el precio en vivo.
 export interface CalcularConcretoInput extends Partial<ActualizarParametrosConcretoInput> {
   pesoFinalG: number;
+  // Empaques de ESTA pieza — nunca se guarda como default (ver backend).
+  costoEmpaques?: number;
 }
 
 export const concretoApi = {

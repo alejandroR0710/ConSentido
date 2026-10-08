@@ -17,9 +17,10 @@ export async function actualizarParametros(d: ActualizarParametrosConcretoInput)
        costo_pintura          = $4,
        costo_sellante         = $5,
        costo_lija             = $6,
-       costo_mano_obra        = $7,
-       multiplicador_precio   = $8,
-       redondeo               = $9,
+       costo_vinipel          = $7,
+       costo_mano_obra        = $8,
+       multiplicador_precio   = $9,
+       redondeo               = $10,
        updated_at             = now()
      WHERE id = true
      RETURNING *`,
@@ -30,6 +31,7 @@ export async function actualizarParametros(d: ActualizarParametrosConcretoInput)
       d.costoPintura,
       d.costoSellante,
       d.costoLija,
+      d.costoVinipel,
       d.costoManoObra,
       d.multiplicadorPrecio,
       d.redondeo,

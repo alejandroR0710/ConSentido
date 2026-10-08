@@ -14,6 +14,22 @@ function formatGramos(valor: number) {
   return `${Number(valor.toFixed(1)).toLocaleString("es-CO")} g`;
 }
 
+let siguienteKeyEmpaque = 1;
+interface LineaEmpaqueForm {
+  key: number;
+  nombre: string;
+  cantidad: number;
+  valorUnitario: number;
+}
+
+function lineaEmpaqueVacia(): LineaEmpaqueForm {
+  return { key: siguienteKeyEmpaque++, nombre: "", cantidad: 1, valorUnitario: 0 };
+}
+
+function totalEmpaques(lineas: LineaEmpaqueForm[]): number {
+  return lineas.reduce((acc, l) => acc + l.cantidad * l.valorUnitario, 0);
+}
+
 const REDONDEOS: { valor: 0 | 100 | 500 | 1000; label: string }[] = [
   { valor: 0, label: "Sin redondeo" },
   { valor: 100, label: "A $100" },
@@ -66,9 +82,13 @@ export function CalculadoraConcretoPage() {
   const [costoPintura, setCostoPintura] = useState(400);
   const [costoSellante, setCostoSellante] = useState(200);
   const [costoLija, setCostoLija] = useState(100);
+  const [costoVinipel, setCostoVinipel] = useState(500);
   const [costoManoObra, setCostoManoObra] = useState(3000);
   const [multiplicadorPrecio, setMultiplicadorPrecio] = useState(3);
   const [redondeo, setRedondeo] = useState<0 | 100 | 500 | 1000>(100);
+  // Empaques de ESTA pieza (caja, cinta, etc.) — nunca se guarda como
+  // default, cada pieza lleva lo que le toque.
+  const [lineasEmpaque, setLineasEmpaque] = useState<LineaEmpaqueForm[]>([]);
 
   const [resultado, setResultado] = useState<CalculoConcreto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +104,12 @@ export function CalculadoraConcretoPage() {
     costoPintura,
     costoSellante,
     costoLija,
+    costoVinipel,
     costoManoObra,
     multiplicadorPrecio,
     redondeo,
   };
+  const costoEmpaques = totalEmpaques(lineasEmpaque);
 
   // Carga los precios guardados una vez.
   useEffect(() => {
@@ -100,6 +122,7 @@ export function CalculadoraConcretoPage() {
         setCostoPintura(Number(p.costo_pintura));
         setCostoSellante(Number(p.costo_sellante));
         setCostoLija(Number(p.costo_lija));
+        setCostoVinipel(Number(p.costo_vinipel));
         setCostoManoObra(Number(p.costo_mano_obra));
         setMultiplicadorPrecio(Number(p.multiplicador_precio));
         setRedondeo(Number(p.redondeo) as 0 | 100 | 500 | 1000);
@@ -107,7 +130,8 @@ export function CalculadoraConcretoPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar los precios"));
   }, []);
 
-  // Recalcula en vivo cuando cambia el peso o cualquier precio/costo.
+  // Recalcula en vivo cuando cambia el peso, cualquier precio/costo, o los
+  // empaques de la pieza.
   useEffect(() => {
     if (pesoFinal <= 0) {
       setResultado(null);
@@ -119,7 +143,7 @@ export function CalculadoraConcretoPage() {
       setCalculando(true);
       setError(null);
       try {
-        setResultado(await concretoApi.calcular({ pesoFinalG: pesoFinal, ...parametros }));
+        setResultado(await concretoApi.calcular({ pesoFinalG: pesoFinal, ...parametros, costoEmpaques }));
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "No se pudo calcular");
         setResultado(null);
@@ -139,9 +163,11 @@ export function CalculadoraConcretoPage() {
     costoPintura,
     costoSellante,
     costoLija,
+    costoVinipel,
     costoManoObra,
     multiplicadorPrecio,
     redondeo,
+    costoEmpaques,
   ]);
 
   async function guardarPrecios() {
@@ -162,6 +188,11 @@ export function CalculadoraConcretoPage() {
     return <Navigate to="/con-sentido" replace />;
   }
 
+  // El precio de venta que devuelve el backend ya incluye vinipel+empaques
+  // (se suman sin multiplicador, ver concreto.service.ts) — se resta acá
+  // solo para mostrar por separado cuánto fue el múltiplo puro de materiales.
+  const precioVentaBase = resultado ? resultado.precioVenta - resultado.costoVinipelYEmpaques : 0;
+
   const filas: { label: string; valor: string; fuerte?: boolean }[] = resultado
     ? [
         { label: "Peso final de la pieza", valor: formatGramos(resultado.pesoFinalG) },
@@ -176,6 +207,14 @@ export function CalculadoraConcretoPage() {
         { label: "Costo total de producción", valor: formatMoney(resultado.costoTotal), fuerte: true },
         {
           label: `Precio de venta (× ${resultado.multiplicadorAplicado})`,
+          valor: formatMoney(precioVentaBase),
+        },
+        {
+          label: "+ Vinipel y empaques (sin multiplicador)",
+          valor: formatMoney(resultado.costoVinipelYEmpaques),
+        },
+        {
+          label: "Precio de venta final",
           valor: formatMoney(resultado.precioVenta),
           fuerte: true,
         },
@@ -231,6 +270,9 @@ export function CalculadoraConcretoPage() {
             <Campo label="Lija" unidad="$/pieza">
               <MoneyInput value={costoLija} onChange={setCostoLija} className={INPUT_CLASE} />
             </Campo>
+            <Campo label="Vinipel" unidad="$/pieza">
+              <MoneyInput value={costoVinipel} onChange={setCostoVinipel} className={INPUT_CLASE} />
+            </Campo>
             <Campo label="Mano de obra" unidad="$/pieza">
               <MoneyInput value={costoManoObra} onChange={setCostoManoObra} className={INPUT_CLASE} />
             </Campo>
@@ -263,6 +305,66 @@ export function CalculadoraConcretoPage() {
                 <span className="text-xs text-brand-green-700 dark:text-brand-vanilla">{mensajeGuardado}</span>
               )}
             </div>
+          </div>
+
+          {/* Empaques de esta pieza — nunca se guardan como default, cada
+              pieza lleva lo que le toque (mismo criterio que el vinipel, pero
+              variable en vez de un valor fijo). */}
+          <div className="rounded-lg border-l-4 border-sky-500 bg-sky-50/40 p-3 dark:bg-sky-950/10">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-sky-700 dark:text-sky-400">📦 Empaques de esta pieza</span>
+              <button
+                type="button"
+                onClick={() => setLineasEmpaque([...lineasEmpaque, lineaEmpaqueVacia()])}
+                className="text-xs font-medium text-sky-700 underline dark:text-sky-400"
+              >
+                + Agregar
+              </button>
+            </div>
+            {lineasEmpaque.length === 0 && <p className="text-xs text-brand-ink/50">Sin empaque agregado todavía.</p>}
+            {lineasEmpaque.map((l) => (
+              <div key={l.key} className="mb-2 flex items-center gap-2">
+                <input
+                  value={l.nombre}
+                  onChange={(e) =>
+                    setLineasEmpaque(lineasEmpaque.map((x) => (x.key === l.key ? { ...x, nombre: e.target.value } : x)))
+                  }
+                  placeholder="Ej. Caja de cartón"
+                  className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                />
+                <span className="shrink-0 text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">Valor c/u</span>
+                <MoneyInput
+                  value={l.valorUnitario}
+                  onChange={(v) => setLineasEmpaque(lineasEmpaque.map((x) => (x.key === l.key ? { ...x, valorUnitario: v } : x)))}
+                  className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="cant."
+                  value={l.cantidad || ""}
+                  onChange={(e) =>
+                    setLineasEmpaque(
+                      lineasEmpaque.map((x) => (x.key === l.key ? { ...x, cantidad: Number(e.target.value) } : x)),
+                    )
+                  }
+                  className="w-16 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => setLineasEmpaque(lineasEmpaque.filter((x) => x.key !== l.key))}
+                  className="shrink-0 text-red-600"
+                  aria-label="Quitar"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {lineasEmpaque.length > 0 && (
+              <p className="mt-1 text-right text-xs font-semibold text-sky-700 dark:text-sky-400">
+                Total empaques: {formatMoney(costoEmpaques)}
+              </p>
+            )}
           </div>
         </div>
 

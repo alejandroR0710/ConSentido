@@ -12,9 +12,16 @@ export const calcularConcretoSchema = z.object({
   costoPintura: z.number().nonnegative().optional(),
   costoSellante: z.number().nonnegative().optional(),
   costoLija: z.number().nonnegative().optional(),
+  costoVinipel: z.number().nonnegative().optional(),
   costoManoObra: z.number().nonnegative().optional(),
   multiplicadorPrecio: z.number().positive().optional(),
   redondeo: z.union([z.literal(0), z.literal(100), z.literal(500), z.literal(1000)]).optional(),
+  // Empaques de la pieza (caja, cinta, etc.) — a diferencia de los demás
+  // campos, nunca se guarda como default: cada pieza lleva lo que le toque.
+  // Se suma directo al precio de venta ya calculado, sin multiplicador (ver
+  // concreto.service.ts) — mismo criterio que el empaque en la calculadora
+  // de velas.
+  costoEmpaques: z.number().nonnegative().optional(),
 });
 export type CalcularConcretoInput = z.infer<typeof calcularConcretoSchema>;
 
@@ -29,6 +36,7 @@ export const actualizarParametrosConcretoSchema = z.object({
   costoPintura: z.number().nonnegative(),
   costoSellante: z.number().nonnegative(),
   costoLija: z.number().nonnegative(),
+  costoVinipel: z.number().nonnegative(),
   costoManoObra: z.number().nonnegative(),
   multiplicadorPrecio: z.number().positive(),
   redondeo: z.union([z.literal(0), z.literal(100), z.literal(500), z.literal(1000)]),

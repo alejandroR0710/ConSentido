@@ -11,23 +11,28 @@ const SELECT_VALE = `
 `;
 
 export interface FiltrosListarVales {
+  tipo?: "pago" | "deuda";
   fuente?: string;
-  estado?: "activo" | "repuesto" | "anulado";
+  estado?: "activo" | "resuelto" | "anulado";
 }
 
 export async function listVales(filtros: FiltrosListarVales) {
   const condiciones: string[] = [];
   const params: unknown[] = [];
+  if (filtros.tipo) {
+    condiciones.push(`v.tipo = $${params.length + 1}`);
+    params.push(filtros.tipo);
+  }
   if (filtros.fuente) {
     condiciones.push(`v.fuente = $${params.length + 1}`);
     params.push(filtros.fuente);
   }
   if (filtros.estado === "anulado") {
     condiciones.push(`v.anulado_en IS NOT NULL`);
-  } else if (filtros.estado === "repuesto") {
-    condiciones.push(`v.repuesto_en IS NOT NULL AND v.anulado_en IS NULL`);
+  } else if (filtros.estado === "resuelto") {
+    condiciones.push(`(v.repuesto_en IS NOT NULL OR v.cobrado_en IS NOT NULL) AND v.anulado_en IS NULL`);
   } else if (filtros.estado === "activo") {
-    condiciones.push(`v.repuesto_en IS NULL AND v.anulado_en IS NULL`);
+    condiciones.push(`v.repuesto_en IS NULL AND v.cobrado_en IS NULL AND v.anulado_en IS NULL`);
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
   const result = await pool.query(`${SELECT_VALE} ${where} ORDER BY v.created_at DESC`, params);
@@ -54,33 +59,37 @@ export async function getCategoriaGastoPorNombre(nombre: string, executor: Execu
 export async function crearVale(
   client: PoolClient,
   params: {
+    tipo: string;
     pagadoA: string;
     destinatarioUsuarioId: string | null;
     destinatarioDocumento: string | null;
     concepto: string;
     montoEfectivo: number;
     montoBanco: number;
-    fuente: string;
+    montoAdeudado: number | null;
+    fuente: string | null;
     duenoId: string | null;
     creadoPorId: string;
   },
 ) {
   const result = await client.query(
     `INSERT INTO vales (
-       numero, pagado_a, destinatario_usuario_id, destinatario_documento, concepto,
-       monto_efectivo, monto_banco, fuente, dueno_id, creado_por_id
+       numero, tipo, pagado_a, destinatario_usuario_id, destinatario_documento, concepto,
+       monto_efectivo, monto_banco, monto_adeudado, fuente, dueno_id, creado_por_id
      ) VALUES (
        'V-' || lpad(nextval('vales_numero_seq'), 6, '0'),
-       $1, $2, $3, $4, $5, $6, $7, $8, $9
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
      )
      RETURNING *`,
     [
+      params.tipo,
       params.pagadoA,
       params.destinatarioUsuarioId,
       params.destinatarioDocumento,
       params.concepto,
       params.montoEfectivo,
       params.montoBanco,
+      params.montoAdeudado,
       params.fuente,
       params.duenoId,
       params.creadoPorId,
@@ -94,6 +103,13 @@ export async function marcarRepuesto(client: PoolClient, id: string, fuenteRepos
     id,
     fuenteReposicion,
   ]);
+}
+
+export async function marcarCobrado(client: PoolClient, id: string, montoEfectivo: number, montoBanco: number) {
+  await client.query(
+    `UPDATE vales SET cobrado_en = NOW(), monto_cobrado_efectivo = $2, monto_cobrado_banco = $3 WHERE id = $1`,
+    [id, montoEfectivo, montoBanco],
+  );
 }
 
 export async function marcarAnulado(client: PoolClient, id: string) {

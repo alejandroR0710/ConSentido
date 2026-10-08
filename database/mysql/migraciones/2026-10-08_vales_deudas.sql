@@ -6,6 +6,35 @@
 -- Correr UNA vez en phpMyAdmin (base de datos del sistema → pestaña SQL).
 -- ============================================================================
 
+-- Las dos restricciones originales sin nombre explícito ya no son correctas:
+-- `fuente` va a pasar a NULL-able (deuda sin préstamo), y en ese caso
+-- monto_efectivo+monto_banco en 0 es válido. Se buscan por catálogo en vez
+-- de adivinar su nombre autogenerado — mismo patrón ya usado en
+-- 2026-10-04_modulo_pedidos.sql — para no arriesgarse a borrar por error
+-- OTRA restricción (ej. la de dueno_id) si el nombre adivinado resultara
+-- existir pero apuntar a algo distinto. Van primero, antes de tocar
+-- columnas: si cualquiera de las dos no se encuentra, el script para acá
+-- sin haber modificado nada todavía.
+SET @chk_fuente := (SELECT tc.CONSTRAINT_NAME
+             FROM information_schema.TABLE_CONSTRAINTS tc
+             JOIN information_schema.CHECK_CONSTRAINTS cc
+               ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+             WHERE tc.TABLE_SCHEMA = DATABASE() AND tc.TABLE_NAME = 'vales'
+               AND tc.CONSTRAINT_TYPE = 'CHECK' AND cc.CHECK_CLAUSE LIKE '%turno%'
+             LIMIT 1);
+SET @sql_fuente := CONCAT('ALTER TABLE vales DROP CHECK ', @chk_fuente);
+PREPARE stmt_fuente FROM @sql_fuente; EXECUTE stmt_fuente; DEALLOCATE PREPARE stmt_fuente;
+
+SET @chk_monto := (SELECT tc.CONSTRAINT_NAME
+             FROM information_schema.TABLE_CONSTRAINTS tc
+             JOIN information_schema.CHECK_CONSTRAINTS cc
+               ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+             WHERE tc.TABLE_SCHEMA = DATABASE() AND tc.TABLE_NAME = 'vales'
+               AND tc.CONSTRAINT_TYPE = 'CHECK' AND cc.CHECK_CLAUSE LIKE '%monto_efectivo%'
+             LIMIT 1);
+SET @sql_monto := CONCAT('ALTER TABLE vales DROP CHECK ', @chk_monto);
+PREPARE stmt_monto FROM @sql_monto; EXECUTE stmt_monto; DEALLOCATE PREPARE stmt_monto;
+
 ALTER TABLE vales
   MODIFY COLUMN fuente VARCHAR(20) NULL,
   ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'pago' AFTER numero,
@@ -13,19 +42,6 @@ ALTER TABLE vales
   ADD COLUMN cobrado_en DATETIME(6) NULL AFTER fuente_reposicion,
   ADD COLUMN monto_cobrado_efectivo DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER cobrado_en,
   ADD COLUMN monto_cobrado_banco DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER monto_cobrado_efectivo;
-
--- Las dos restricciones originales sin nombre explícito (MySQL las nombró
--- automáticamente vales_chk_1/vales_chk_2, por orden de aparición en el
--- CREATE TABLE original) ya no son correctas: `fuente` ahora puede ser NULL
--- (deuda sin préstamo), y en ese caso monto_efectivo+monto_banco en 0 es
--- válido. Si alguno de estos DROP falla con "check constraint does not
--- exist", el nombre real es distinto al esperado — consulta
--- information_schema.TABLE_CONSTRAINTS (columna CONSTRAINT_NAME, filtrando
--- TABLE_NAME='vales' y CONSTRAINT_TYPE='CHECK') para encontrar el nombre
--- real antes de reintentar. Es un fallo ruidoso y recuperable, nunca
--- silencioso.
-ALTER TABLE vales DROP CONSTRAINT vales_chk_1;
-ALTER TABLE vales DROP CONSTRAINT vales_chk_2;
 
 ALTER TABLE vales
   ADD CONSTRAINT chk_vales_tipo CHECK (tipo IN ('pago','deuda')),

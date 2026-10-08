@@ -43,10 +43,16 @@ function formatearFechaHora(fechaIso: string) {
   return new Date(fechaIso).toLocaleString("es", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+// "Resuelto" depende del tipo: para un pago es repuesto_en (solo aplica si
+// fuente="dueno"); para una deuda es cobrado_en — son obligaciones
+// independientes (ver spec). Una deuda con préstamo de un dueño que YA se
+// le repuso al dueño pero todavía NO se le ha cobrado al empleado/cliente
+// debe seguir contando como "activo"/pendiente, nunca resuelta solo porque
+// repuesto_en tiene valor.
 function estadoVale(v: Vale): EstadoVale {
   if (v.anulado_en) return "anulado";
-  if (v.repuesto_en || v.cobrado_en) return "resuelto";
-  return "activo";
+  const resuelto = v.tipo === "deuda" ? Boolean(v.cobrado_en) : Boolean(v.repuesto_en);
+  return resuelto ? "resuelto" : "activo";
 }
 
 /** La misma palabra "resuelto" significa cosas distintas según el tipo —

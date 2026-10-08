@@ -27,12 +27,20 @@ export async function listVales(filtros: FiltrosListarVales) {
     condiciones.push(`v.fuente = $${params.length + 1}`);
     params.push(filtros.fuente);
   }
+  // "Resuelto" significa cosas distintas según el tipo: para un pago,
+  // repuesto_en (solo aplica si fuente="dueno"); para una deuda, cobrado_en
+  // — son obligaciones independientes (ver spec: "dos obligaciones
+  // independientes... en cualquier orden"). Una deuda con préstamo de un
+  // dueño que YA se le repuso al dueño pero todavía NO se le ha cobrado al
+  // empleado/cliente debe seguir contando como "activo"/pendiente, nunca
+  // como resuelta solo porque repuesto_en tiene valor.
+  const RESUELTO_SQL = `((v.tipo = 'pago' AND v.repuesto_en IS NOT NULL) OR (v.tipo = 'deuda' AND v.cobrado_en IS NOT NULL))`;
   if (filtros.estado === "anulado") {
     condiciones.push(`v.anulado_en IS NOT NULL`);
   } else if (filtros.estado === "resuelto") {
-    condiciones.push(`(v.repuesto_en IS NOT NULL OR v.cobrado_en IS NOT NULL) AND v.anulado_en IS NULL`);
+    condiciones.push(`${RESUELTO_SQL} AND v.anulado_en IS NULL`);
   } else if (filtros.estado === "activo") {
-    condiciones.push(`v.repuesto_en IS NULL AND v.cobrado_en IS NULL AND v.anulado_en IS NULL`);
+    condiciones.push(`NOT ${RESUELTO_SQL} AND v.anulado_en IS NULL`);
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
   const result = await pool.query(`${SELECT_VALE} ${where} ORDER BY v.created_at DESC`, params);

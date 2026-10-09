@@ -33,7 +33,10 @@ const itemSchema = z.object({
   // Precio mayorista neto y desde cuántas unidades (opcionales: un e-commerce viejo no los manda).
   wholesalePrice: z.number().nonnegative().nullable().optional(),
   wholesaleMinQty: z.number().int().min(2).nullable().optional(),
-  wholesaleNote: z.string().max(120).nullable().optional(),
+  // Sin .max a propósito: Zod cuenta unidades UTF-16 y el e-commerce caracteres (un emoji vale 2
+  // acá y 1 allá); una nota válida allá haría fallar el snapshot entero y el producto dejaría de
+  // sincronizarse. recepcion.ts la recorta a 120 al guardar.
+  wholesaleNote: z.string().nullable().optional(),
   stock: z.number().int(),
 });
 

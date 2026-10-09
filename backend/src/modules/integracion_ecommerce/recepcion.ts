@@ -98,10 +98,16 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
   return { status: "APPLIED" };
 }
 
+/** Recorta a `max` caracteres (no unidades UTF-16: así no parte un emoji), como cuenta VARCHAR. */
+function recortar(texto: string | null | undefined, max: number): string | null {
+  if (!texto) return null;
+  return Array.from(texto).slice(0, max).join("");
+}
+
 /** [precio_mayorista, mayorista_desde, nota_mayorista] del ítem; sin mayorista, los tres null. */
 function mayorista(item: ItemEcommerce): [number | null, number | null, string | null] {
   if (item.wholesalePrice == null || item.wholesaleMinQty == null) return [null, null, null];
-  return [item.wholesalePrice, item.wholesaleMinQty, item.wholesaleNote?.slice(0, 120) ?? null];
+  return [item.wholesalePrice, item.wholesaleMinQty, recortar(item.wholesaleNote, 120)];
 }
 
 async function fijarStock(client: PoolClient, productoId: string, cantidad: number) {

@@ -11,6 +11,12 @@ export interface ProductoConSentido {
   // Publicado en la tienda en línea (null si no está sincronizado).
   ecommerce_publicado: boolean | null;
   precio: number;
+  // Precio mayorista neto desde `mayorista_desde` unidades (sumando las variantes del mismo
+  // producto del e-commerce: `grupo`); llega del e-commerce. null = sin mayorista.
+  precio_mayorista: number | null;
+  mayorista_desde: number | null;
+  nota_mayorista: string | null;
+  grupo: string;
   descripcion: string | null;
   imagen_url: string | null;
   categoria: string | null;

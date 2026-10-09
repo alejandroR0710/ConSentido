@@ -1,5 +1,5 @@
 import { PoolClient, pool } from "../../shared/db/pool";
-import { claveItem, type DeltaStockEcommerce, type EventoEntrante, type SnapshotProducto } from "./tipos";
+import { claveItem, type DeltaStockEcommerce, type EventoEntrante, type ItemEcommerce, type SnapshotProducto } from "./tipos";
 
 export type ResultadoRecepcion =
   | { status: "APPLIED" }
@@ -66,9 +66,10 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
       await client.query(
         `UPDATE productos
             SET nombre = $2, sku = $3, precio = $4, categoria_id = $5, imagen_url = $6,
-                ecommerce_publicado = $7, activo = true
+                ecommerce_publicado = $7, activo = true,
+                precio_mayorista = $8, mayorista_desde = $9, nota_mayorista = $10
           WHERE id = $1`,
-        [id, nombre, item.sku, item.price, categoriaId, snap.imageUrl, snap.published],
+        [id, nombre, item.sku, item.price, categoriaId, snap.imageUrl, snap.published, ...mayorista(item)],
       );
       // El stock de un ítem que ya existe solo lo mueven los STOCK_DELTA, salvo
       // en la carga inicial / resincronización.
@@ -77,10 +78,12 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
       const creado = await client.query(
         `INSERT INTO productos
            (nombre, sku, ecommerce_item_key, ecommerce_product_id, ecommerce_variant_id, ecommerce_publicado,
-            modulo_id, categoria_id, precio, imagen_url, activo)
-         VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM modulos WHERE slug = 'con_sentido'), $7, $8, $9, true)
+            modulo_id, categoria_id, precio, imagen_url, activo, precio_mayorista, mayorista_desde, nota_mayorista)
+         VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM modulos WHERE slug = 'con_sentido'), $7, $8, $9, true,
+                 $10, $11, $12)
          RETURNING id`,
-        [nombre, item.sku, clave, item.productId, item.variantId, snap.published, categoriaId, item.price, snap.imageUrl],
+        [nombre, item.sku, clave, item.productId, item.variantId, snap.published, categoriaId, item.price, snap.imageUrl,
+          ...mayorista(item)],
       );
       await fijarStock(client, creado.rows[0].id, item.stock);
     }
@@ -93,6 +96,12 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
     claves.length ? [snap.productId, claves] : [snap.productId],
   );
   return { status: "APPLIED" };
+}
+
+/** [precio_mayorista, mayorista_desde, nota_mayorista] del ítem; sin mayorista, los tres null. */
+function mayorista(item: ItemEcommerce): [number | null, number | null, string | null] {
+  if (item.wholesalePrice == null || item.wholesaleMinQty == null) return [null, null, null];
+  return [item.wholesalePrice, item.wholesaleMinQty, item.wholesaleNote?.slice(0, 120) ?? null];
 }
 
 async function fijarStock(client: PoolClient, productoId: string, cantidad: number) {

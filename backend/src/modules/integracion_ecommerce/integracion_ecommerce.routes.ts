@@ -30,6 +30,10 @@ const itemSchema = z.object({
   name: z.string().min(1),
   price: z.number().nonnegative(),
   salePrice: z.number().nonnegative().nullable(),
+  // Precio mayorista neto y desde cuántas unidades (opcionales: un e-commerce viejo no los manda).
+  wholesalePrice: z.number().nonnegative().nullable().optional(),
+  wholesaleMinQty: z.number().int().min(2).nullable().optional(),
+  wholesaleNote: z.string().max(120).nullable().optional(),
   stock: z.number().int(),
 });
 

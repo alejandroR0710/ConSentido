@@ -13,6 +13,11 @@ export interface ItemEcommerce {
   name: string;
   price: number; // precio "de físico", ya sin la comisión de Wompi
   salePrice: number | null;
+  // Precio mayorista neto ("de físico") desde `wholesaleMinQty` unidades, sumando las variantes del
+  // mismo producto; null/ausente = sin mayorista.
+  wholesalePrice?: number | null;
+  wholesaleMinQty?: number | null;
+  wholesaleNote?: string | null;
   stock: number;
 }
 

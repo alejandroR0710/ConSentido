@@ -417,6 +417,11 @@ CREATE TABLE productos (
   categoria_id   INT,
   modulo_id      SMALLINT NOT NULL,
   precio         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- Mayorista (llega del e-commerce): neto desde `mayorista_desde` unidades,
+  -- sumando las variantes del mismo producto. NULL = sin mayorista.
+  precio_mayorista DECIMAL(12,2) NULL,
+  mayorista_desde  INT NULL,
+  nota_mayorista   VARCHAR(120) NULL,
   costo          DECIMAL(12,2) NOT NULL DEFAULT 0,
   unidad_medida  VARCHAR(20) NOT NULL DEFAULT 'unidad',
   imagen_url     TEXT,

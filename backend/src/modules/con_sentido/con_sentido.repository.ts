@@ -11,11 +11,21 @@ type Executor = Pool | PoolClient;
 // sola vez, para que el frontend y el validador de ventas (z.number()) reciban
 // números de verdad.
 function normalizarProducto<T extends Record<string, unknown>>(fila: T) {
-  return { ...fila, precio: Number(fila.precio), stock: Number(fila.stock) };
+  return {
+    ...fila,
+    precio: Number(fila.precio),
+    stock: Number(fila.stock),
+    precio_mayorista: fila.precio_mayorista == null ? null : Number(fila.precio_mayorista),
+    mayorista_desde: fila.mayorista_desde == null ? null : Number(fila.mayorista_desde),
+  };
 }
 
+// `grupo`: clave para sumar las variantes de un mismo producto del e-commerce al aplicar el
+// mayorista (un producto creado a mano en el POS es su propio grupo).
 const SELECT_PRODUCTO = `
   SELECT p.id, p.nombre, p.sku, p.precio, p.descripcion, p.imagen_url, p.activo,
+         p.precio_mayorista, p.mayorista_desde, p.nota_mayorista,
+         COALESCE(p.ecommerce_product_id, p.id) AS grupo,
          p.ecommerce_publicado, (p.ecommerce_item_key IS NOT NULL) AS sincronizado,
          cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock
     FROM productos p

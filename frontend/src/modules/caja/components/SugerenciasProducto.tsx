@@ -1,5 +1,6 @@
 import { formatMoney } from "../../../shared/format/money";
 import type { ProductoConSentido } from "../../con_sentido/api";
+import { textoMayorista } from "../../con_sentido/mayorista";
 
 interface SugerenciasProductoProps {
   productos: ProductoConSentido[];
@@ -58,6 +59,11 @@ export function SugerenciasProducto({ productos, texto, onSeleccionar }: Sugeren
           </span>
           <span className="shrink-0 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
             {formatMoney(p.precio)}
+            {textoMayorista(p) && (
+              <span className="block text-[10px] font-medium text-brand-green-700 dark:text-brand-vanilla">
+                {textoMayorista(p)}
+              </span>
+            )}
           </span>
         </button>
       ))}

@@ -8,6 +8,7 @@ import {
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
+import { preciosConMayorista, textoMayorista } from "../mayorista";
 
 interface Producto {
   id: string;
@@ -20,6 +21,10 @@ interface Producto {
   sku?: string | null;
   stock?: number;
   ecommerce_publicado?: boolean | null;
+  // Mayorista (llega del e-commerce): ver ../mayorista.ts.
+  grupo?: string;
+  precio_mayorista?: number | null;
+  mayorista_desde?: number | null;
 }
 
 // Normaliza para buscar sin importar mayúsculas ni tildes ("fragancia" encuentra "Fragáncia").
@@ -33,6 +38,8 @@ interface ItemCarrito {
   descripcionOtro: string;
   cantidad: number;
   precioUnitario: number;
+  // El cajero cambió el precio a mano: el mayorista automático ya no lo toca.
+  precioManual: boolean;
   // Obligatoria si la venta deja el producto en stock negativo (ver faltaStock).
   observacionInventario: string;
 }
@@ -71,14 +78,29 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     return resultante !== null && resultante < 0;
   };
 
-  const total = carrito.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
+  // Precio mayorista: se recalcula con cada cambio del carrito (sumando las líneas del mismo
+  // producto). `precioDe` es el precio que de verdad se cobra en cada línea.
+  const precios = preciosConMayorista(
+    carrito.map((item) => ({
+      grupo: item.producto ? (item.producto.grupo ?? item.producto.id) : null,
+      cantidad: item.cantidad,
+      precioNormal: item.producto ? Number(item.producto.precio) : item.precioUnitario,
+      precioMayorista: item.producto?.precio_mayorista ?? null,
+      mayoristaDesde: item.producto?.mayorista_desde ?? null,
+      precioManual: item.precioManual,
+    })),
+  );
+  const precioDe = (item: ItemCarrito) => precios[carrito.indexOf(item)]?.precio ?? item.precioUnitario;
+  const esMayorista = (item: ItemCarrito) => precios[carrito.indexOf(item)]?.esMayorista ?? false;
+
+  const total = carrito.reduce((sum, item) => sum + precioDe(item) * item.cantidad, 0);
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
 
   // Validar que todos los items sean válidos
   const itemsValidos = carrito.every((item) => {
     if (item.producto) {
       // Item con producto: precio, y observación si queda en stock negativo
-      return item.precioUnitario > 0 && (!faltaStock(item) || item.observacionInventario.trim().length > 0);
+      return precioDe(item) > 0 && (!faltaStock(item) || item.observacionInventario.trim().length > 0);
     } else {
       // Item "Otro": debe tener descripción y precio
       return item.descripcionOtro.trim().length > 0 && item.precioUnitario > 0;
@@ -102,6 +124,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         descripcionOtro: "",
         cantidad: 1,
         precioUnitario: Number(p.precio),
+        precioManual: false,
         observacionInventario: "",
       },
     ]);
@@ -117,6 +140,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         descripcionOtro: "",
         cantidad: 1,
         precioUnitario: 0,
+        precioManual: false,
         observacionInventario: "",
       },
     ]);
@@ -147,8 +171,8 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
           imagen: item.producto?.imagen ?? item.producto?.imagen_url ?? undefined,
           categoria: item.producto?.categoria,
           cantidad: item.cantidad,
-          precioUnitario: item.precioUnitario,
-          subtotal: item.precioUnitario * item.cantidad,
+          precioUnitario: precioDe(item),
+          subtotal: precioDe(item) * item.cantidad,
           observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
         })),
         monto: total,
@@ -218,6 +242,12 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                           <span className={Number(p.stock) <= 0 ? " font-semibold text-red-600 dark:text-red-400" : ""}>
                             {" · "}
                             {Number(p.stock) === 0 ? "Sin stock" : `Stock: ${Number(p.stock)}`}
+                            {textoMayorista({ precio_mayorista: p.precio_mayorista ?? null, mayorista_desde: p.mayorista_desde ?? null }) && (
+                              <span className="text-brand-green-700 dark:text-brand-vanilla">
+                                {" · "}
+                                {textoMayorista({ precio_mayorista: p.precio_mayorista ?? null, mayorista_desde: p.mayorista_desde ?? null })}
+                              </span>
+                            )}
                           </span>
                         )}
                       </div>
@@ -349,17 +379,22 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Precio</label>
+                      <label className="text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                        Precio
+                        {esMayorista(item) && (
+                          <span className="ml-1 font-semibold text-brand-green-700 dark:text-brand-vanilla">· Mayorista</span>
+                        )}
+                      </label>
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={item.precioUnitario || ""}
+                        value={precioDe(item) || ""}
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, "");
-                          actualizarItem(item.id, { precioUnitario: val === "" ? 0 : Number(val) });
+                          actualizarItem(item.id, { precioUnitario: val === "" ? 0 : Number(val), precioManual: true });
                         }}
                         className={`w-full rounded text-xs border bg-brand-vanilla px-2 py-1 text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla ${
-                          item.precioUnitario <= 0
+                          precioDe(item) <= 0
                             ? "border-red-400 dark:border-red-500"
                             : "border-brand-vanilla-dark dark:border-brand-green-700"
                         }`}
@@ -368,7 +403,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                     <div className="flex-1">
                       <label className="text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Subtotal</label>
                       <div className="rounded bg-brand-green-100 px-2 py-1 text-xs font-semibold text-brand-green-700 dark:bg-brand-green-900/50 dark:text-brand-vanilla">
-                        {formatMoney(item.precioUnitario * item.cantidad)}
+                        {formatMoney(precioDe(item) * item.cantidad)}
                       </div>
                     </div>
                     <button

@@ -16,6 +16,7 @@ import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIn
 import { SugerenciasProducto } from "./SugerenciasProducto";
 import { facturaCajaAReciboProps } from "../factura";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
+import { preciosConMayorista } from "../../con_sentido/mayorista";
 
 interface IngresoModalProps {
   onCerrar: () => void;
@@ -41,6 +42,8 @@ interface LineaIngreso {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  // El cajero cambió el precio a mano: el mayorista automático ya no lo toca.
+  precioManual?: boolean;
   // Solo queda seteado cuando la línea vino del autocompletar de productos
   // (ver SugerenciasProducto) — escribir después de elegir lo limpia, porque
   // el texto ya no coincide necesariamente con el producto del catálogo.
@@ -113,7 +116,28 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
     return resultante !== null && resultante < 0;
   };
   const faltaObservacion = lineasValidas.some((l) => faltaStock(l) && !l.observacionInventario?.trim());
-  const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0);
+  // Precio mayorista (ver con_sentido/mayorista.ts): se recalcula con cada cambio de las líneas,
+  // sumando las del mismo producto. `precioDe` es el precio que de verdad se cobra en cada línea.
+  const productoDe = (linea: LineaIngreso) =>
+    linea.productoId ? productos.find((p) => p.id === linea.productoId) : undefined;
+  const precios = preciosConMayorista(
+    lineas.map((l) => {
+      const producto = productoDe(l);
+      return {
+        grupo: producto ? producto.grupo : null,
+        cantidad: l.cantidad,
+        precioNormal: producto ? producto.precio : l.precioUnitario,
+        precioMayorista: producto?.precio_mayorista ?? null,
+        mayoristaDesde: producto?.mayorista_desde ?? null,
+        precioManual: l.precioManual ?? false,
+      };
+    }),
+  );
+  const precioDe = (linea: LineaIngreso) =>
+    precios[lineas.findIndex((l) => l.key === linea.key)]?.precio ?? linea.precioUnitario;
+  const esMayorista = (linea: LineaIngreso) =>
+    precios[lineas.findIndex((l) => l.key === linea.key)]?.esMayorista ?? false;
+  const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * precioDe(l), 0);
   const montoBruto = modoMonto === "productos" ? totalLineas : monto;
   const montoNeto = montoBruto * (1 - descuentoPorcentaje / 100);
   const mixtoInvalido =
@@ -151,7 +175,7 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
           ? lineasValidas.map((l) => ({
               nombre: l.nombre.trim(),
               cantidad: l.cantidad,
-              precioUnitario: l.precioUnitario,
+              precioUnitario: precioDe(l),
               productoId: l.productoId,
               observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
             }))
@@ -290,6 +314,7 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
                         actualizarLinea(linea.key, {
                           nombre: producto.nombre,
                           precioUnitario: producto.precio,
+                          precioManual: false,
                           productoId: producto.id,
                         });
                         setFilaEnfocada(null);
@@ -305,13 +330,18 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
                   className="w-16 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 />
                 <MoneyInput
-                  value={linea.precioUnitario}
-                  onChange={(v) => actualizarLinea(linea.key, { precioUnitario: v })}
+                  value={precioDe(linea)}
+                  onChange={(v) => actualizarLinea(linea.key, { precioUnitario: v, precioManual: true })}
                   placeholder="Precio"
                   className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 />
                 <span className="w-24 text-right text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-                  {formatMoney(linea.cantidad * linea.precioUnitario)}
+                  {esMayorista(linea) && (
+                    <span className="block text-[10px] font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                      Mayorista
+                    </span>
+                  )}
+                  {formatMoney(linea.cantidad * precioDe(linea))}
                 </span>
                 <button
                   type="button"

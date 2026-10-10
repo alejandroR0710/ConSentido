@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "../auth/useAuth";
 import type { MetodoPagoValor } from "../components/SelectorMetodoPago";
 
 /** El subconjunto de estado de MigaoPage.tsx que representa una decisión ya
@@ -42,13 +43,13 @@ interface CuentasMinimizadasContextValue {
   limpiarPendienteDeRestaurar: () => void;
 }
 
-const STORAGE_KEY = "migao-cuentas-minimizadas";
+const STORAGE_KEY_BASE = "migao-cuentas-minimizadas";
 
 const CuentasMinimizadasContext = createContext<CuentasMinimizadasContextValue | null>(null);
 
-function leerDeLocalStorage(): Record<string, CuentaMinimizada> {
+function leerDeLocalStorage(storageKey: string): Record<string, CuentaMinimizada> {
   try {
-    const crudo = localStorage.getItem(STORAGE_KEY);
+    const crudo = localStorage.getItem(storageKey);
     return crudo ? (JSON.parse(crudo) as Record<string, CuentaMinimizada>) : {};
   } catch {
     return {};
@@ -62,17 +63,24 @@ function leerDeLocalStorage(): Record<string, CuentaMinimizada> {
  * los ítems de la cuenta, solo las decisiones del cajero.
  */
 export function CuentasMinimizadasProvider({ children }: { children: ReactNode }) {
-  const [mapa, setMapa] = useState<Record<string, CuentaMinimizada>>(() => leerDeLocalStorage());
+  const { usuario } = useAuth();
+  // Clave por usuario: en un terminal compartido, las cuentas minimizadas de
+  // un cajero no deben reaparecerle a otro que inicie sesión después. AppShell
+  // nunca monta este Provider sin usuario (ver AppShell.tsx), y lo desmonta
+  // por completo al cerrar sesión, así que la clave ya es la correcta desde
+  // el primer render — no hace falta releer al cambiar de usuario.
+  const storageKey = `${STORAGE_KEY_BASE}:${usuario?.id ?? "anonimo"}`;
+  const [mapa, setMapa] = useState<Record<string, CuentaMinimizada>>(() => leerDeLocalStorage(storageKey));
   const [pendienteDeRestaurar, setPendienteDeRestaurar] = useState<CuentaMinimizada | null>(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mapa));
+      localStorage.setItem(storageKey, JSON.stringify(mapa));
     } catch {
       // localStorage lleno o bloqueado (modo privado) — sigue funcionando en
       // memoria el resto de la sesión, solo no sobrevive un refresh.
     }
-  }, [mapa]);
+  }, [mapa, storageKey]);
 
   const minimizar = useCallback(
     (ordenId: string, etiqueta: string, montoAproximado: number, decisiones: DecisionesCobroMigao) => {

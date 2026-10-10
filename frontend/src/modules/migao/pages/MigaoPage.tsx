@@ -146,6 +146,13 @@ export function MigaoPage() {
   // sea la más reciente, sin importar el orden en que lleguen.
   const ordenesRequestIdRef = useRef(0);
 
+  // Cuál orden es la "dueña" del detalle/cuenta que se está pidiendo en este
+  // momento — tanto seleccionarOrden como restaurarDesdeMinimizada lo marcan
+  // antes de llamar al backend, y vuelven a comparar contra él al volver. Si
+  // mientras tanto se seleccionó o restauró OTRA orden, la respuesta de la
+  // más vieja se descarta en vez de pisar el detalle/cuenta de la actual.
+  const fetchEnCursoRef = useRef<string | null>(null);
+
   async function cargarOrdenes() {
     const requestId = ++ordenesRequestIdRef.current;
     try {
@@ -228,8 +235,10 @@ export function MigaoPage() {
     setEsAdministrativo(false);
     reiniciarDivision();
     setCantidadesSeleccionadas({});
+    fetchEnCursoRef.current = ordenId;
     try {
       const detalleData = await migaoApi.obtenerDetalle(ordenId);
+      if (fetchEnCursoRef.current !== ordenId) return;
       setDetalle(detalleData);
       // Ya no se puede iniciar un cobro dividido/parcial desde acá, pero si la
       // orden ya traía uno en marcha de antes, se reabre donde se quedó para
@@ -238,12 +247,15 @@ export function MigaoPage() {
       // no hay "cuenta" que cargar, se ignora el 404.
       if (detalleData.orden.estado === "pagando") {
         try {
-          setCuenta(await migaoApi.obtenerCuenta(ordenId));
+          const cuentaData = await migaoApi.obtenerCuenta(ordenId);
+          if (fetchEnCursoRef.current !== ordenId) return;
+          setCuenta(cuentaData);
         } catch {
           // 'pagando' por productos sueltos (pagarItems) — nada que reabrir acá.
         }
       }
     } catch (err) {
+      if (fetchEnCursoRef.current !== ordenId) return;
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el detalle de la orden");
     }
   }
@@ -267,10 +279,11 @@ export function MigaoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** La ✕ del Modal de cobro, el click al fondo oscuro, y el botón explícito
-   *  "Minimizar" llaman los tres a esta misma función — minimizar nunca pierde
-   *  el progreso ni es una acción destructiva (ver spec 2026-10-10). */
-  function minimizarActual() {
+  /** Guarda la cuenta activa como minimizada tal cual está ahora, sin tocar
+   *  el estado local — lo único que usa el cleanup de desmontaje (ver más
+   *  abajo), que nunca debe llamar a un setState de este componente mientras
+   *  se está desmontando. */
+  function guardarComoMinimizada() {
     if (!ordenSeleccionadaId) return;
     const etiqueta = ordenActual
       ? `Mesa ${ordenActual.mesa_numero ?? "—"}${ordenActual.nombre ? ` "${ordenActual.nombre}"` : ""}`
@@ -293,53 +306,99 @@ export function MigaoPage() {
       propinaItemsMontoCustom,
       montoRecibidoItems,
     });
+  }
+
+  /** La ✕ del Modal de cobro, el click al fondo oscuro, y el botón explícito
+   *  "Minimizar" llaman los tres a esta misma función — minimizar nunca pierde
+   *  el progreso ni es una acción destructiva (ver spec 2026-10-10). */
+  function minimizarActual() {
+    if (!ordenSeleccionadaId) return;
+    guardarComoMinimizada();
     setOrdenSeleccionadaId(null);
     setDetalle(null);
     setError(null);
     setMensaje(null);
   }
 
+  // guardarComoMinimizadaRef siempre apunta a la versión más reciente de la
+  // función (cierra sobre el estado del último render) — el cleanup de abajo
+  // se registra una sola vez (deps vacías) y solo se dispara al desmontar de
+  // verdad, así que no puede leer el closure del primer render.
+  const guardarComoMinimizadaRef = useRef(guardarComoMinimizada);
+  useEffect(() => {
+    guardarComoMinimizadaRef.current = guardarComoMinimizada;
+  });
+
+  // Si MigaoPage se desmonta con una cuenta activa SIN minimizar (navegó por
+  // el menú/un link en vez de tocar "Minimizar", botón atrás del navegador),
+  // se minimiza sola — el objetivo de la funcionalidad es que salir de la
+  // pantalla nunca pierda el progreso, sin importar por qué puerta se salió.
+  useEffect(() => {
+    return () => guardarComoMinimizadaRef.current();
+  }, []);
+
   /** Reabre una cuenta minimizada: pide la orden FRESCA al backend (nunca usa
    *  detalle/ítems guardados) y encima le aplica las decisiones que sí se
-   *  guardaron. Si ya no está abierta, o si la petición falla, se avisa y se
-   *  queda en la lista — nunca aplica decisiones sobre una cuenta inválida. */
+   *  guardaron. Las decisiones que no dependen del backend se aplican de una
+   *  vez (no esperan el fetch) para que minimizar a mitad de la restauración
+   *  nunca guarde valores de la cuenta anterior. Si ya no está abierta, se
+   *  avisa y se queda en la lista; si la petición falla por otra razón (ej.
+   *  sin conexión), se deja de nuevo minimizada en vez de perderla. */
   async function restaurarDesdeMinimizada(entry: CuentaMinimizada) {
     setOrdenSeleccionadaId(entry.ordenId);
     setDetalle(null);
     setMensaje(null);
     setError(null);
     reiniciarDivision();
+    const d = entry.decisiones;
+    setPago(d.pago);
+    setMontoRecibido(d.montoRecibido);
+    // Una cuenta minimizada por Root con "administrativo" no debe quedar sin
+    // forma de desactivarse si la restaura un Cajero (el checkbox para
+    // destildarla solo se muestra si puedeAdministrativo).
+    setEsAdministrativo(d.esAdministrativo && puedeAdministrativo);
+    setDescuentoPorcentaje(d.descuentoPorcentaje);
+    setPropinaPorcentaje(d.propinaPorcentaje);
+    setPropinaMontoCustom(d.propinaMontoCustom);
+    setPropinaDecidida(d.propinaDecidida);
+    setPropinaMetodoPago(d.propinaMetodoPago);
+    setPagoItems(d.pagoItems);
+    setPropinaItemsPorcentaje(d.propinaItemsPorcentaje);
+    setPropinaItemsMontoCustom(d.propinaItemsMontoCustom);
+    setMontoRecibidoItems(d.montoRecibidoItems);
+    setErrorItems(null);
+    // cantidadesSeleccionadas/modalPagarItemsAbierto se decide abajo, una vez
+    // que se sabe cuáles ítems siguen siendo cobrables en la cuenta fresca.
+    setModalPagarItemsAbierto(false);
+    fetchEnCursoRef.current = entry.ordenId;
     try {
       const detalleData = await migaoApi.obtenerDetalle(entry.ordenId);
+      if (fetchEnCursoRef.current !== entry.ordenId) return;
       if (detalleData.orden.estado === "cerrada" || detalleData.orden.estado === "cancelada") {
         setOrdenSeleccionadaId(null);
         setError("Esa cuenta minimizada ya no está abierta (se cerró o se canceló) — se quitó de la lista.");
         return;
       }
       setDetalle(detalleData);
-      const d = entry.decisiones;
-      setPago(d.pago);
-      setMontoRecibido(d.montoRecibido);
-      setEsAdministrativo(d.esAdministrativo);
-      setDescuentoPorcentaje(d.descuentoPorcentaje);
-      setPropinaPorcentaje(d.propinaPorcentaje);
-      setPropinaMontoCustom(d.propinaMontoCustom);
-      setPropinaDecidida(d.propinaDecidida);
-      setPropinaMetodoPago(d.propinaMetodoPago);
-      setModalPagarItemsAbierto(d.modalPagarItemsAbierto);
-      setPagoItems(d.pagoItems);
-      setPropinaItemsPorcentaje(d.propinaItemsPorcentaje);
-      setPropinaItemsMontoCustom(d.propinaItemsMontoCustom);
-      setMontoRecibidoItems(d.montoRecibidoItems);
-      const idsVigentes = new Set(detalleData.items.map((i) => i.id));
-      setCantidadesSeleccionadas(
-        Object.fromEntries(
-          Object.entries(d.cantidadesSeleccionadas).filter(([itemId]) => idsVigentes.has(Number(itemId))),
-        ),
+      // Un ítem cancelado o ya cobrado (pagarItems) sigue viniendo en
+      // `items` — filtrar solo por id no alcanza, hay que exigir que siga
+      // siendo cobrable, igual que el resto de la vista (ver `cobrable` más
+      // abajo), y recortar la cantidad guardada si ya quedó menos disponible.
+      const cobrables = new Map(
+        detalleData.items.filter((i) => i.estado !== "cancelado" && !i.venta_id).map((i) => [i.id, Number(i.cantidad)]),
       );
+      const cantidadesVigentes = Object.fromEntries(
+        Object.entries(d.cantidadesSeleccionadas).flatMap(([itemId, cantidad]) => {
+          const maxima = cobrables.get(Number(itemId));
+          return maxima ? [[itemId, Math.min(cantidad, maxima)]] : [];
+        }),
+      );
+      setCantidadesSeleccionadas(cantidadesVigentes);
+      setModalPagarItemsAbierto(d.modalPagarItemsAbierto && Object.keys(cantidadesVigentes).length > 0);
       if (detalleData.orden.estado === "pagando") {
         try {
           const cuentaData = await migaoApi.obtenerCuenta(entry.ordenId);
+          if (fetchEnCursoRef.current !== entry.ordenId) return;
           setCuenta(cuentaData);
           const partesVigentes = new Set(cuentaData.partes.map((p) => p.id));
           setAbonoForms(
@@ -350,8 +409,16 @@ export function MigaoPage() {
         }
       }
     } catch (err) {
+      if (fetchEnCursoRef.current !== entry.ordenId) return;
       setOrdenSeleccionadaId(null);
-      setError(err instanceof ApiError ? err.message : "No se pudo recuperar esa cuenta minimizada — se quitó de la lista.");
+      // Error de red/servidor, no "ya no existe" (eso ya se maneja arriba sin
+      // tirar excepción) — se deja de nuevo minimizada en vez de perderla.
+      minimizar(entry.ordenId, entry.etiqueta, entry.montoAproximado, entry.decisiones);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo conectar para recuperar esa cuenta minimizada — sigue minimizada, intenta de nuevo.",
+      );
     } finally {
       limpiarPendienteDeRestaurar();
     }
@@ -363,7 +430,7 @@ export function MigaoPage() {
   useEffect(() => {
     if (!pendienteDeRestaurar) return;
     if (ordenSeleccionadaId && ordenSeleccionadaId !== pendienteDeRestaurar.ordenId) {
-      minimizarActual();
+      guardarComoMinimizada();
     }
     restaurarDesdeMinimizada(pendienteDeRestaurar);
     // eslint-disable-next-line react-hooks/exhaustive-deps

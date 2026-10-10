@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { desbloquearAudio } from "../../modules/migao/beep";
 import { ComponenteAlarmaPedidos } from "../../modules/pedidos/components/ComponenteAlarmaPedidos";
+import { BarraCuentasMinimizadas } from "../cuentasMinimizadas/BarraCuentasMinimizadas";
+import { CuentasMinimizadasProvider } from "../cuentasMinimizadas/CuentasMinimizadasContext";
 import { useAuth } from "../auth/useAuth";
 import { tieneAccesoTotal } from "../auth/roles";
 import { Modal } from "../components/Modal";
@@ -53,8 +55,9 @@ export function AppShell() {
 
   return (
     <RefrescoProvider>
-      {tieneAccesoTotal(usuario.rol) && <ComponenteAlarmaPedidos />}
-      <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
+      <CuentasMinimizadasProvider>
+        {tieneAccesoTotal(usuario.rol) && <ComponenteAlarmaPedidos />}
+        <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
         <header className="flex items-center justify-between border-b border-brand-vanilla-dark px-4 py-3 dark:border-brand-green-700">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
@@ -122,7 +125,9 @@ export function AppShell() {
             />
           </Modal>
         )}
-      </div>
+        </div>
+        <BarraCuentasMinimizadas />
+      </CuentasMinimizadasProvider>
     </RefrescoProvider>
   );
 }

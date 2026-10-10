@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import {
+  useCuentasMinimizadas,
+  type CuentaMinimizada,
+} from "../../../shared/cuentasMinimizadas/CuentasMinimizadasContext";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { Modal } from "../../../shared/components/Modal";
@@ -50,6 +54,8 @@ export function MigaoPage() {
   // "Pago administrativo" (no genera ingreso en Caja General) es exclusivo de
   // Root/Super Root — Cajero cobra normal.
   const puedeAdministrativo = tieneAccesoTotal(usuario?.rol);
+  const { minimizadas, minimizar, restaurar, pendienteDeRestaurar, limpiarPendienteDeRestaurar } =
+    useCuentasMinimizadas();
 
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [itemsActivos, setItemsActivos] = useState<ItemActivo[]>([]);
@@ -201,6 +207,13 @@ export function MigaoPage() {
   }
 
   async function seleccionarOrden(ordenId: string) {
+    // Si esta orden ya tiene decisiones guardadas de una minimización previa,
+    // restaurarla en vez de arrancar de cero y pisarlas en silencio — mismo
+    // camino que usa la barra de minimizadas (ver pendienteDeRestaurar).
+    if (minimizadas.some((m) => m.ordenId === ordenId)) {
+      restaurar(ordenId);
+      return;
+    }
     setOrdenSeleccionadaId(ordenId);
     setDetalle(null);
     setMensaje(null);
@@ -254,12 +267,107 @@ export function MigaoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function volverALista() {
+  /** La ✕ del Modal de cobro, el click al fondo oscuro, y el botón explícito
+   *  "Minimizar" llaman los tres a esta misma función — minimizar nunca pierde
+   *  el progreso ni es una acción destructiva (ver spec 2026-10-10). */
+  function minimizarActual() {
+    if (!ordenSeleccionadaId) return;
+    const etiqueta = ordenActual
+      ? `Mesa ${ordenActual.mesa_numero ?? "—"}${ordenActual.nombre ? ` "${ordenActual.nombre}"` : ""}`
+      : "Cuenta";
+    const montoAproximado = cuenta ? cuenta.partes.reduce((acc, p) => acc + p.pendiente, 0) : (detalle?.total ?? 0);
+    minimizar(ordenSeleccionadaId, etiqueta, montoAproximado, {
+      pago,
+      montoRecibido,
+      esAdministrativo,
+      descuentoPorcentaje,
+      propinaPorcentaje,
+      propinaMontoCustom,
+      propinaDecidida,
+      propinaMetodoPago,
+      abonoForms,
+      cantidadesSeleccionadas,
+      modalPagarItemsAbierto,
+      pagoItems,
+      propinaItemsPorcentaje,
+      propinaItemsMontoCustom,
+      montoRecibidoItems,
+    });
     setOrdenSeleccionadaId(null);
     setDetalle(null);
     setError(null);
     setMensaje(null);
   }
+
+  /** Reabre una cuenta minimizada: pide la orden FRESCA al backend (nunca usa
+   *  detalle/ítems guardados) y encima le aplica las decisiones que sí se
+   *  guardaron. Si ya no está abierta, o si la petición falla, se avisa y se
+   *  queda en la lista — nunca aplica decisiones sobre una cuenta inválida. */
+  async function restaurarDesdeMinimizada(entry: CuentaMinimizada) {
+    setOrdenSeleccionadaId(entry.ordenId);
+    setDetalle(null);
+    setMensaje(null);
+    setError(null);
+    reiniciarDivision();
+    try {
+      const detalleData = await migaoApi.obtenerDetalle(entry.ordenId);
+      if (detalleData.orden.estado === "cerrada" || detalleData.orden.estado === "cancelada") {
+        setOrdenSeleccionadaId(null);
+        setError("Esa cuenta minimizada ya no está abierta (se cerró o se canceló) — se quitó de la lista.");
+        return;
+      }
+      setDetalle(detalleData);
+      const d = entry.decisiones;
+      setPago(d.pago);
+      setMontoRecibido(d.montoRecibido);
+      setEsAdministrativo(d.esAdministrativo);
+      setDescuentoPorcentaje(d.descuentoPorcentaje);
+      setPropinaPorcentaje(d.propinaPorcentaje);
+      setPropinaMontoCustom(d.propinaMontoCustom);
+      setPropinaDecidida(d.propinaDecidida);
+      setPropinaMetodoPago(d.propinaMetodoPago);
+      setModalPagarItemsAbierto(d.modalPagarItemsAbierto);
+      setPagoItems(d.pagoItems);
+      setPropinaItemsPorcentaje(d.propinaItemsPorcentaje);
+      setPropinaItemsMontoCustom(d.propinaItemsMontoCustom);
+      setMontoRecibidoItems(d.montoRecibidoItems);
+      const idsVigentes = new Set(detalleData.items.map((i) => i.id));
+      setCantidadesSeleccionadas(
+        Object.fromEntries(
+          Object.entries(d.cantidadesSeleccionadas).filter(([itemId]) => idsVigentes.has(Number(itemId))),
+        ),
+      );
+      if (detalleData.orden.estado === "pagando") {
+        try {
+          const cuentaData = await migaoApi.obtenerCuenta(entry.ordenId);
+          setCuenta(cuentaData);
+          const partesVigentes = new Set(cuentaData.partes.map((p) => p.id));
+          setAbonoForms(
+            Object.fromEntries(Object.entries(d.abonoForms).filter(([parteId]) => partesVigentes.has(parteId))),
+          );
+        } catch {
+          // 'pagando' por productos sueltos (pagarItems) — nada que reabrir acá.
+        }
+      }
+    } catch (err) {
+      setOrdenSeleccionadaId(null);
+      setError(err instanceof ApiError ? err.message : "No se pudo recuperar esa cuenta minimizada — se quitó de la lista.");
+    } finally {
+      limpiarPendienteDeRestaurar();
+    }
+  }
+
+  // Si al restaurar una cuenta ya hay otra activa (sin minimizar) en la
+  // página, esa se minimiza automáticamente primero — nunca se pierde trabajo
+  // sin avisar ni se bloquea la acción de restaurar.
+  useEffect(() => {
+    if (!pendienteDeRestaurar) return;
+    if (ordenSeleccionadaId && ordenSeleccionadaId !== pendienteDeRestaurar.ordenId) {
+      minimizarActual();
+    }
+    restaurarDesdeMinimizada(pendienteDeRestaurar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendienteDeRestaurar]);
 
   /** Recarga el detalle sin tocar el método de pago ni la división ya elegidos
    *  — a diferencia de seleccionarOrden(), que sí los reinicia porque cambia
@@ -611,9 +719,8 @@ export function MigaoPage() {
       {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
       {errorFactura && <p className="text-sm text-amber-700 dark:text-amber-400">⚠ {errorFactura}</p>}
 
-      {!mostrarCobro ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">
               Órdenes abiertas {ordenes.length > 0 && <span className="text-brand-ink/50">({ordenes.length})</span>}
             </h2>
@@ -713,26 +820,31 @@ export function MigaoPage() {
               })}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      </div>
+
+      {mostrarCobro && (
+        <Modal
+          titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
+          onCerrar={minimizarActual}
+          maxWidth="sm:max-w-2xl"
+        >
+        <div className="flex flex-col gap-4">
           <button
-            onClick={volverALista}
+            onClick={minimizarActual}
             className="self-start text-sm font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
           >
-            ← Volver a órdenes
+            ➖ Minimizar
           </button>
 
           <h2 className="-mt-2 flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
-            <span>
-              {ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
+            <span className="flex flex-wrap items-center gap-2">
               {ordenActual?.mesero_nombre && (
-                <span className="ml-2 text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                <span className="text-sm font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
                   Mesero: {ordenActual.mesero_nombre}
                 </span>
               )}
               {ordenActual?.nombre && (
-                <span className="ml-2 text-sm font-semibold italic text-brand-green-700 dark:text-brand-vanilla">
+                <span className="text-sm font-semibold italic text-brand-green-700 dark:text-brand-vanilla">
                   "{ordenActual.nombre}"
                 </span>
               )}
@@ -1192,6 +1304,7 @@ export function MigaoPage() {
             </>
           )}
         </div>
+        </Modal>
       )}
 
       {modalAbierto === "cancelar" && ordenSeleccionadaId && (

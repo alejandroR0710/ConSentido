@@ -338,15 +338,20 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   }
 
   return (
-    <Modal titulo="Registrar ingreso" onCerrar={onCerrar} maxWidth="sm:max-w-2xl">
-      <button
-        type="button"
-        onClick={onCerrar}
-        className="mb-2 block text-sm font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
-      >
-        ➖ Minimizar
-      </button>
-
+    <Modal
+      titulo="Registrar ingreso"
+      onCerrar={onCerrar}
+      maxWidth="sm:max-w-2xl"
+      accionExtra={
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="rounded-md px-2 py-1 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+        >
+          ➖ Minimizar
+        </button>
+      }
+    >
       <label className="mb-2 block text-xs font-medium">Viene de</label>
       <div className="mb-3 grid grid-cols-3 gap-2">
         {MODULOS_ORIGEN.map((m) => (

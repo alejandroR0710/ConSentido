@@ -8,6 +8,9 @@ interface ModalProps {
   // "advertencia": para popups que exigen atención (algo bloquea una acción,
   // falta resolver algo) — borde y título en amber en vez del verde normal.
   tono?: "normal" | "advertencia";
+  // Botón(es) extra en el header, a la izquierda de la ✕ (ej. "Minimizar")
+  // — opcional, no afecta a los modales que no lo pasan.
+  accionExtra?: ReactNode;
 }
 
 /**
@@ -15,7 +18,7 @@ interface ModalProps {
  * centrado en pantallas más grandes. Base de todos los popups de la app —
  * evita repetir el fondo oscuro + contenedor + botón de cerrar en cada uno.
  */
-export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", tono = "normal" }: ModalProps) {
+export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", tono = "normal", accionExtra }: ModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={onCerrar}>
       <div
@@ -35,13 +38,16 @@ export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", to
             {tono === "advertencia" && <span aria-hidden>⚠️ </span>}
             {titulo}
           </h2>
-          <button
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-1">
+            {accionExtra}
+            <button
+              onClick={onCerrar}
+              aria-label="Cerrar"
+              className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">{children}</div>

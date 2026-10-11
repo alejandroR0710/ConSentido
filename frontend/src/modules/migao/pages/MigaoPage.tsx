@@ -894,15 +894,16 @@ export function MigaoPage() {
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
+          accionExtra={
+            <button
+              onClick={minimizarActual}
+              className="rounded-md px-2 py-1 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+            >
+              ➖ Minimizar
+            </button>
+          }
         >
         <div className="flex flex-col gap-4">
-          <button
-            onClick={minimizarActual}
-            className="self-start text-sm font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
-          >
-            ➖ Minimizar
-          </button>
-
           <h2 className="-mt-2 flex items-center gap-2 text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
             <span className="flex flex-wrap items-center gap-2">
               {ordenActual?.mesero_nombre && (

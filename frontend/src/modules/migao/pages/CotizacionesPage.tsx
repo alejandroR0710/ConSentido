@@ -5,6 +5,10 @@ import { ModalImprimir } from "../../../shared/components/ModalImprimir";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { formatMoney } from "../../../shared/format/money";
 import { IngresoModal } from "../../caja/components/IngresoModal";
+import {
+  useIngresosMinimizados,
+  type IngresoMinimizado,
+} from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type Producto } from "../api";
 import { BotonFactura } from "../components/BotonFactura";
 
@@ -89,6 +93,13 @@ export function CotizacionesPage() {
   const [facturandoCotizacion, setFacturandoCotizacion] = useState<CotizacionDetalle | null>(null);
   const [cargandoFacturar, setCargandoFacturar] = useState<string | null>(null);
   const [errorFacturar, setErrorFacturar] = useState<string | null>(null);
+  const [snapshotIngresoRestaurado, setSnapshotIngresoRestaurado] = useState<IngresoMinimizado | null>(null);
+  const { pendienteDeRestaurar, limpiarPendienteDeRestaurar } = useIngresosMinimizados();
+  useEffect(() => {
+    if (pendienteDeRestaurar?.origen.tipo !== "cotizacion") return;
+    setSnapshotIngresoRestaurado(pendienteDeRestaurar);
+    limpiarPendienteDeRestaurar();
+  }, [pendienteDeRestaurar, limpiarPendienteDeRestaurar]);
 
   async function cargarCotizaciones() {
     try {
@@ -455,30 +466,53 @@ export function CotizacionesPage() {
 
       {recibo && <ModalImprimir {...recibo} onCerrar={() => setRecibo(null)} />}
 
-      {facturandoCotizacion && (
+      {(facturandoCotizacion || snapshotIngresoRestaurado) && (
         <IngresoModal
-          onCerrar={() => setFacturandoCotizacion(null)}
-          valoresIniciales={{
-            motivo: [
-              `Cotización #${facturandoCotizacion.numero}`,
-              facturandoCotizacion.cliente_nombre ?? undefined,
-              facturandoCotizacion.cliente_telefono ?? undefined,
-              facturandoCotizacion.nota ?? undefined,
-            ]
-              .filter(Boolean)
-              .join(" — "),
-            items: facturandoCotizacion.items.map((item) => ({
-              nombre: item.nombre,
-              cantidad: Number(item.cantidad),
-              precioUnitario: Number(item.precio_unitario),
-            })),
+          key={snapshotIngresoRestaurado?.id ?? facturandoCotizacion?.id ?? "nuevo"}
+          origen={
+            facturandoCotizacion
+              ? { tipo: "cotizacion", cotizacionId: facturandoCotizacion.id, numeroCotizacion: facturandoCotizacion.numero }
+              : snapshotIngresoRestaurado!.origen
+          }
+          onCerrar={() => {
+            setFacturandoCotizacion(null);
+            setSnapshotIngresoRestaurado(null);
           }}
+          valoresIniciales={
+            facturandoCotizacion
+              ? {
+                  motivo: [
+                    `Cotización #${facturandoCotizacion.numero}`,
+                    facturandoCotizacion.cliente_nombre ?? undefined,
+                    facturandoCotizacion.cliente_telefono ?? undefined,
+                    facturandoCotizacion.nota ?? undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(" — "),
+                  items: facturandoCotizacion.items.map((item) => ({
+                    nombre: item.nombre,
+                    cantidad: Number(item.cantidad),
+                    precioUnitario: Number(item.precio_unitario),
+                  })),
+                }
+              : undefined
+          }
+          snapshotRestaurado={snapshotIngresoRestaurado ?? undefined}
           onRegistrado={async (resultado) => {
-            try {
-              await migaoApi.marcarCotizacionFacturada(facturandoCotizacion.id, resultado.venta.id);
-            } catch {
-              // El ingreso ya quedó registrado — si esto falla, la cotización
-              // simplemente no queda marcada como facturada, nada se deshace.
+            const origenActivo = facturandoCotizacion
+              ? ({
+                  tipo: "cotizacion" as const,
+                  cotizacionId: facturandoCotizacion.id,
+                  numeroCotizacion: facturandoCotizacion.numero,
+                })
+              : snapshotIngresoRestaurado!.origen;
+            if (origenActivo.tipo === "cotizacion") {
+              try {
+                await migaoApi.marcarCotizacionFacturada(origenActivo.cotizacionId, resultado.venta.id);
+              } catch {
+                // El ingreso ya quedó registrado — si esto falla, la cotización
+                // simplemente no queda marcada como facturada, nada se deshace.
+              }
             }
             await cargarCotizaciones();
           }}

@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { desbloquearAudio } from "../../modules/migao/beep";
 import { ComponenteAlarmaPedidos } from "../../modules/pedidos/components/ComponenteAlarmaPedidos";
-import { BarraCuentasMinimizadas } from "../cuentasMinimizadas/BarraCuentasMinimizadas";
 import { CuentasMinimizadasProvider } from "../cuentasMinimizadas/CuentasMinimizadasContext";
+import { IngresosMinimizadosProvider } from "../ingresosMinimizados/IngresosMinimizadosContext";
 import { useAuth } from "../auth/useAuth";
 import { tieneAccesoTotal } from "../auth/roles";
 import { Modal } from "../components/Modal";
 import { BannerNotificaciones } from "../push/BannerNotificaciones";
 import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
+import { BarraMinimizados } from "./BarraMinimizados";
 import { BotonLeadExterno } from "./BotonLeadExterno";
 import { IndicadorTurnoCaja } from "./IndicadorTurnoCaja";
 import { RoleNav } from "./RoleNav";
@@ -56,6 +57,7 @@ export function AppShell() {
   return (
     <RefrescoProvider>
       <CuentasMinimizadasProvider>
+        <IngresosMinimizadosProvider>
         {tieneAccesoTotal(usuario.rol) && <ComponenteAlarmaPedidos />}
         <div className="min-h-screen bg-brand-vanilla text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
         <header className="flex items-center justify-between border-b border-brand-vanilla-dark px-4 py-3 dark:border-brand-green-700">
@@ -126,7 +128,8 @@ export function AppShell() {
           </Modal>
         )}
         </div>
-        <BarraCuentasMinimizadas />
+        <BarraMinimizados />
+        </IngresosMinimizadosProvider>
       </CuentasMinimizadasProvider>
     </RefrescoProvider>
   );

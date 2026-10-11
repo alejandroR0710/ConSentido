@@ -18,6 +18,10 @@ import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHi
 import { EgresoModal } from "../components/EgresoModal";
 import { acumuladoDelTurno, resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
+import {
+  useIngresosMinimizados,
+  type IngresoMinimizado,
+} from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { agruparPorEtiqueta, labelMetodoPago } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
 
@@ -62,6 +66,14 @@ export function CajaPage() {
   const [abriendo, setAbriendo] = useState(false);
 
   const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "reset" | "administracion" | null>(null);
+  const [snapshotIngresoRestaurado, setSnapshotIngresoRestaurado] = useState<IngresoMinimizado | null>(null);
+  const { pendienteDeRestaurar, limpiarPendienteDeRestaurar } = useIngresosMinimizados();
+  useEffect(() => {
+    if (pendienteDeRestaurar?.origen.tipo !== "caja") return;
+    setSnapshotIngresoRestaurado(pendienteDeRestaurar);
+    setModalAbierto("ingreso");
+    limpiarPendienteDeRestaurar();
+  }, [pendienteDeRestaurar, limpiarPendienteDeRestaurar]);
   const [movimientoEditando, setMovimientoEditando] = useState<MovimientoCaja | null>(null);
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
   const [movimientoAEditarCompleto, setMovimientoAEditarCompleto] = useState<MovimientoCaja | null>(null);
@@ -514,7 +526,16 @@ export function CajaPage() {
       )}
 
       {modalAbierto === "ingreso" && (
-        <IngresoModal onCerrar={() => setModalAbierto(null)} onRegistrado={cargarResumenDeTurnoActual} />
+        <IngresoModal
+          key={snapshotIngresoRestaurado?.id ?? "nuevo"}
+          origen={{ tipo: "caja" }}
+          onCerrar={() => {
+            setModalAbierto(null);
+            setSnapshotIngresoRestaurado(null);
+          }}
+          onRegistrado={cargarResumenDeTurnoActual}
+          snapshotRestaurado={snapshotIngresoRestaurado ?? undefined}
+        />
       )}
 
       {modalAbierto === "egreso" && (

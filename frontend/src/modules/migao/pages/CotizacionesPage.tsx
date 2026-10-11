@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { BotonVolver } from "../../../shared/components/BotonVolver";
 import { ModalImprimir } from "../../../shared/components/ModalImprimir";
@@ -94,9 +94,22 @@ export function CotizacionesPage() {
   const [cargandoFacturar, setCargandoFacturar] = useState<string | null>(null);
   const [errorFacturar, setErrorFacturar] = useState<string | null>(null);
   const [snapshotIngresoRestaurado, setSnapshotIngresoRestaurado] = useState<IngresoMinimizado | null>(null);
-  const { pendienteDeRestaurar, limpiarPendienteDeRestaurar } = useIngresosMinimizados();
+  // Espejo en ref de snapshotIngresoRestaurado — abrirFacturarDesde es
+  // asíncrona (pide la cotización completa antes de abrir el modal) y
+  // necesita leer el valor MÁS RECIENTE después de ese await, no el que
+  // tenía cerrado en su closure al momento de llamarse.
+  const snapshotIngresoRestauradoRef = useRef(snapshotIngresoRestaurado);
+  useEffect(() => {
+    snapshotIngresoRestauradoRef.current = snapshotIngresoRestaurado;
+  }, [snapshotIngresoRestaurado]);
+  const { minimizados: ingresosMinimizados, restaurar: restaurarIngreso, pendienteDeRestaurar, limpiarPendienteDeRestaurar } =
+    useIngresosMinimizados();
   useEffect(() => {
     if (pendienteDeRestaurar?.origen.tipo !== "cotizacion") return;
+    // Si justo en este momento había una cotización cargándose para facturar
+    // (abrirFacturarDesde en vuelo), la restauración gana — nunca se mezclan
+    // los dos orígenes (ver guardia simétrica ahí).
+    setFacturandoCotizacion(null);
     setSnapshotIngresoRestaurado(pendienteDeRestaurar);
     limpiarPendienteDeRestaurar();
   }, [pendienteDeRestaurar, limpiarPendienteDeRestaurar]);
@@ -227,10 +240,26 @@ export function CotizacionesPage() {
    *  los productos/servicios de esta cotización — el cajero elige el área,
    *  confirma el método de pago, y ahí sale la venta real con su factura. */
   async function abrirFacturarDesde(id: string) {
+    // Si esta cotización ya tiene un ingreso minimizado a medio llenar,
+    // restaurarlo en vez de pedir la cotización de nuevo y arrancar en
+    // blanco — eso pisaría esa entrada en silencio al minimizar otra vez
+    // (los dos comparten el mismo id, "cotizacion-<id>").
+    const existente = ingresosMinimizados.find(
+      (m) => m.origen.tipo === "cotizacion" && m.origen.cotizacionId === id,
+    );
+    if (existente) {
+      restaurarIngreso(existente.id);
+      return;
+    }
     setCargandoFacturar(id);
     setErrorFacturar(null);
     try {
       const detalle = await migaoApi.obtenerCotizacion(id);
+      // Si mientras esta petición estaba en vuelo se restauró un ingreso
+      // minimizado, esa restauración gana — nunca se mezclan los dos orígenes
+      // (ver snapshotIngresoRestauradoRef y la guardia simétrica en el efecto
+      // de pendienteDeRestaurar).
+      if (snapshotIngresoRestauradoRef.current) return;
       setFacturandoCotizacion(detalle);
     } catch (err) {
       setErrorFacturar(err instanceof ApiError ? err.message : "No se pudo abrir la cotización para facturar");
@@ -470,9 +499,13 @@ export function CotizacionesPage() {
         <IngresoModal
           key={snapshotIngresoRestaurado?.id ?? facturandoCotizacion?.id ?? "nuevo"}
           origen={
-            facturandoCotizacion
-              ? { tipo: "cotizacion", cotizacionId: facturandoCotizacion.id, numeroCotizacion: facturandoCotizacion.numero }
-              : snapshotIngresoRestaurado!.origen
+            snapshotIngresoRestaurado
+              ? snapshotIngresoRestaurado.origen
+              : {
+                  tipo: "cotizacion",
+                  cotizacionId: facturandoCotizacion!.id,
+                  numeroCotizacion: facturandoCotizacion!.numero,
+                }
           }
           onCerrar={() => {
             setFacturandoCotizacion(null);
@@ -499,13 +532,13 @@ export function CotizacionesPage() {
           }
           snapshotRestaurado={snapshotIngresoRestaurado ?? undefined}
           onRegistrado={async (resultado) => {
-            const origenActivo = facturandoCotizacion
-              ? ({
+            const origenActivo = snapshotIngresoRestaurado
+              ? snapshotIngresoRestaurado.origen
+              : ({
                   tipo: "cotizacion" as const,
-                  cotizacionId: facturandoCotizacion.id,
-                  numeroCotizacion: facturandoCotizacion.numero,
-                })
-              : snapshotIngresoRestaurado!.origen;
+                  cotizacionId: facturandoCotizacion!.id,
+                  numeroCotizacion: facturandoCotizacion!.numero,
+                });
             if (origenActivo.tipo === "cotizacion") {
               try {
                 await migaoApi.marcarCotizacionFacturada(origenActivo.cotizacionId, resultado.venta.id);

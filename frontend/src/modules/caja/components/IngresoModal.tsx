@@ -53,11 +53,21 @@ function lineaVacia(): LineaIngreso {
 }
 
 export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales, snapshotRestaurado }: IngresoModalProps) {
-  const { minimizar } = useIngresosMinimizados();
+  const { minimizar, descartar } = useIngresosMinimizados();
   // Mismo id si se está restaurando (para que minimizar de nuevo pise la
-  // misma entrada en vez de duplicarla); uno nuevo si el formulario arranca
-  // en blanco o precargado desde una cotización.
-  const [id] = useState(() => snapshotRestaurado?.id ?? crypto.randomUUID());
+  // misma entrada en vez de duplicarla). Si no, y el origen es una
+  // cotización, un id estable por cotización — abrir "Pasar a factura" dos
+  // veces sobre la misma cotización debe pisar la misma entrada minimizada,
+  // no crear dos chips para lo mismo. `crypto.randomUUID` no existe fuera de
+  // un contexto seguro (ej. acceder por IP/HTTP en la red local) — con un
+  // fallback nunca revienta el formulario por eso.
+  const [id] = useState(
+    () =>
+      snapshotRestaurado?.id ??
+      (origen.tipo === "cotizacion"
+        ? `cotizacion-${origen.cotizacionId}`
+        : (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)),
+  );
   const f = snapshotRestaurado?.formulario;
   const tieneItemsIniciales = Boolean(valoresIniciales?.items && valoresIniciales.items.length > 0);
   // Con Sentido por defecto: la mayoría de ingresos manuales acá son de ahí
@@ -71,10 +81,15 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
   const [monto, setMonto] = useState(f?.monto ?? 0);
   const [lineas, setLineas] = useState<LineaIngreso[]>(
-    f?.lineas ??
-      (tieneItemsIniciales
+    f
+      // Re-clavar las keys con el contador de ESTA sesión: las que traía el
+      // snapshot pueden venir de antes de un refresh de página, y el
+      // contador reinicia en 1 en cada carga — sin esto, una línea nueva
+      // agregada después podía terminar con la misma key que una restaurada.
+      ? f.lineas.map((l) => ({ ...l, key: siguienteKeyLinea++ }))
+      : tieneItemsIniciales
         ? valoresIniciales!.items!.map((i) => ({ key: siguienteKeyLinea++, ...i }))
-        : [lineaVacia()]),
+        : [lineaVacia()],
   );
   const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(f?.descuentoPorcentaje ?? 0);
   const [pago, setPago] = useState<MetodoPagoValor>(f?.pago ?? { metodoPago: "efectivo" });
@@ -82,6 +97,20 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   const [motivo, setMotivo] = useState(f?.motivo ?? valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Si el formulario abre YA lleno (precargado desde una cotización) o
+  // restaurado, "sigue como arrancó" no es lo mismo que "está vacío" — lo que
+  // importa para no dejar un chip fantasma es si el cajero cambió algo desde
+  // que se montó, sin importar con qué arrancó.
+  const primerRenderTocadoRef = useRef(true);
+  const tocadoRef = useRef(false);
+  useEffect(() => {
+    if (primerRenderTocadoRef.current) {
+      primerRenderTocadoRef.current = false;
+      return;
+    }
+    tocadoRef.current = true;
+  }, [modulo, modoMonto, monto, lineas, descuentoPorcentaje, pago, montoRecibido, motivo]);
 
   // Catálogo de Con Sentido para el autocompletar de "Producto o servicio" —
   // se carga una vez al abrir el modal (mismo listado que usa el e-commerce,
@@ -167,15 +196,22 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
     setLineas((actual) => (actual.length > 1 ? actual.filter((l) => l.key !== key) : [lineaVacia()]));
   }
 
+  // Se marca en cuanto el POST de registrar responde bien, ANTES de esperar
+  // a onRegistrado (que puede tardar — ej. marcarCotizacionFacturada) y antes
+  // de que el estado resultado llegue a commitearse. Si el modal se cierra en
+  // esa ventana, guardarComoMinimizado no debe tratar un ingreso YA
+  // registrado como uno a medio llenar — eso duplicaría la venta al
+  // restaurarlo y volver a registrar.
+  const yaRegistradoRef = useRef(false);
+
   /** Guarda el formulario tal cual bajo su id — a diferencia de Migao, no hay
    *  nada "fresco" que repedir al backend, así que esto es todo lo que hace
    *  falta para poder restaurarlo después (ver spec 2026-10-11). Se salta si
-   *  ya se registró (nada que minimizar) o si el formulario sigue intacto
-   *  (abrirlo y cerrarlo sin tocar nada no debe dejar un chip en la barra). */
+   *  ya se registró (nada que minimizar) o si el formulario sigue tal cual
+   *  arrancó (abrirlo y cerrarlo sin cambiar nada no debe dejar un chip en la
+   *  barra, incluso si arrancó precargado desde una cotización). */
   function guardarComoMinimizado() {
-    if (resultado) return;
-    const sinTocar = lineasValidas.length === 0 && monto === 0 && motivo.trim().length === 0;
-    if (sinTocar) return;
+    if (resultado || yaRegistradoRef.current || !tocadoRef.current) return;
     const formulario: FormularioIngreso = {
       modulo,
       modoMonto,
@@ -208,6 +244,14 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
     return () => guardarComoMinimizadoRef.current();
   }, []);
 
+  // Por si quedó una entrada minimizada bajo este id de alguna carrera (ej.
+  // StrictMode en desarrollo re-disparando el efecto de arriba justo al
+  // montar) — una vez que el ingreso quedó registrado, nunca debe quedar un
+  // chip para él en la barra.
+  useEffect(() => {
+    if (resultado) descartar(id);
+  }, [resultado, id, descartar]);
+
   async function registrar() {
     if (!puedeRegistrar) return;
     setRegistrando(true);
@@ -234,6 +278,10 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
           : { metodoPago: pago.metodoPago, monto: montoNeto, montoRecibidoEfectivo }),
         ...referenciaBancoPayload(pago),
       });
+      // Antes de esperar onRegistrado (puede tardar) y antes de que
+      // setResultado llegue a commitearse — si el modal se desmonta en el
+      // medio, guardarComoMinimizado ya no debe guardar nada bajo este id.
+      yaRegistradoRef.current = true;
       await onRegistrado(creado);
       setResultado(creado);
     } catch (err) {

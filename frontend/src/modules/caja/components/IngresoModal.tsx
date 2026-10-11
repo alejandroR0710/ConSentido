@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { CalculadoraVuelta } from "../../../shared/components/CalculadoraVuelta";
 import { Modal } from "../../../shared/components/Modal";
@@ -11,6 +11,13 @@ import {
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
+import {
+  useIngresosMinimizados,
+  type FormularioIngreso,
+  type IngresoMinimizado,
+  type LineaIngreso,
+  type OrigenIngreso,
+} from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
 import { SugerenciasProducto } from "./SugerenciasProducto";
@@ -19,6 +26,10 @@ import { MODULOS_ORIGEN } from "../moduloOrigen";
 import { preciosConMayorista } from "../../con_sentido/mayorista";
 
 interface IngresoModalProps {
+  // De dónde sale este formulario — viaja con el snapshot al minimizar para
+  // saber a qué pantalla volver y qué hacer después de registrar (ver
+  // IngresosMinimizadosContext.tsx).
+  origen: OrigenIngreso;
   onCerrar: () => void;
   // Recibe el resultado del registro — quien abre este modal desde otro
   // lugar (ej. "Pasar a factura" de una cotización) lo necesita para, por
@@ -31,25 +42,9 @@ interface IngresoModalProps {
     motivo?: string;
     items?: ItemIngresoInput[];
   };
-}
-
-// Igual que en Cotizaciones: en vez de un solo monto, se pueden agregar
-// varias líneas sueltas (nombre libre + cantidad + precio) y el total se
-// suma solo — útil cuando el ingreso viene de varios productos/servicios
-// distintos que no vale la pena registrar como venta aparte.
-interface LineaIngreso {
-  key: number;
-  nombre: string;
-  cantidad: number;
-  precioUnitario: number;
-  // El cajero cambió el precio a mano: el mayorista automático ya no lo toca.
-  precioManual?: boolean;
-  // Solo queda seteado cuando la línea vino del autocompletar de productos
-  // (ver SugerenciasProducto) — escribir después de elegir lo limpia, porque
-  // el texto ya no coincide necesariamente con el producto del catálogo.
-  productoId?: string;
-  // Obligatoria si la línea deja el producto en stock negativo (ver faltaStock).
-  observacionInventario?: string;
+  // Formulario minimizado que se está restaurando — tiene prioridad sobre
+  // valoresIniciales (que solo aplica al abrir en blanco desde una cotización).
+  snapshotRestaurado?: IngresoMinimizado;
 }
 
 let siguienteKeyLinea = 1;
@@ -57,27 +52,34 @@ function lineaVacia(): LineaIngreso {
   return { key: siguienteKeyLinea++, nombre: "", cantidad: 1, precioUnitario: 0 };
 }
 
-export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: IngresoModalProps) {
+export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales, snapshotRestaurado }: IngresoModalProps) {
+  const { minimizar } = useIngresosMinimizados();
+  // Mismo id si se está restaurando (para que minimizar de nuevo pise la
+  // misma entrada en vez de duplicarla); uno nuevo si el formulario arranca
+  // en blanco o precargado desde una cotización.
+  const [id] = useState(() => snapshotRestaurado?.id ?? crypto.randomUUID());
+  const f = snapshotRestaurado?.formulario;
   const tieneItemsIniciales = Boolean(valoresIniciales?.items && valoresIniciales.items.length > 0);
   // Con Sentido por defecto: la mayoría de ingresos manuales acá son de ahí
   // (Migao casi siempre cobra desde su propia pantalla, no desde acá) — antes
   // arrancaba en "migao" y era fácil dejarlo así sin querer.
-  const [modulo, setModulo] = useState<ModuloOrigenSlug>(valoresIniciales?.moduloOrigenSlug ?? "con_sentido");
+  const [modulo, setModulo] = useState<ModuloOrigenSlug>(f?.modulo ?? valoresIniciales?.moduloOrigenSlug ?? "con_sentido");
   // "Agregar productos" abre primero (es el flujo más usado); "Monto único"
   // queda como segunda opción para un ingreso suelto sin desglose.
-  const [modoMonto, setModoMonto] = useState<"unico" | "productos">("productos");
+  const [modoMonto, setModoMonto] = useState<"unico" | "productos">(f?.modoMonto ?? "productos");
   // "Monto" siempre es el bruto (antes de descuento); lo que realmente se
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
-  const [monto, setMonto] = useState(0);
+  const [monto, setMonto] = useState(f?.monto ?? 0);
   const [lineas, setLineas] = useState<LineaIngreso[]>(
-    tieneItemsIniciales
-      ? valoresIniciales!.items!.map((i) => ({ key: siguienteKeyLinea++, ...i }))
-      : [lineaVacia()],
+    f?.lineas ??
+      (tieneItemsIniciales
+        ? valoresIniciales!.items!.map((i) => ({ key: siguienteKeyLinea++, ...i }))
+        : [lineaVacia()]),
   );
-  const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(0);
-  const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
-  const [montoRecibido, setMontoRecibido] = useState(0);
-  const [motivo, setMotivo] = useState(valoresIniciales?.motivo ?? "");
+  const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(f?.descuentoPorcentaje ?? 0);
+  const [pago, setPago] = useState<MetodoPagoValor>(f?.pago ?? { metodoPago: "efectivo" });
+  const [montoRecibido, setMontoRecibido] = useState(f?.montoRecibido ?? 0);
+  const [motivo, setMotivo] = useState(f?.motivo ?? valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,6 +167,47 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
     setLineas((actual) => (actual.length > 1 ? actual.filter((l) => l.key !== key) : [lineaVacia()]));
   }
 
+  /** Guarda el formulario tal cual bajo su id — a diferencia de Migao, no hay
+   *  nada "fresco" que repedir al backend, así que esto es todo lo que hace
+   *  falta para poder restaurarlo después (ver spec 2026-10-11). Se salta si
+   *  ya se registró (nada que minimizar) o si el formulario sigue intacto
+   *  (abrirlo y cerrarlo sin tocar nada no debe dejar un chip en la barra). */
+  function guardarComoMinimizado() {
+    if (resultado) return;
+    const sinTocar = lineasValidas.length === 0 && monto === 0 && motivo.trim().length === 0;
+    if (sinTocar) return;
+    const formulario: FormularioIngreso = {
+      modulo,
+      modoMonto,
+      monto,
+      lineas,
+      descuentoPorcentaje,
+      pago,
+      montoRecibido,
+      motivo,
+    };
+    const etiqueta = origen.tipo === "cotizacion" ? `Cotización #${origen.numeroCotizacion}` : "Ingreso";
+    minimizar(id, origen, etiqueta, montoNeto, formulario);
+  }
+
+  // guardarComoMinimizadoRef siempre apunta a la versión más reciente de la
+  // función (cierra sobre el estado del último render) — el cleanup de abajo
+  // se registra una sola vez (deps vacías) y solo se dispara al desmontar de
+  // verdad, así que no puede leer el closure del primer render.
+  const guardarComoMinimizadoRef = useRef(guardarComoMinimizado);
+  useEffect(() => {
+    guardarComoMinimizadoRef.current = guardarComoMinimizado;
+  });
+
+  // Minimizar nunca pierde el progreso sin importar POR QUÉ este modal deja
+  // de estar montado: la ✕/fondo oscuro/botón "Minimizar" (los tres llaman a
+  // onCerrar sin más), otra restauración que lo reemplaza en la misma
+  // pantalla (ver key en CajaPage/CotizacionesPage), o navegar a otra
+  // pantalla sin tocar nada explícito.
+  useEffect(() => {
+    return () => guardarComoMinimizadoRef.current();
+  }, []);
+
   async function registrar() {
     if (!puedeRegistrar) return;
     setRegistrando(true);
@@ -248,6 +291,14 @@ export function IngresoModal({ onCerrar, onRegistrado, valoresIniciales }: Ingre
 
   return (
     <Modal titulo="Registrar ingreso" onCerrar={onCerrar} maxWidth="sm:max-w-2xl">
+      <button
+        type="button"
+        onClick={onCerrar}
+        className="mb-2 block text-sm font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+      >
+        ➖ Minimizar
+      </button>
+
       <label className="mb-2 block text-xs font-medium">Viene de</label>
       <div className="mb-3 grid grid-cols-3 gap-2">
         {MODULOS_ORIGEN.map((m) => (

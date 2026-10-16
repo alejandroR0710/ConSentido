@@ -1,4 +1,5 @@
 import type { ReciboImprimibleProps } from "../../shared/components/ReciboImprimible";
+import { formatMoney } from "../../shared/format/money";
 import { labelArea } from "./areas";
 import type { EntregaPropina, FacturaOrden } from "./api";
 
@@ -22,8 +23,20 @@ export function facturaAReciboProps(factura: FacturaOrden): Omit<ReciboImprimibl
     });
   }
 
+  // Si queda saldo por cobrar, esto no es una factura de venta real todavía
+  // — se imprime como prefactura con el aviso y el saldo, mismo patrón ya
+  // usado en Vales para "Pendiente de cobro" (ver vales/factura.ts). Los
+  // módulos que no mandan saldoPendiente (todos salvo Pedidos, por ahora)
+  // siguen imprimiendo la factura normal, sin ningún cambio.
+  const saldoPendiente = factura.saldoPendiente ?? 0;
+  const esPrefactura = saldoPendiente > 0.01;
+  if (esPrefactura) {
+    camposEncabezado.push({ etiqueta: "Abonado", valor: formatMoney(factura.totalAbonado ?? 0) });
+    camposEncabezado.push({ etiqueta: "Saldo pendiente", valor: formatMoney(saldoPendiente) });
+  }
+
   return {
-    tipo: "factura",
+    tipo: esPrefactura ? "prefactura" : "factura",
     folio: factura.numeroFactura,
     fecha: factura.fecha,
     camposEncabezado,

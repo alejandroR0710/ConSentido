@@ -7,6 +7,7 @@ const CLAVE_ANCHO = "recibo-ancho-mm";
 
 const TITULO_POR_TIPO: Record<ReciboImprimibleProps["tipo"], string> = {
   factura: "Factura",
+  prefactura: "Prefactura",
   cotizacion: "Cotización",
   movimiento: "Comprobante",
   resumen: "Resumen de caja",

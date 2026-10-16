@@ -524,6 +524,11 @@ export interface FacturaOrden {
   total: number;
   pagos: FacturaPago[];
   propina: { monto: number; porcentaje: number | null; metodoPago: "efectivo" | "banco" } | null;
+  // Exclusivo de Pedidos por ahora — el resto de los módulos no los manda
+  // (quedan undefined), así que facturaAReciboProps sigue imprimiendo la
+  // factura normal para ellos, sin ningún cambio.
+  totalAbonado?: number;
+  saldoPendiente?: number;
 }
 
 /** Cotización: presupuesto para un cliente ANTES de una orden/venta real —

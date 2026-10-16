@@ -40,7 +40,10 @@ export interface ReciboImprimibleProps {
   // "resumen": totalizado de un día o un turno (ver resumenIngresos/Egresos).
   // "comprobante_propina": vale de entrega de propina a una persona del
   // equipo, con espacio para que firme de recibido (ver HistorialPropinasPage).
-  tipo: "factura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina" | "vale";
+  // "prefactura": una factura con saldo pendiente — mismos ítems/totales que
+  // "factura", pero con el aviso de que todavía no es un comprobante de
+  // venta válido (ver facturaAReciboProps en migao/factura.ts).
+  tipo: "factura" | "prefactura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina" | "vale";
   // Solo aplica a tipo "movimiento": qué franja/color mostrar.
   // Solo aplica a tipo "movimiento" ("ingreso"/"egreso") o tipo "vale" ("deuda").
   variante?: "ingreso" | "egreso" | "deuda";
@@ -110,6 +113,7 @@ export function ReciboImprimible({
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
 
+  const esPrefactura = tipo === "prefactura";
   const esCotizacion = tipo === "cotizacion";
   const esMovimiento = tipo === "movimiento";
   const esResumen = tipo === "resumen";
@@ -122,7 +126,9 @@ export function ReciboImprimible({
   const esLineaUnica = esMovimiento || esComprobantePropina || esVale;
   const mostrarSku = !esLineaUnica && (items ?? []).some((item) => item.sku);
 
-  const franjaTexto = esCotizacion
+  const franjaTexto = esPrefactura
+    ? "PREFACTURA — NO es una factura de venta"
+    : esCotizacion
     ? "COTIZACIÓN — NO es una factura de venta"
     : esResumen
       ? "RESUMEN DE CAJA"
@@ -147,7 +153,9 @@ export function ReciboImprimible({
   // sin esa opción activada.
   const franjaClase = esEgreso ? "border-red-600 text-red-700" : "border-black text-black";
 
-  const tituloDocumento = esCotizacion
+  const tituloDocumento = esPrefactura
+    ? "Prefactura"
+    : esCotizacion
     ? "Cotización"
     : esComprobantePropina
       ? "Comprobante de propina"
@@ -406,11 +414,13 @@ export function ReciboImprimible({
       )}
 
       <div className="mt-3 text-center text-[15px]">
-        {esCotizacion
-          ? "Precios sujetos a cambio. Válida por 15 días."
-          : esMovimiento || esResumen || esComprobantePropina || esVale
-            ? "Documento interno — no es una factura de venta."
-            : "¡Gracias por tu compra!"}
+        {esPrefactura
+          ? "Pendiente de pago — no es un comprobante de venta."
+          : esCotizacion
+            ? "Precios sujetos a cambio. Válida por 15 días."
+            : esMovimiento || esResumen || esComprobantePropina || esVale
+              ? "Documento interno — no es una factura de venta."
+              : "¡Gracias por tu compra!"}
       </div>
     </div>
   );

@@ -452,12 +452,21 @@ export const listarPedidosVencidos = () => repo.listPedidosVencidos();
  * con_sentido.service.ts::obtenerFacturaVenta (mesa/mesero/comensal/propina
  * quedan null, acá no aplican) para reusar el mismo componente de impresión
  * del frontend. Sin descuento en este flujo: subtotal y total son iguales.
+ *
+ * Incluye `totalAbonado`/`saldoPendiente`: el frontend decide con eso si
+ * imprime la factura real o una prefactura (ver
+ * frontend/src/modules/migao/factura.ts::facturaAReciboProps) — acá solo se
+ * calcula y se expone, nunca se bloquea la generación por falta de pago.
  */
 export async function obtenerFacturaPedido(id: string) {
   const pedido = await repo.getPedidoById(id);
   if (!pedido) throw Errors.notFound("Pedido no encontrado");
 
-  const [items, abonos] = await Promise.all([repo.getItemsPorPedido(id), repo.getAbonosPorPedido(id)]);
+  const [items, abonos, totalAbonado] = await Promise.all([
+    repo.getItemsPorPedido(id),
+    repo.getAbonosPorPedido(id),
+    repo.sumAbonosPorPedido(id),
+  ]);
   const monto = Number(pedido.precio_acordado);
   const factura = await repo.getOrCrearFacturaPedido({ pedidoId: id, subtotal: monto, total: monto });
 
@@ -484,5 +493,7 @@ export async function obtenerFacturaPedido(id: string) {
     total: monto,
     pagos: abonos.map((a) => ({ metodoPago: a.metodo_pago as string, monto: Number(a.monto), referencia: null as string | null })),
     propina: null,
+    totalAbonado,
+    saldoPendiente: Math.max(0, monto - totalAbonado),
   };
 }

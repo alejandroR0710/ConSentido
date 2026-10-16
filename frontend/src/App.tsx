@@ -26,6 +26,9 @@ import { MigaoPage } from "./modules/migao/pages/MigaoPage";
 import { DetallePedidoPage } from "./modules/pedidos/pages/DetallePedidoPage";
 import { PedidosPage } from "./modules/pedidos/pages/PedidosPage";
 import { UsuariosPage } from "./modules/general/pages/UsuariosPage";
+import { RecetaDetallePage } from "./modules/recetario/pages/RecetaDetallePage";
+import { RecetarioAdminPage } from "./modules/recetario/pages/RecetarioAdminPage";
+import { RecetarioVerPage } from "./modules/recetario/pages/RecetarioVerPage";
 import { DetalleValePage } from "./modules/vales/pages/DetalleValePage";
 import { ValesPage } from "./modules/vales/pages/ValesPage";
 import { CalculadoraVelasPage } from "./modules/velas/pages/CalculadoraVelasPage";
@@ -71,6 +74,9 @@ export default function App() {
         <Route path="/pedidos/:id" element={<DetallePedidoPage />} />
         <Route path="/vales" element={<ValesPage />} />
         <Route path="/vales/:id" element={<DetalleValePage />} />
+        <Route path="/recetario" element={<RecetarioAdminPage />} />
+        <Route path="/recetario/ver" element={<RecetarioVerPage />} />
+        <Route path="/recetario/ver/:id" element={<RecetaDetallePage />} />
         <Route path="/menu" element={<MenuPage />} />
         <Route path="/usuarios" element={<UsuariosPage />} />
       </Route>

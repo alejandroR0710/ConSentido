@@ -77,6 +77,11 @@ export const MODULES_META: ModuloMeta[] = [
     roles: ["Super Root", "Root", "Cajero"],
   },
   { slug: "pedidos", label: "Pedidos", path: "/pedidos", icon: "📋" },
+  // Recetario: Root/Super Root administran las recetas; Cocina (y también
+  // Root/Super Root, para poder revisar cómo le queda) las navega en una
+  // pantalla aparte, pensada para leerse mientras se cocina.
+  { slug: "recetario", label: "Recetario", path: "/recetario", icon: "📖", roles: ["Super Root", "Root"] },
+  { slug: "recetario", label: "Recetas", path: "/recetario/ver", icon: "🍲", roles: ["Super Root", "Root", "Cocina"] },
   // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
   // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
   // resto de módulos operativos del día a día.

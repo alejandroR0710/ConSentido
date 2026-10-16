@@ -111,6 +111,7 @@ export function RecetarioAdminPage() {
             setRecetaEditando(null);
             await cargar();
           }}
+          onMediaActualizada={cargar}
           onCategoriaCreada={onCategoriaCreada}
         />
       )}

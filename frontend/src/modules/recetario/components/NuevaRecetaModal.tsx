@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
-import { recetarioApi, type RecetarioCategoria } from "../api";
+import { recetarioApi, type Receta, type RecetarioCategoria } from "../api";
 
 interface NuevaRecetaModalProps {
   categorias: RecetarioCategoria[];
@@ -54,26 +54,47 @@ export function NuevaRecetaModal({ categorias, onCerrar, onCreado, onCategoriaCr
     if (!titulo.trim() || !instrucciones.trim()) return;
     setSubmitting(true);
     setError(null);
+
+    let receta: Receta;
     try {
-      const receta = await recetarioApi.crear({
+      receta = await recetarioApi.crear({
         titulo: titulo.trim(),
         instrucciones: instrucciones.trim(),
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         videoUrl: medioPrincipal === "video" && videoUrl.trim() ? videoUrl.trim() : undefined,
         descripcionEmplatado: descripcionEmplatado.trim() || undefined,
       });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la receta");
+      setSubmitting(false);
+      return;
+    }
+
+    // La receta ya existe en este punto — si falla subir una imagen de acá en
+    // adelante, nunca debe parecer que la creación entera falló (eso
+    // invitaría a reintentar con el mismo botón y crear una receta
+    // duplicada). Se avisa aparte, se refresca la lista, y se cierra — para
+    // agregar la imagen que faltó hay que entrar a "Editar".
+    try {
       if (medioPrincipal === "imagen" && imagenPrincipalFile) {
         await recetarioApi.subirImagenPrincipal(receta.id, imagenPrincipalFile);
       }
       if (imagenEmplatadoFile) {
         await recetarioApi.subirImagenEmplatado(receta.id, imagenEmplatadoFile);
       }
-      await onCreado();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo crear la receta");
-    } finally {
+      await onCreado();
+      alert(
+        `La receta "${receta.titulo}" se creó, pero no se pudo subir una de las imágenes (${
+          err instanceof ApiError ? err.message : "error desconocido"
+        }). Agrégala desde "Editar".`,
+      );
       setSubmitting(false);
+      return;
     }
+
+    await onCreado();
+    setSubmitting(false);
   }
 
   return (

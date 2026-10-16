@@ -4,11 +4,21 @@ export const crearCategoriaSchema = z.object({
   nombre: z.string().trim().min(1, "Escribe el nombre de la categoría").max(80),
 });
 
+// `.url()` de Zod solo exige que `new URL(...)` no reviente — acepta
+// `javascript:`/`data:`/`mailto:` igual que `https:`. El `.refine` exige
+// además que empiece por http(s), como pide la spec.
+const videoUrlSchema = z
+  .string()
+  .trim()
+  .url("El link de video no es una URL válida")
+  .max(500)
+  .refine((u) => /^https?:\/\//i.test(u), { message: "El link debe empezar con http:// o https://" });
+
 export const crearRecetaSchema = z.object({
   titulo: z.string().trim().min(1, "Escribe el título de la receta").max(150),
   instrucciones: z.string().trim().min(1, "Escribe las instrucciones de la receta"),
   categoriaId: z.number().int().positive().optional(),
-  videoUrl: z.string().trim().url("El link de video no es una URL válida").max(500).optional(),
+  videoUrl: videoUrlSchema.optional(),
   descripcionEmplatado: z.string().trim().max(500).optional(),
 });
 export type CrearRecetaInput = z.infer<typeof crearRecetaSchema>;
@@ -22,7 +32,7 @@ export const editarRecetaSchema = z.object({
   titulo: z.string().trim().min(1, "Escribe el título de la receta").max(150).optional(),
   instrucciones: z.string().trim().min(1, "Escribe las instrucciones de la receta").optional(),
   categoriaId: z.number().int().positive().nullable().optional(),
-  videoUrl: z.string().trim().url("El link de video no es una URL válida").max(500).nullable().optional(),
+  videoUrl: videoUrlSchema.nullable().optional(),
   descripcionEmplatado: z.string().trim().max(500).nullable().optional(),
 });
 export type EditarRecetaInput = z.infer<typeof editarRecetaSchema>;

@@ -81,10 +81,13 @@ export async function editarReceta(
   if (campos.categoriaId !== undefined) agregar("categoria_id", campos.categoriaId);
   if (campos.videoUrl !== undefined) {
     agregar("video_url", campos.videoUrl);
-    // Un video y una imagen principal nunca coexisten — fijar el video limpia
-    // la imagen principal que hubiera, en la misma sentencia (nunca basta con
-    // el CHECK de la base solo: eso rechazaría el UPDATE en vez de resolverlo).
-    agregar("imagen_principal_url", null);
+    // Un video y una imagen principal nunca coexisten — fijar un video REAL
+    // limpia la imagen principal que hubiera, en la misma sentencia (nunca
+    // basta con el CHECK de la base solo: eso rechazaría el UPDATE en vez de
+    // resolverlo). Vaciar el video (null) NO toca la imagen — así, cambiar a
+    // la pestaña "Video" sin escribir nada y guardar no borra una imagen que
+    // ya existía por accidente.
+    if (campos.videoUrl) agregar("imagen_principal_url", null);
   }
   if (campos.descripcionEmplatado !== undefined) agregar("descripcion_emplatado", campos.descripcionEmplatado);
   if (sets.length === 0) return;

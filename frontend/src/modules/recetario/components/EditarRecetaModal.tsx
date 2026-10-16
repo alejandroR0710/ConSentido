@@ -9,6 +9,11 @@ interface EditarRecetaModalProps {
   categorias: RecetarioCategoria[];
   onCerrar: () => void;
   onGuardado: () => Promise<void> | void;
+  // Solo refresca la lista del admin, sin cerrar este modal — a diferencia
+  // de onGuardado (que cierra), subir una imagen no debe botar al usuario
+  // del formulario y perder el título/instrucciones que ya haya escrito sin
+  // guardar.
+  onMediaActualizada: () => Promise<void> | void;
   onCategoriaCreada: (categoria: RecetarioCategoria) => void;
 }
 
@@ -22,6 +27,7 @@ export function EditarRecetaModal({
   categorias,
   onCerrar,
   onGuardado,
+  onMediaActualizada,
   onCategoriaCreada,
 }: EditarRecetaModalProps) {
   const [titulo, setTitulo] = useState(receta.titulo);
@@ -60,13 +66,13 @@ export function EditarRecetaModal({
     setImagenPrincipalUrl(actualizada.imagen_principal_url);
     setMedioPrincipal("imagen");
     setVideoUrl("");
-    await onGuardado();
+    await onMediaActualizada();
   }
 
   async function subirImagenEmplatado(file: File) {
     const actualizada = await recetarioApi.subirImagenEmplatado(receta.id, file);
     setImagenEmplatadoUrl(actualizada.imagen_emplatado_url);
-    await onGuardado();
+    await onMediaActualizada();
   }
 
   async function guardar() {

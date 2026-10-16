@@ -1138,6 +1138,33 @@ CREATE INDEX idx_vales_dueno ON vales(dueno_id);
 CREATE INDEX idx_vales_tipo ON vales(tipo);
 
 -- ============================================================================
+-- 7.2 MODULO RECETARIO
+-- ============================================================================
+
+CREATE TABLE recetario_categorias (
+  id     INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(80) UNIQUE NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE recetario_recetas (
+  id                    CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  titulo                VARCHAR(150) NOT NULL,
+  instrucciones         TEXT NOT NULL,
+  categoria_id          INT NULL,
+  video_url             VARCHAR(500) NULL,
+  imagen_principal_url  VARCHAR(500) NULL,
+  imagen_emplatado_url  VARCHAR(500) NULL,
+  descripcion_emplatado VARCHAR(500) NULL,
+  creado_por_id         CHAR(36) NOT NULL,
+  created_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  FOREIGN KEY (categoria_id) REFERENCES recetario_categorias(id),
+  FOREIGN KEY (creado_por_id) REFERENCES usuarios(id),
+  CHECK (video_url IS NULL OR imagen_principal_url IS NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE INDEX idx_recetario_recetas_categoria ON recetario_recetas(categoria_id);
+
+-- ============================================================================
 -- 8. SEED MINIMO DE MODULOS
 -- ============================================================================
 -- Nota: si vas a importar los datos migrados desde Supabase, el archivo de
@@ -1150,7 +1177,8 @@ INSERT INTO modulos (slug, nombre) VALUES
   ('con_sentido', 'Con Sentido'),
   ('migao', 'Migao (POS)'),
   ('pedidos', 'Pedidos / Encargos'),
-  ('vales', 'Vales');
+  ('vales', 'Vales'),
+  ('recetario', 'Recetario');
 
 -- A diferencia del resto de categorías de gasto (libres, se crean desde la
 -- UI), esta la necesita el código del módulo Vales por nombre exacto (ver

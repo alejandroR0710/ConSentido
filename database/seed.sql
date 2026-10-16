@@ -94,7 +94,9 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'crear',           'vales.crear'),
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_repuesto', 'vales.marcar_repuesto'),
   ((SELECT id FROM modulos WHERE slug = 'vales'), 'anular',          'vales.anular'),
-  ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_cobrado',  'vales.marcar_cobrado');
+  ((SELECT id FROM modulos WHERE slug = 'vales'), 'marcar_cobrado',  'vales.marcar_cobrado'),
+  ((SELECT id FROM modulos WHERE slug = 'recetario'), 'ver',          'recetario.ver'),
+  ((SELECT id FROM modulos WHERE slug = 'recetario'), 'administrar',  'recetario.administrar');
 
 -- Roles
 INSERT INTO roles (nombre, descripcion) VALUES
@@ -150,7 +152,8 @@ WHERE p.codigo IN (
   'con_sentido.productos.ver'
 );
 
--- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo.
+-- Cocina: SOLO puede ver la cola de pedidos y cambiar el estado a preparando/listo,
+-- más consultar inventario/amasijos y ver (no administrar) el Recetario.
 -- Sin acceso a migao.ordenes.* (no ve cobros, no crea órdenes, no cierra mesas).
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT (SELECT id FROM roles WHERE nombre = 'Cocina'), p.id
@@ -161,7 +164,8 @@ WHERE p.codigo IN (
   'migao.inventario.ver',
   'migao.inventario.administrar',
   'migao.amasijos.ver',
-  'migao.amasijos.administrar'
+  'migao.amasijos.administrar',
+  'recetario.ver'
 );
 
 -- Mesero: crea, ve, agrega y edita/cancela ítems de órdenes. NO puede cerrar/cobrar

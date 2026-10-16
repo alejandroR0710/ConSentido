@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { SubidaImagen } from "../../../shared/components/SubidaImagen";
 import { recetarioApi, type Receta, type RecetarioCategoria } from "../api";
+import { SelectorMedioPrincipal } from "./SelectorMedioPrincipal";
 
 interface EditarRecetaModalProps {
   receta: Receta;
@@ -16,11 +17,6 @@ interface EditarRecetaModalProps {
   onMediaActualizada: () => Promise<void> | void;
   onCategoriaCreada: (categoria: RecetarioCategoria) => void;
 }
-
-const OPCIONES_MEDIO = [
-  { valor: "imagen" as const, etiqueta: "Imagen" },
-  { valor: "video" as const, etiqueta: "Video" },
-];
 
 export function EditarRecetaModal({
   receta,
@@ -163,33 +159,18 @@ export function EditarRecetaModal({
       />
 
       <label className="mb-2 block text-xs font-medium">Medio principal</label>
-      <div className="mb-3 flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
-        {OPCIONES_MEDIO.map((op) => (
-          <button
-            key={op.valor}
-            type="button"
-            onClick={() => setMedioPrincipal(op.valor)}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              medioPrincipal === op.valor
-                ? "bg-brand-green-600 text-white"
-                : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-            }`}
-          >
-            {op.etiqueta}
-          </button>
-        ))}
-      </div>
-
-      {medioPrincipal === "video" ? (
-        <input
-          value={videoUrl}
-          onChange={(e) => setVideoUrl(e.target.value)}
-          placeholder="https://..."
-          className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        />
-      ) : (
-        <SubidaImagen imagenUrl={imagenPrincipalUrl} onSubir={subirImagenPrincipal} />
-      )}
+      <SelectorMedioPrincipal medio={medioPrincipal} onCambiarMedio={setMedioPrincipal}>
+        {medioPrincipal === "video" ? (
+          <input
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+        ) : (
+          <SubidaImagen imagenUrl={imagenPrincipalUrl} onSubir={subirImagenPrincipal} />
+        )}
+      </SelectorMedioPrincipal>
 
       <div className="mb-4 flex flex-col gap-2 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
         <span className="text-xs font-semibold uppercase tracking-wide text-brand-ink/70 dark:text-brand-vanilla/70">

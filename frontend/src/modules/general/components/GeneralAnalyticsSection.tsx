@@ -1,37 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import { analyticsApi, type AnalyticsGeneral } from "../api";
 
-type Rango = "hoy" | "semana" | "mes" | "todo";
-
-// Fecha de arranque para "Todo": anterior a cualquier dato real del negocio,
-// simplemente para que el filtro BETWEEN del backend no excluya nada — no
-// hace falta una consulta aparte "sin fecha", reusa la misma ruta que
-// Día/Semana/Mes.
-const DESDE_TODO = "2000-01-01";
-
 const POLL_MS = 15000;
 
 function fechaISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function inicioDeSemana(fecha: Date) {
-  const d = new Date(fecha);
-  const offset = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - offset);
-  return d;
-}
-
-function rangoFechas(rango: Rango): { desde: string; hasta: string } {
-  const hoy = new Date();
-  const hasta = fechaISO(hoy);
-  if (rango === "hoy") return { desde: hasta, hasta };
-  if (rango === "semana") return { desde: fechaISO(inicioDeSemana(hoy)), hasta };
-  if (rango === "mes") return { desde: fechaISO(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta };
-  return { desde: DESDE_TODO, hasta };
 }
 
 function StatCard({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: string }) {
@@ -141,89 +117,82 @@ function RangoBlock({ titulo, datos }: { titulo: string; datos: AnalyticsGeneral
   );
 }
 
-const RANGOS: { valor: Rango; etiqueta: string }[] = [
-  { valor: "hoy", etiqueta: "Día" },
-  { valor: "semana", etiqueta: "Semana" },
-  { valor: "mes", etiqueta: "Mes" },
-  { valor: "todo", etiqueta: "Todo" },
-];
-
 export function GeneralAnalyticsSection() {
-  const [datosHoy, setDatosHoy] = useState<AnalyticsGeneral | null>(null);
-  const [datosSemana, setDatosSemana] = useState<AnalyticsGeneral | null>(null);
-  const [datosMes, setDatosMes] = useState<AnalyticsGeneral | null>(null);
-  const [datosTodo, setDatosTodo] = useState<AnalyticsGeneral | null>(null);
+  const hoyIso = fechaISO(new Date());
+  const [desde, setDesde] = useState(hoyIso);
+  const [hasta, setHasta] = useState(hoyIso);
+  const [datos, setDatos] = useState<AnalyticsGeneral | null>(null);
+  const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rango, setRango] = useState<Rango>("hoy");
 
   async function cargar() {
+    setCargando(true);
     setError(null);
     try {
-      const rangoHoy = rangoFechas("hoy");
-      const rangoSemana = rangoFechas("semana");
-      const rangoMes = rangoFechas("mes");
-      const rangoTodo = rangoFechas("todo");
-      const [hoy, semana, mes, todo] = await Promise.all([
-        analyticsApi.obtenerGeneral(rangoHoy.desde, rangoHoy.hasta),
-        analyticsApi.obtenerGeneral(rangoSemana.desde, rangoSemana.hasta),
-        analyticsApi.obtenerGeneral(rangoMes.desde, rangoMes.hasta),
-        analyticsApi.obtenerGeneral(rangoTodo.desde, rangoTodo.hasta),
-      ]);
-      setDatosHoy(hoy);
-      setDatosSemana(semana);
-      setDatosMes(mes);
-      setDatosTodo(todo);
+      setDatos(await analyticsApi.obtenerGeneral(desde, hasta));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron cargar las analíticas");
+    } finally {
+      setCargando(false);
     }
   }
 
+  // cargarRef siempre apunta a la versión más reciente (cierra sobre el
+  // desde/hasta del último render) — el intervalo de abajo se crea una sola
+  // vez (deps vacías) y nunca debe quedarse pegado al rango que estaba
+  // elegido cuando arrancó.
+  const cargarRef = useRef(cargar);
   useEffect(() => {
-    cargar();
-    const intervalo = setInterval(cargar, POLL_MS);
+    cargarRef.current = cargar;
+  });
+
+  useEffect(() => {
+    cargarRef.current();
+    const intervalo = setInterval(() => cargarRef.current(), POLL_MS);
     return () => clearInterval(intervalo);
   }, []);
 
   useRegistrarRefresco(cargar);
 
-  const datosPorRango: Record<Rango, AnalyticsGeneral | null> = {
-    hoy: datosHoy,
-    semana: datosSemana,
-    mes: datosMes,
-    todo: datosTodo,
-  };
-  const tituloPorRango: Record<Rango, string> = {
-    hoy: "Hoy",
-    semana: "Esta semana",
-    mes: "Este mes",
-    todo: "Histórico completo (todos los turnos)",
-  };
+  const titulo = desde === hasta ? `Resumen del ${desde}` : `Resumen del ${desde} al ${hasta}`;
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Resumen General</h2>
 
-        <div className="flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
-          {RANGOS.map((r) => (
-            <button
-              key={r.valor}
-              onClick={() => setRango(r.valor)}
-              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                rango === r.valor
-                  ? "bg-brand-green-600 text-white"
-                  : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-              }`}
-            >
-              {r.etiqueta}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium">Desde</label>
+            <input
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Hasta</label>
+            <input
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+          <button
+            onClick={cargar}
+            disabled={cargando}
+            className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {cargando ? "Consultando..." : "Ver resumen"}
+          </button>
         </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <RangoBlock titulo={tituloPorRango[rango]} datos={datosPorRango[rango]} />
+      <RangoBlock titulo={titulo} datos={datos} />
     </div>
   );
 }

@@ -636,6 +636,33 @@ export function MigaoPage() {
     setCuenta(await migaoApi.obtenerCuenta(ordenSeleccionadaId));
   }
 
+  // Única puerta HOY para entrar al motor de pago parcial/cuenta dividida
+  // desde una mesa que arranca sin cobro — sirve igual para dividir entre
+  // varios comensales (numPartes>1, no cubierto por este botón) y para una
+  // sola parte (pagar el total completo, pero por este motor en vez del
+  // cobro simple — necesario, por ejemplo, para poder agregar productos de
+  // la tienda: ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md,
+  // hallazgo I5 de la revisión final — antes de este botón no había ninguna
+  // forma de llegar a esta pantalla desde una mesa nueva).
+  const [iniciandoCobroPartes, setIniciandoCobroPartes] = useState(false);
+  async function iniciarCobroConPartes() {
+    if (!ordenSeleccionadaId) return;
+    setIniciandoCobroPartes(true);
+    setError(null);
+    try {
+      const cuentaNueva = await migaoApi.iniciarCobro(
+        ordenSeleccionadaId,
+        { modo: "igual", numPartes: 1 },
+        descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+      );
+      setCuenta(cuentaNueva);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo iniciar el cobro");
+    } finally {
+      setIniciandoCobroPartes(false);
+    }
+  }
+
   // Se resincroniza cada vez que cambia `cuenta` (partes recién creadas, o
   // pendiente ya actualizado tras un abono) — conserva lo que el cajero ya
   // haya escrito si sigue siendo válido (no supera el nuevo pendiente); si
@@ -1202,6 +1229,19 @@ export function MigaoPage() {
                     </div>
                   ))}
               </div>
+
+              {!usarMotorNuevo && (
+                <button
+                  type="button"
+                  onClick={iniciarCobroConPartes}
+                  disabled={iniciandoCobroPartes}
+                  className="w-full rounded-md border border-brand-green-700 px-3 py-2 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                >
+                  {iniciandoCobroPartes
+                    ? "Iniciando..."
+                    : "¿Dividir la cuenta o agregar productos de la tienda? Iniciar cobro con pago parcial"}
+                </button>
+              )}
 
               {!usarMotorNuevo ? (
                 <>

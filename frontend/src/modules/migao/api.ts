@@ -403,6 +403,27 @@ export interface CuentaParteUnidad {
   productoNombre: string;
 }
 
+// Carrito de productos Con Sentido vinculado a esta parte — ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+// null = esta parte no tiene ningún producto de la tienda vinculado.
+export interface CarritoTiendaItem {
+  productoId: string | null;
+  nombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+export interface CarritoTienda {
+  ventaId: string;
+  estado: "pendiente" | "completada";
+  items: CarritoTiendaItem[];
+  descuentoPorcentaje: number;
+  descuentoMonto: number;
+  monto: number;
+  pagado: number;
+  pendiente: number;
+}
+
 export interface CuentaParte {
   id: string;
   indice: number;
@@ -411,6 +432,7 @@ export interface CuentaParte {
   montoPagado: number;
   pendiente: number;
   unidades: CuentaParteUnidad[];
+  tienda: CarritoTienda | null;
 }
 
 export interface CuentaAbono {
@@ -677,6 +699,20 @@ export const migaoApi = {
   // independiente de la de otros abonos de la misma cuenta.
   registrarAbono: (parteId: string, input: RegistrarAbonoInput) =>
     apiFetch<CuentaDetalle>(`/migao/cuentas/partes/${parteId}/abonos`, { method: "POST", body: input }),
+  // Venta combinada mesa + Con Sentido: crea o reemplaza por completo el
+  // carrito de tienda de esta parte (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+  vincularCarritoTienda: (
+    parteId: string,
+    input: { items: { productoId: string; cantidad: number; precioUnitario: number }[]; descuentoPorcentaje?: number },
+  ) =>
+    apiFetch<{ ventaId: string; subtotal: number; descuentoMonto: number; monto: number }>(
+      `/migao/cuentas/partes/${parteId}/carrito-tienda`,
+      { method: "PUT", body: input },
+    ),
+  // Reimprimir la factura de ese carrito una vez pagado (el Cajero no tiene
+  // permiso para con-sentido/ventas/:id/factura, por eso esta ruta propia).
+  obtenerFacturaTiendaDeParte: (parteId: string) =>
+    apiFetch<FacturaOrden>(`/migao/cuentas/partes/${parteId}/factura-tienda`),
   // Cobra solo ALGUNOS productos de una cuenta que sigue abierta — genera su
   // propia venta+factura independiente (ver PagarItemsResultado), la mesa
   // sigue aceptando productos nuevos. No se combina con iniciarCobro/dividir

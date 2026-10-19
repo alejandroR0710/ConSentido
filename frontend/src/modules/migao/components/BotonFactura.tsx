@@ -18,7 +18,12 @@ type OrigenFactura =
   | { tipo: "venta"; id: string }
   | { tipo: "venta_con_sentido"; id: string }
   | { tipo: "venta_caja"; id: string }
-  | { tipo: "pedido"; id: string };
+  | { tipo: "pedido"; id: string }
+  // Factura del carrito de tienda vinculado a una parte (venta combinada
+  // mesa + Con Sentido) — id acá es el parteId, no un ventaId, porque el
+  // Cajero no tiene permiso para resolverlo por su cuenta (ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+  | { tipo: "parte_tienda"; id: string };
 
 interface BotonFacturaProps {
   origen: OrigenFactura;
@@ -51,7 +56,9 @@ export function BotonFactura({ origen, className, etiqueta = "Factura" }: BotonF
             ? await migaoApi.obtenerFacturaPorVenta(origen.id)
             : origen.tipo === "pedido"
               ? await pedidosApi.obtenerFactura(origen.id)
-              : await conSentidoApi.obtenerFactura(origen.id);
+              : origen.tipo === "parte_tienda"
+                ? await migaoApi.obtenerFacturaTiendaDeParte(origen.id)
+                : await conSentidoApi.obtenerFactura(origen.id);
       setRecibo(facturaAReciboProps(factura));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar la factura");

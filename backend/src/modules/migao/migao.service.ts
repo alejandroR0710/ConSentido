@@ -1691,9 +1691,9 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
     // orden acá la dejaría "sin cuenta" sin devolver ese dinero. Hay que
     // anular la venta desde Caja General (caja.service.ts::anularVenta), que
     // sí revierte los movimientos de caja correspondientes.
-    if (await repo.existenPagosPorOrden(ordenId)) {
+    if ((await repo.existenPagosPorOrden(ordenId)) || (await conSentidoRepo.existenPagosTiendaPorOrden(ordenId))) {
       throw Errors.conflict(
-        "Esta cuenta ya tiene pagos registrados — para cancelarla, anula la venta desde Caja General",
+        "Esta cuenta ya tiene pagos registrados (de mesa o de tienda) — para cancelarla, anula la venta desde Caja General",
       );
     }
 
@@ -1730,6 +1730,10 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
     }
 
     await repo.cancelarOrdenEstado(client, ordenId);
+
+    // Carritos de tienda vinculados a alguna parte de esta orden que todavía
+    // no se habían pagado — ya se descartó arriba que tengan algo pagado.
+    await conSentidoRepo.anularCarritosTiendaPorOrden(client, ordenId);
 
     await client.query("COMMIT");
     notificarAlertasInventario(alertasInventario);

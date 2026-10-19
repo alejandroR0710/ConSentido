@@ -12,6 +12,7 @@ import {
   obtenerFacturaVentaController,
   obtenerVentaController,
   registrarVentaController,
+  vincularMesaController,
 } from "./con_sentido.controller";
 
 export const conSentidoRouter = Router();
@@ -37,3 +38,11 @@ conSentidoRouter.get(
   asyncHandler(obtenerFacturaVentaController),
 );
 conSentidoRouter.post("/ventas", requirePermission("con_sentido.ventas.crear"), asyncHandler(registrarVentaController));
+
+// Puerta 2 de la venta combinada mesa + Con Sentido — ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+conSentidoRouter.post(
+  "/vincular-mesa",
+  requirePermission("con_sentido.ventas.vincular_mesa"),
+  asyncHandler(vincularMesaController),
+);

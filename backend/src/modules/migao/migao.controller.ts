@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import { rutaPublicaImagen } from "../../shared/middlewares/upload.middleware";
 import { Errors } from "../../shared/utils/app-error";
 import { created, ok } from "../../shared/utils/response";
+import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
+import * as conSentidoService from "../con_sentido/con_sentido.service";
+import { vincularCarritoTiendaSchema } from "../con_sentido/con_sentido.schema";
 import {
   agregarItemSchema,
   cambiarMesaSchema,
@@ -237,6 +240,24 @@ export async function registrarAbonoController(req: Request, res: Response) {
   const data = registrarAbonoSchema.parse(req.body);
   const cuenta = await service.registrarAbono(req.params.parteId, data, req.auth!.usuarioId);
   return ok(res, cuenta);
+}
+
+// Puerta 1 de la venta combinada mesa + Con Sentido — ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+export async function vincularCarritoTiendaController(req: Request, res: Response) {
+  const data = vincularCarritoTiendaSchema.parse(req.body);
+  const resultado = await conSentidoService.vincularCarritoTienda(req.params.parteId, data, req.auth!.usuarioId);
+  return ok(res, resultado);
+}
+
+// El Cajero tiene con_sentido.ventas.vincular_mesa pero NO con_sentido.ventas.ver
+// — por eso la factura del carrito de tienda se reimprime desde esta ruta de
+// Migao (mismo permiso que vincular), no desde GET /con-sentido/ventas/:id/factura.
+export async function obtenerFacturaTiendaDeParteController(req: Request, res: Response) {
+  const carrito = await conSentidoRepo.getCarritoTiendaPorParte(req.params.parteId);
+  if (!carrito) throw Errors.notFound("Esta parte no tiene un carrito de tienda vinculado");
+  const factura = await conSentidoService.obtenerFacturaVenta(carrito.ventaId);
+  return ok(res, factura);
 }
 
 export async function cancelarOrdenController(req: Request, res: Response) {

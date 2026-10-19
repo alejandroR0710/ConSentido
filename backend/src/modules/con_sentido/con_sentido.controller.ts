@@ -5,6 +5,7 @@ import {
   crearProductoConSentidoSchema,
   editarProductoConSentidoSchema,
   registrarVentaSchema,
+  vincularMesaSchema,
 } from "./con_sentido.schema";
 import * as service from "./con_sentido.service";
 
@@ -56,4 +57,12 @@ export async function obtenerVentaController(req: Request, res: Response) {
 export async function obtenerFacturaVentaController(req: Request, res: Response) {
   const factura = await service.obtenerFacturaVenta(req.params.id);
   return ok(res, factura);
+}
+
+// Puerta 2 de la venta combinada mesa + Con Sentido — ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+export async function vincularMesaController(req: Request, res: Response) {
+  const data = vincularMesaSchema.parse(req.body);
+  const resultado = await service.vincularMesa(data, req.auth!.usuarioId);
+  return created(res, resultado);
 }

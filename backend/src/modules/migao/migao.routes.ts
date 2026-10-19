@@ -63,6 +63,7 @@ import {
   obtenerCuentaController,
   obtenerDetalleOrdenController,
   obtenerFacturaOrdenController,
+  obtenerFacturaTiendaDeParteController,
   obtenerFacturaVentaController,
   obtenerPropinasDeHoyController,
   obtenerResumenDiarioIngresosController,
@@ -72,6 +73,7 @@ import {
   repartirPropinasController,
   resetearOrdenesController,
   subirImagenProductoController,
+  vincularCarritoTiendaController,
 } from "./migao.controller";
 import {
   obtenerAmasijosController,
@@ -300,6 +302,21 @@ migaoRouter.post(
   "/cuentas/partes/:parteId/abonos",
   requirePermission("migao.ordenes.cerrar"),
   asyncHandler(registrarAbonoController),
+);
+// Venta combinada mesa + Con Sentido (ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md):
+// vincula/reemplaza el carrito de productos Con Sentido de esta parte.
+migaoRouter.put(
+  "/cuentas/partes/:parteId/carrito-tienda",
+  requirePermission("con_sentido.ventas.vincular_mesa"),
+  asyncHandler(vincularCarritoTiendaController),
+);
+// Reimprimir la factura de ese carrito una vez pagado — mismo permiso que
+// vincularlo (el Cajero no tiene con_sentido.ventas.ver).
+migaoRouter.get(
+  "/cuentas/partes/:parteId/factura-tienda",
+  requirePermission("con_sentido.ventas.vincular_mesa"),
+  asyncHandler(obtenerFacturaTiendaDeParteController),
 );
 // Cobrar solo ALGUNOS productos de una cuenta que sigue abierta — genera su
 // propia factura independiente, la mesa sigue aceptando productos nuevos.

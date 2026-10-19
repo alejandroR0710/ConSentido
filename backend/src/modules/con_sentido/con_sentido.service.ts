@@ -2,6 +2,8 @@ import { pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import * as cajaService from "../general/caja/caja.service";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
+import * as migaoRepo from "../migao/migao.repository";
+import * as migaoService from "../migao/migao.service";
 import * as repo from "./con_sentido.repository";
 import { descontarParaVenta, motivoVenta } from "./stock-venta";
 import {
@@ -9,6 +11,8 @@ import {
   CrearProductoConSentidoInput,
   EditarProductoConSentidoInput,
   RegistrarVentaInput,
+  VincularCarritoTiendaInput,
+  VincularMesaInput,
 } from "./con_sentido.schema";
 
 export async function listarProductos() {
@@ -278,4 +282,100 @@ export async function obtenerFacturaVenta(ventaId: string) {
     pagos,
     propina: null,
   };
+}
+
+/**
+ * Crea (si no existe) o reemplaza por completo el carrito de tienda vinculado
+ * a una parte de cuenta dividida de Migao — ver
+ * docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+ * Devuelve stock de lo que ya estaba, descuenta el de lo nuevo (mismo criterio
+ * que registrarVenta: sin stock se vende igual, con observación), y recalcula
+ * monto/descuento. Rechaza si ya se cobró algo de este carrito — editar una
+ * parte ya pagada (aunque sea parcialmente) rompería lo que ya se facturó.
+ */
+export async function vincularCarritoTienda(parteId: string, input: VincularCarritoTiendaInput, usuarioId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const parteResult = await client.query(`SELECT id FROM migao_cuenta_partes WHERE id = $1 FOR UPDATE`, [parteId]);
+    if (!parteResult.rowCount) throw Errors.notFound("Parte de cuenta no encontrada");
+
+    const carritoExistente = await repo.getCarritoTiendaPorParte(parteId, client);
+    if (carritoExistente && carritoExistente.pagado > 0) {
+      throw Errors.conflict("Ya se registraron pagos para el carrito de tienda de esta parte, no se puede editar");
+    }
+
+    const ventaId = carritoExistente ? carritoExistente.ventaId : (await repo.crearCarritoTienda(client, parteId, usuarioId)).id;
+
+    const existentes = await repo.getItemsCarrito(ventaId, client);
+    for (const fila of existentes) {
+      if (fila.producto_id) await repo.reponerStock(client, fila.producto_id, Number(fila.cantidad));
+    }
+
+    const itemsResueltos = [];
+    for (const item of input.items) {
+      const vendido = await descontarParaVenta(client, {
+        productoId: item.productoId,
+        cantidad: item.cantidad,
+        nombre: "producto",
+        observacion: item.observacionInventario,
+      });
+      if (!vendido) throw Errors.badRequest("Uno de los productos del carrito ya no está en el catálogo");
+      itemsResueltos.push({
+        productoId: vendido.producto.id as string,
+        sku: (vendido.producto.sku as string | null) ?? null,
+        nombre: vendido.producto.nombre as string,
+        cantidad: item.cantidad,
+        precioUnitario: item.precioUnitario,
+        observacionInventario: vendido.observacion,
+      });
+    }
+
+    const resultado = await repo.reemplazarItemsCarrito(client, {
+      ventaId,
+      items: itemsResueltos,
+      descuentoPorcentaje: input.descuentoPorcentaje ?? 0,
+    });
+
+    await client.query("COMMIT");
+    return { ventaId, ...resultado };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Puerta 2: vincula una venta de Con Sentido a una mesa desde la pantalla de
+ * Con Sentido. Si la orden todavía no tiene cobro iniciado, arranca uno de
+ * una sola parte (igual que un cobro sin dividir); si ya tiene varias
+ * partes, exige que se diga a cuál se vincula.
+ */
+export async function vincularMesa(input: VincularMesaInput, usuarioId: string) {
+  const ventaAbierta = await migaoRepo.getVentaAbiertaPorOrden(input.ordenId);
+  if (!ventaAbierta) {
+    await migaoService.iniciarCobro(input.ordenId, { division: { modo: "igual", numPartes: 1 } }, usuarioId);
+  }
+
+  const cuenta = await migaoRepo.getCuentaPorOrden(input.ordenId);
+  if (!cuenta) throw Errors.notFound("Esta orden no tiene un cobro iniciado");
+
+  let parteId = input.parteId;
+  if (!parteId) {
+    if (cuenta.partes.length > 1) {
+      throw Errors.badRequest("Esta mesa tiene la cuenta dividida — especifica a cuál parte vincular los productos");
+    }
+    parteId = cuenta.partes[0].id;
+  } else if (!cuenta.partes.some((p) => p.id === parteId)) {
+    throw Errors.badRequest("Esa parte no corresponde a esta mesa");
+  }
+
+  const resultado = await vincularCarritoTienda(
+    parteId,
+    { items: input.items, descuentoPorcentaje: input.descuentoPorcentaje },
+    usuarioId,
+  );
+  return { ...resultado, parteId };
 }

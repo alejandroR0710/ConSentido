@@ -1,4 +1,5 @@
 import { Pool, PoolClient, pool } from "../../shared/db/pool";
+import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
 
 type Executor = Pool | PoolClient;
 
@@ -1063,19 +1064,22 @@ export async function getCuentaPorOrden(ordenId: string) {
     [venta.id],
   );
 
-  const partes = partesResult.rows.map((p) => ({
-    id: p.id as string,
-    indice: p.indice as number,
-    modo: p.modo as "producto" | "igual",
-    montoDebido: Number(p.monto_debido),
-    montoPagado: Number(p.monto_pagado),
-    pendiente: Math.max(0, Number(p.monto_debido) - Number(p.monto_pagado)),
-    unidades: (unidadesPorParte.get(p.id) ?? []).map((u) => ({
-      itemId: Number(u.orden_item_id),
-      cantidad: Number(u.cantidad),
-      productoNombre: u.producto_nombre as string,
+  const partes = await Promise.all(
+    partesResult.rows.map(async (p) => ({
+      id: p.id as string,
+      indice: p.indice as number,
+      modo: p.modo as "producto" | "igual",
+      montoDebido: Number(p.monto_debido),
+      montoPagado: Number(p.monto_pagado),
+      pendiente: Math.max(0, Number(p.monto_debido) - Number(p.monto_pagado)),
+      unidades: (unidadesPorParte.get(p.id) ?? []).map((u) => ({
+        itemId: Number(u.orden_item_id),
+        cantidad: Number(u.cantidad),
+        productoNombre: u.producto_nombre as string,
+      })),
+      tienda: await conSentidoRepo.getCarritoTiendaPorParte(p.id),
     })),
-  }));
+  );
 
   const pagos = pagosResult.rows.map((p) => ({
     parteId: p.parte_id as string,

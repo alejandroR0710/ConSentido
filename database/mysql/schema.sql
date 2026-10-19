@@ -451,13 +451,23 @@ CREATE TABLE con_sentido_ventas (
   id             CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   usuario_id     CHAR(36),
   monto          DECIMAL(12,2) NOT NULL,
-  metodo_pago    VARCHAR(20) NOT NULL CHECK (metodo_pago IN ('efectivo', 'banco', 'mixto')),
+  -- NULL mientras la venta está vinculada a una parte de mesa y todavía no
+  -- se termina de pagar (estado='pendiente') — no hay un solo método hasta
+  -- que se complete, puede ir pagándose en abonos con métodos distintos.
+  metodo_pago    VARCHAR(20) CHECK (metodo_pago IN ('efectivo', 'banco', 'mixto')),
   monto_efectivo DECIMAL(12,2),
   monto_banco    DECIMAL(12,2),
-  estado         VARCHAR(20) NOT NULL DEFAULT 'completada' CHECK (estado IN ('completada', 'anulada')),
+  estado         VARCHAR(20) NOT NULL DEFAULT 'completada' CHECK (estado IN ('pendiente', 'completada', 'anulada')),
   created_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  -- Vínculo opcional a una parte de cuenta dividida de Migao (ver
+  -- docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md):
+  -- NULL = venta normal de Con Sentido, sin cambios respecto a antes.
+  parte_id              CHAR(36) NULL,
+  descuento_porcentaje  DECIMAL(5,2) DEFAULT 0,
+  descuento             DECIMAL(12,2) DEFAULT 0,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+  FOREIGN KEY (parte_id) REFERENCES migao_cuenta_partes(id),
   INDEX idx_con_sentido_ventas_fecha (created_at DESC),
   INDEX idx_con_sentido_ventas_usuario (usuario_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;

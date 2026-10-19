@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App.tsx";
 import { AuthProvider } from "./shared/auth/AuthProvider.tsx";
+import { ThemeProvider } from "./shared/theme/ThemeContext.tsx";
 import "./index.css";
 import "./shared/print/print.css";
 
@@ -38,9 +39,11 @@ document.addEventListener(
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </StrictMode>,
 );

@@ -1,6 +1,14 @@
 @import "tailwindcss";
 
 /*
+ * Por defecto Tailwind activa `dark:` solo con la preferencia del sistema
+ * (prefers-color-scheme). Con el botón de tema del header (ThemeContext)
+ * ahora se elige a mano, así que `dark:` pasa a depender de la clase
+ * ".dark" en <html> (la pone/quita ThemeContext, con localStorage).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
  * Paleta de marca: verde oscuro + blanco vainilla (ambientación de naturaleza).
  * Se definen como tokens de Tailwind v4 (@theme) para usarse como bg-brand-*, text-brand-*, etc.
  */
@@ -107,6 +115,10 @@
   color-scheme: light dark;
 }
 
+:root.dark {
+  color-scheme: dark;
+}
+
 /*
  * Mobile: la app se usa como POS, no como página para leer — el zoom solo
  * estorba. touch-action quita el zoom por doble toque; el pellizco se bloquea
@@ -128,11 +140,9 @@ body {
   color: var(--color-brand-ink);
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: var(--color-brand-green-900);
-    color: var(--color-brand-vanilla);
-  }
+:root.dark body {
+  background-color: var(--color-brand-green-900);
+  color: var(--color-brand-vanilla);
 }
 
 /*

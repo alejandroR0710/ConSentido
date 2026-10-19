@@ -7,6 +7,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#1F4A34" />
     <title>Con Sentido / El Rinconcito del Migao</title>
+    <script>
+      // Aplica el tema guardado (o el del sistema) antes de que React monte,
+      // para que no se vea un parpadeo del tema por defecto al cargar.
+      (function () {
+        try {
+          var t = localStorage.getItem("cs-theme");
+          if (t !== "light" && t !== "dark") {
+            t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

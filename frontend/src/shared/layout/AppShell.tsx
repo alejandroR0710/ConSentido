@@ -9,6 +9,7 @@ import { tieneAccesoTotal } from "../auth/roles";
 import { Modal } from "../components/Modal";
 import { BannerNotificaciones } from "../push/BannerNotificaciones";
 import { RefrescoProvider, useRefrescoVista } from "../refresh/RefrescoContext";
+import { useTheme } from "../theme/ThemeContext";
 import { BarraMinimizados } from "./BarraMinimizados";
 import { BotonLeadExterno } from "./BotonLeadExterno";
 import { IndicadorTurnoCaja } from "./IndicadorTurnoCaja";
@@ -28,6 +29,23 @@ function BotonRefrescar() {
       className="flex items-center justify-center rounded-md p-1.5 text-lg text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
     >
       <span className={refrescando ? "inline-block animate-spin" : ""}>⟳</span>
+    </button>
+  );
+}
+
+/** Botón de tema claro/oscuro — antes solo seguía la preferencia del
+ *  sistema, sin forma de elegirlo desde la app (ver ThemeContext.tsx). */
+function BotonTema() {
+  const { tema, alternarTema } = useTheme();
+  const esOscuro = tema === "dark";
+  return (
+    <button
+      onClick={alternarTema}
+      aria-label={esOscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+      title={esOscuro ? "Modo claro" : "Modo oscuro"}
+      className="flex items-center justify-center rounded-md p-1.5 text-lg text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+    >
+      {esOscuro ? "☀️" : "🌙"}
     </button>
   );
 }
@@ -77,6 +95,7 @@ export function AppShell() {
             <IndicadorTurnoCaja />
             <span className="hidden sm:inline">{usuario.nombre}</span>
             <BotonLeadExterno />
+            <BotonTema />
             {tieneAccesoTotal(usuario.rol) && (
               <Link
                 to="/vales"

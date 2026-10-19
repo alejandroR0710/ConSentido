@@ -1361,7 +1361,7 @@ export function MigaoPage() {
                                 docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
                                 Con carrito de tienda: 2 columnas (form a la izquierda, resumen
                                 a la derecha); sin carrito: una sola columna, como siempre. */}
-                            <div className={tieneCarritoTienda ? "grid gap-4 sm:grid-cols-[1fr,260px]" : ""}>
+                            <div className={tieneCarritoTienda ? "grid gap-4 sm:grid-cols-[1fr_260px]" : ""}>
                               <div className="flex flex-col gap-3">
                                 {pendienteParte <= 0.001 || !form ? (
                                   <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">

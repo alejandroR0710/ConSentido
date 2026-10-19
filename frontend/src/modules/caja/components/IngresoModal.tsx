@@ -595,7 +595,7 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
                 ¿Vincular estos productos a una mesa? (se cobran junto con su cuenta, no acá)
               </label>
               {vincularAMesa && (
-                <div className="mt-2 grid gap-4 sm:grid-cols-[1fr,260px]">
+                <div className="mt-2 grid gap-4 sm:grid-cols-[1fr_260px]">
                   <div>
                     {!todasLasLineasConProducto && (
                       <p className="mb-2 text-xs text-red-600">

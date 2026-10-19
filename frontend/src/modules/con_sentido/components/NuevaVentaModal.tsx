@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
-import { migaoApi } from "../../migao/api";
 import {
   SelectorMetodoPago,
   faltaReferenciaBanco,
@@ -9,9 +8,7 @@ import {
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
-import { conSentidoApi } from "../api";
 import { preciosConMayorista, textoMayorista } from "../mayorista";
-import { SelectorMesaVisual } from "./SelectorMesaVisual";
 
 interface Producto {
   id: string;
@@ -59,31 +56,6 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Venta combinada mesa + Con Sentido — ver
-  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
-  // Al vincular a una mesa no se cobra nada acá (eso pasa después, desde el
-  // cobro de la mesa en Migao): no aplica método de pago ni "otro producto".
-  const [vincularAMesa, setVincularAMesa] = useState(false);
-  const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
-  // Si esa mesa ya tiene la cuenta dividida en 2+ partes, hay que elegir a
-  // cuál vincular (ver spec) — null = todavía no se revisó, [] = revisado y
-  // no hace falta elegir (0 o 1 parte, o la mesa ni siquiera tiene cobro
-  // iniciado todavía, se crea una sola parte sola) (hallazgo I4 de la
-  // revisión final).
-  const [partesDeLaMesa, setPartesDeLaMesa] = useState<{ id: string; indice: number }[] | null>(null);
-  const [parteIdElegida, setParteIdElegida] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!ordenIdElegida) {
-      setPartesDeLaMesa(null);
-      setParteIdElegida(null);
-      return;
-    }
-    migaoApi
-      .obtenerCuenta(ordenIdElegida)
-      .then((cuenta) => setPartesDeLaMesa(cuenta.partes.length > 1 ? cuenta.partes : []))
-      .catch(() => setPartesDeLaMesa([])); // sin cobro iniciado todavía: se crea una sola parte sola
-  }, [ordenIdElegida]);
 
   // Por nombre o por SKU.
   const termino = normalizar(busqueda.trim());
@@ -135,28 +107,13 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     }
   });
 
-  // Vinculando a una mesa: todos los ítems deben ser productos reales del
-  // catálogo (el backend no acepta "otro producto" en el carrito de tienda)
-  // y hace falta haber elegido una mesa — no se valida método de pago, acá
-  // no se cobra nada todavía.
-  const todosConProducto = carrito.every((item) => item.producto !== null);
-  // Si la mesa tiene cuenta dividida (partesDeLaMesa con 2+), hace falta
-  // haber elegido a cuál parte vincular antes de poder confirmar.
-  const faltaElegirParte = (partesDeLaMesa?.length ?? 0) > 1 && !parteIdElegida;
-  const puedeRegistrar = vincularAMesa
-    ? carrito.length > 0 &&
-      itemsValidos &&
-      total > 0 &&
-      todosConProducto &&
-      ordenIdElegida !== null &&
-      partesDeLaMesa !== null &&
-      !faltaElegirParte
-    : carrito.length > 0 &&
-      itemsValidos &&
-      total > 0 &&
-      (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
-      !mixtoInvalido &&
-      !faltaReferenciaBanco(pago);
+  const puedeRegistrar =
+    carrito.length > 0 &&
+    itemsValidos &&
+    total > 0 &&
+    (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
+    !mixtoInvalido &&
+    !faltaReferenciaBanco(pago);
 
   function agregarProducto(p: Producto) {
     setCarrito([
@@ -203,31 +160,6 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
 
     setRegistrando(true);
     setError(null);
-
-    if (vincularAMesa) {
-      try {
-        await conSentidoApi.vincularMesa({
-          ordenId: ordenIdElegida!,
-          parteId: parteIdElegida ?? undefined,
-          items: carrito.map((item) => ({
-            productoId: item.producto!.id,
-            cantidad: item.cantidad,
-            precioUnitario: precioDe(item),
-            observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
-          })),
-        });
-        setCarrito([]);
-        setBusqueda("");
-        setVincularAMesa(false);
-        setOrdenIdElegida(null);
-        onCerrar();
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "No se pudo vincular el carrito a la mesa");
-      } finally {
-        setRegistrando(false);
-      }
-      return;
-    }
 
     try {
       const venta = {
@@ -499,71 +431,10 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         </div>
       </div>
 
-      {/* Venta combinada mesa + Con Sentido — ver
-          docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
       <div className="mt-4 border-t border-brand-vanilla-dark pt-4 dark:border-brand-green-700">
-        <label className="flex items-center gap-2 text-xs font-medium">
-          <input
-            type="checkbox"
-            checked={vincularAMesa}
-            onChange={(e) => {
-              setVincularAMesa(e.target.checked);
-              setOrdenIdElegida(null);
-            }}
-          />
-          ¿Vincular a una mesa? (se cobra junto con la cuenta de la mesa, no acá)
-        </label>
-        {vincularAMesa && (
-          <div className="mt-2">
-            {ordenIdElegida ? (
-              <div>
-                <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-                  Mesa elegida.{" "}
-                  <button type="button" onClick={() => setOrdenIdElegida(null)} className="text-brand-green-700 underline dark:text-brand-vanilla">
-                    Cambiar
-                  </button>
-                </p>
-                {partesDeLaMesa && partesDeLaMesa.length > 1 && (
-                  <div className="mt-2">
-                    <p className="mb-1 text-xs font-medium">Esta mesa tiene la cuenta dividida — ¿a cuál parte se vincula?</p>
-                    <div className="flex flex-wrap gap-2">
-                      {partesDeLaMesa.map((parte) => (
-                        <button
-                          key={parte.id}
-                          type="button"
-                          onClick={() => setParteIdElegida(parte.id)}
-                          className={`rounded-md border px-3 py-1 text-xs font-medium ${
-                            parteIdElegida === parte.id
-                              ? "border-brand-green-700 bg-brand-green-100 text-brand-green-700 dark:bg-brand-green-700/40 dark:text-brand-vanilla"
-                              : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
-                          }`}
-                        >
-                          Parte {parte.indice}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
-            )}
-            {!todosConProducto && (
-              <p className="mt-1 text-xs text-red-600">
-                Quita los productos "otro" del carrito — solo se puede vincular productos reales del catálogo.
-              </p>
-            )}
-          </div>
-        )}
+        <label className="mb-2 block text-xs font-medium">Método de pago</label>
+        <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={total} />
       </div>
-
-      {/* Método de pago — no aplica si se vincula a una mesa, eso se cobra después desde Migao. */}
-      {!vincularAMesa && (
-        <div className="mt-4 border-t border-brand-vanilla-dark pt-4 dark:border-brand-green-700">
-          <label className="mb-2 block text-xs font-medium">Método de pago</label>
-          <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={total} />
-        </div>
-      )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
@@ -572,11 +443,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         disabled={registrando || !puedeRegistrar}
         className="mt-4 w-full rounded-md bg-brand-green-600 px-4 py-3 font-semibold text-white hover:bg-brand-green-700 disabled:opacity-60"
       >
-        {registrando
-          ? "Guardando..."
-          : vincularAMesa
-            ? `Vincular a la mesa (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`
-            : `Registrar venta (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`}
+        {registrando ? "Guardando..." : `Registrar venta (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`}
       </button>
     </Modal>
   );

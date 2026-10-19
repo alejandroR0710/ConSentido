@@ -11,6 +11,11 @@ interface ModalProps {
   // Botón(es) extra en el header, a la izquierda de la ✕ (ej. "Minimizar")
   // — opcional, no afecta a los modales que no lo pasan.
   accionExtra?: ReactNode;
+  // Panel adicional al costado del diálogo (no dentro de su área con
+  // scroll) — para resúmenes/información de apoyo que no debe competir por
+  // espacio con el formulario. En mobile, sin espacio horizontal, se apila
+  // debajo del diálogo en vez de ir al costado.
+  panelLateral?: ReactNode;
 }
 
 /**
@@ -18,39 +23,55 @@ interface ModalProps {
  * centrado en pantallas más grandes. Base de todos los popups de la app —
  * evita repetir el fondo oscuro + contenedor + botón de cerrar en cada uno.
  */
-export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", tono = "normal", accionExtra }: ModalProps) {
+export function Modal({
+  titulo,
+  onCerrar,
+  children,
+  maxWidth = "sm:max-w-md",
+  tono = "normal",
+  accionExtra,
+  panelLateral,
+}: ModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={onCerrar}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
-          tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
-        } ${maxWidth}`}
+        className="flex w-full flex-col gap-3 sm:w-auto sm:max-h-[85vh] sm:max-w-[90vw] sm:flex-row sm:items-stretch sm:justify-center"
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2
-            className={`text-lg font-semibold ${
-              tono === "advertencia"
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-brand-green-700 dark:text-brand-vanilla"
-            }`}
-          >
-            {tono === "advertencia" && <span aria-hidden>⚠️ </span>}
-            {titulo}
-          </h2>
-          <div className="flex items-center gap-1">
-            {accionExtra}
-            <button
-              onClick={onCerrar}
-              aria-label="Cerrar"
-              className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
+        <div
+          className={`flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
+            tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
+          } ${maxWidth}`}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              className={`text-lg font-semibold ${
+                tono === "advertencia"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-brand-green-700 dark:text-brand-vanilla"
+              }`}
             >
-              ✕
-            </button>
+              {tono === "advertencia" && <span aria-hidden>⚠️ </span>}
+              {titulo}
+            </h2>
+            <div className="flex items-center gap-1">
+              {accionExtra}
+              <button
+                onClick={onCerrar}
+                aria-label="Cerrar"
+                className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
+              >
+                ✕
+              </button>
+            </div>
           </div>
+
+          <div className="flex-1 overflow-y-auto">{children}</div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        {panelLateral && (
+          <div className="w-full shrink-0 pb-4 sm:w-70 sm:overflow-y-auto sm:pb-0">{panelLateral}</div>
+        )}
       </div>
     </div>
   );

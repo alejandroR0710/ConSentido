@@ -949,6 +949,23 @@ export function MigaoPage() {
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
+          panelLateral={
+            cuenta?.partes.some((p) => p.tienda) ? (
+              <div className="flex h-full flex-col gap-4">
+                {cuenta.partes
+                  .filter((parte) => parte.tienda)
+                  .map((parte) => (
+                    <ResumenCuentasParte
+                      key={parte.id}
+                      parte={parte}
+                      montoPagarAhora={abonoForms[parte.id]?.montoPagarAhora ?? 0}
+                      indice={cuenta.partes.length > 1 ? parte.indice : undefined}
+                      itemsOrden={detalle?.items}
+                    />
+                  ))}
+              </div>
+            ) : undefined
+          }
           accionExtra={
             <button
               onClick={minimizarActual}
@@ -1313,7 +1330,6 @@ export function MigaoPage() {
                       {cuenta.partes.map((parte) => {
                         const form = abonoForms[parte.id];
                         const pendienteParte = pendienteCombinado(parte);
-                        const tieneCarritoTienda = Boolean(parte.tienda);
                         return (
                           <div
                             key={parte.id}
@@ -1357,12 +1373,7 @@ export function MigaoPage() {
                               </div>
                             </div>
 
-                            {/* Venta combinada mesa + Con Sentido — ver
-                                docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
-                                Con carrito de tienda: 2 columnas (form a la izquierda, resumen
-                                a la derecha); sin carrito: una sola columna, como siempre. */}
-                            <div className={tieneCarritoTienda ? "grid gap-4 sm:grid-cols-[1fr_260px]" : ""}>
-                              <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-3">
                                 {pendienteParte <= 0.001 || !form ? (
                                   <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
                                     ✓ Pagada por completo
@@ -1431,11 +1442,6 @@ export function MigaoPage() {
                                     )}
                                   </>
                                 )}
-                              </div>
-
-                              {parte.tienda && (
-                                <ResumenCuentasParte parte={parte} montoPagarAhora={form?.montoPagarAhora ?? 0} />
-                              )}
                             </div>
                           </div>
                         );

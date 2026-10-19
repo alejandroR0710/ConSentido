@@ -1,6 +1,6 @@
 import { formatMoney } from "../../../shared/format/money";
 import { formatCantidad } from "../format";
-import type { CuentaParte } from "../api";
+import type { CuentaParte, OrdenItem } from "../api";
 
 interface ResumenCuentasParteProps {
   parte: CuentaParte;
@@ -8,20 +8,33 @@ interface ResumenCuentasParteProps {
   // muestra en vivo para que quede claro que ese monto cubre las DOS
   // cuentas a la vez (reparto proporcional, lo calcula el backend).
   montoPagarAhora: number;
+  // Cuando la cuenta tiene varias partes, el panel lateral apila el
+  // resumen de cada una — sin esto quedarían indistinguibles entre sí.
+  indice?: number;
+  // Productos de la orden completa — se listan bajo "Cuenta de la mesa"
+  // salvo que esta parte ya tenga su propio desglose (modo "producto",
+  // parte.unidades), en cuyo caso se listan esos en su lugar.
+  itemsOrden?: OrdenItem[];
 }
 
 /** Panel resumen de las dos cuentas que conviven en una parte con un
  *  carrito de tienda vinculado — ver
  *  docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
  *  Pensado para ir al costado del formulario de abono, nunca reemplazarlo. */
-export function ResumenCuentasParte({ parte, montoPagarAhora }: ResumenCuentasParteProps) {
+export function ResumenCuentasParte({ parte, montoPagarAhora, indice, itemsOrden }: ResumenCuentasParteProps) {
   const tienda = parte.tienda!;
   const pendienteCombinado = parte.pendiente + tienda.pendiente;
+  const itemsMesa =
+    parte.unidades.length > 0
+      ? parte.unidades.map((u) => ({ key: `u-${u.itemId}`, cantidad: u.cantidad, nombre: u.productoNombre }))
+      : (itemsOrden ?? [])
+          .filter((i) => i.estado !== "cancelado")
+          .map((i) => ({ key: `i-${i.id}`, cantidad: Number(i.cantidad), nombre: i.producto_nombre }));
 
   return (
-    <div className="flex flex-col gap-3 self-start rounded-xl border border-brand-vanilla-dark bg-brand-vanilla/60 p-3 dark:border-brand-green-700 dark:bg-brand-green-900/40">
+    <div className="flex flex-1 flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla-dark p-3 dark:border-brand-green-600 dark:bg-brand-green-700">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-        Resumen de esta parte
+        {indice !== undefined ? `Resumen — Parte ${indice}` : "Resumen de esta parte"}
       </h4>
 
       <div className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 dark:bg-brand-green-900">
@@ -29,6 +42,17 @@ export function ResumenCuentasParte({ parte, montoPagarAhora }: ResumenCuentasPa
           <span>🍽️ Cuenta de la mesa</span>
           <span>{formatMoney(parte.montoDebido)}</span>
         </div>
+        {itemsMesa.length > 0 && (
+          <ul className="flex flex-col gap-0.5 text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">
+            {itemsMesa.map((item) => (
+              <li key={item.key} className="flex items-center justify-between gap-2">
+                <span className="truncate">
+                  {formatCantidad(item.cantidad)}× {item.nombre}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         {parte.montoPagado > 0 && (
           <div className="flex items-center justify-between text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
             <span>Ya pagado</span>

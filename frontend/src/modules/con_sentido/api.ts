@@ -62,6 +62,20 @@ export const conSentidoApi = {
       method: "POST",
       body: venta,
     }),
+  // Puerta 2 de la venta combinada mesa + Con Sentido — vincula este carrito
+  // a una mesa de Migao en vez de registrarlo como venta suelta. Todos los
+  // ítems deben ser productos reales del catálogo (sin "otro producto" a
+  // mano) — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+  vincularMesa: (input: {
+    ordenId: string;
+    parteId?: string;
+    items: { productoId: string; cantidad: number; precioUnitario: number; observacionInventario?: string }[];
+    descuentoPorcentaje?: number;
+  }) =>
+    apiFetch<{ ventaId: string; parteId: string; subtotal: number; descuentoMonto: number; monto: number }>(
+      "/con-sentido/vincular-mesa",
+      { method: "POST", body: input },
+    ),
   listarVentas: (filtros?: { fecha?: string; skip?: number; limit?: number }) => {
     const params = new URLSearchParams();
     if (filtros?.fecha) params.set("fecha", filtros.fecha);

@@ -8,7 +8,9 @@ import {
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
 import { formatMoney } from "../../../shared/format/money";
+import { conSentidoApi } from "../api";
 import { preciosConMayorista, textoMayorista } from "../mayorista";
+import { SelectorMesaVisual } from "./SelectorMesaVisual";
 
 interface Producto {
   id: string;
@@ -56,6 +58,12 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
   const [pago, setPago] = useState<MetodoPagoValor>({ metodoPago: "efectivo" });
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Venta combinada mesa + Con Sentido — ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+  // Al vincular a una mesa no se cobra nada acá (eso pasa después, desde el
+  // cobro de la mesa en Migao): no aplica método de pago ni "otro producto".
+  const [vincularAMesa, setVincularAMesa] = useState(false);
+  const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
 
   // Por nombre o por SKU.
   const termino = normalizar(busqueda.trim());
@@ -107,13 +115,19 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     }
   });
 
-  const puedeRegistrar =
-    carrito.length > 0 &&
-    itemsValidos &&
-    total > 0 &&
-    (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
-    !mixtoInvalido &&
-    !faltaReferenciaBanco(pago);
+  // Vinculando a una mesa: todos los ítems deben ser productos reales del
+  // catálogo (el backend no acepta "otro producto" en el carrito de tienda)
+  // y hace falta haber elegido una mesa — no se valida método de pago, acá
+  // no se cobra nada todavía.
+  const todosConProducto = carrito.every((item) => item.producto !== null);
+  const puedeRegistrar = vincularAMesa
+    ? carrito.length > 0 && itemsValidos && total > 0 && todosConProducto && ordenIdElegida !== null
+    : carrito.length > 0 &&
+      itemsValidos &&
+      total > 0 &&
+      (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
+      !mixtoInvalido &&
+      !faltaReferenciaBanco(pago);
 
   function agregarProducto(p: Producto) {
     setCarrito([
@@ -160,6 +174,31 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
 
     setRegistrando(true);
     setError(null);
+
+    if (vincularAMesa) {
+      if (!ordenIdElegida) return;
+      try {
+        await conSentidoApi.vincularMesa({
+          ordenId: ordenIdElegida,
+          items: carrito.map((item) => ({
+            productoId: item.producto!.id,
+            cantidad: item.cantidad,
+            precioUnitario: precioDe(item),
+            observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
+          })),
+        });
+        setCarrito([]);
+        setBusqueda("");
+        setVincularAMesa(false);
+        setOrdenIdElegida(null);
+        onCerrar();
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "No se pudo vincular el carrito a la mesa");
+      } finally {
+        setRegistrando(false);
+      }
+      return;
+    }
 
     try {
       const venta = {
@@ -431,11 +470,48 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         </div>
       </div>
 
-      {/* Método de pago */}
+      {/* Venta combinada mesa + Con Sentido — ver
+          docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
       <div className="mt-4 border-t border-brand-vanilla-dark pt-4 dark:border-brand-green-700">
-        <label className="mb-2 block text-xs font-medium">Método de pago</label>
-        <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={total} />
+        <label className="flex items-center gap-2 text-xs font-medium">
+          <input
+            type="checkbox"
+            checked={vincularAMesa}
+            onChange={(e) => {
+              setVincularAMesa(e.target.checked);
+              setOrdenIdElegida(null);
+            }}
+          />
+          ¿Vincular a una mesa? (se cobra junto con la cuenta de la mesa, no acá)
+        </label>
+        {vincularAMesa && (
+          <div className="mt-2">
+            {ordenIdElegida ? (
+              <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+                Mesa elegida.{" "}
+                <button type="button" onClick={() => setOrdenIdElegida(null)} className="text-brand-green-700 underline dark:text-brand-vanilla">
+                  Cambiar
+                </button>
+              </p>
+            ) : (
+              <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
+            )}
+            {!todosConProducto && (
+              <p className="mt-1 text-xs text-red-600">
+                Quita los productos "otro" del carrito — solo se puede vincular productos reales del catálogo.
+              </p>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Método de pago — no aplica si se vincula a una mesa, eso se cobra después desde Migao. */}
+      {!vincularAMesa && (
+        <div className="mt-4 border-t border-brand-vanilla-dark pt-4 dark:border-brand-green-700">
+          <label className="mb-2 block text-xs font-medium">Método de pago</label>
+          <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={total} />
+        </div>
+      )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
@@ -444,7 +520,11 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         disabled={registrando || !puedeRegistrar}
         className="mt-4 w-full rounded-md bg-brand-green-600 px-4 py-3 font-semibold text-white hover:bg-brand-green-700 disabled:opacity-60"
       >
-        {registrando ? "Registrando..." : `Registrar venta (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`}
+        {registrando
+          ? "Guardando..."
+          : vincularAMesa
+            ? `Vincular a la mesa (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`
+            : `Registrar venta (${carrito.length} item${carrito.length !== 1 ? "s" : ""})`}
       </button>
     </Modal>
   );

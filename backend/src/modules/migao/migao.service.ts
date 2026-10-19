@@ -3,6 +3,7 @@ import { Errors } from "../../shared/utils/app-error";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
+import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
 import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as inventarioService from "./inventario.service";
 import * as repo from "./migao.repository";
@@ -1474,7 +1475,15 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
       parteId,
     ]);
     const pendiente = Number(parte.monto_debido) - Number(pagadoResult.rows[0].pagado);
-    if (pendiente <= 0.001) throw Errors.conflict("Esta parte ya está completamente pagada");
+
+    // Carrito de productos Con Sentido vinculado a esta parte (si hay) — ver
+    // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+    // El abono se reparte proporcionalmente entre lo que falta de mesa y lo
+    // que falta de tienda, para que los dos lados bajen juntos.
+    const carritoTienda = await conSentidoRepo.getCarritoTiendaPorParte(parteId, client);
+    const pendienteTienda = carritoTienda?.pendiente ?? 0;
+    const pendienteTotal = pendiente + pendienteTienda;
+    if (pendienteTotal <= 0.001) throw Errors.conflict("Esta parte ya está completamente pagada");
 
     // Igual que cerrarOrden mixto: en un abono mixto, lo que el cajero
     // escribe es lo que el cliente entregó de verdad — si trae propina, esa
@@ -1484,18 +1493,32 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     if (montoAbono <= 0) {
       throw Errors.badRequest("El monto del abono debe ser mayor a 0 (revisa la propina incluida)");
     }
-    if (montoAbono - pendiente > 0.01) {
-      throw Errors.badRequest(`El abono (${montoAbono}) no puede superar el pendiente de esta parte (${pendiente})`);
+    if (montoAbono - pendienteTotal > 0.01) {
+      throw Errors.badRequest(
+        `El abono (${montoAbono}) no puede superar el pendiente de esta parte (${pendienteTotal})`,
+      );
     }
 
+    // Reparto proporcional: cualquier residuo de redondeo queda del lado de
+    // mesa (montoMesaAbono = resta, no un segundo Math.round) para que los
+    // dos montos siempre sumen exacto el monto del abono.
+    const proporcionTienda = pendienteTotal > 0 ? pendienteTienda / pendienteTotal : 0;
+    const montoTiendaAbono = Math.round(montoAbono * proporcionTienda);
+    const montoMesaAbono = montoAbono - montoTiendaAbono;
+
+    // montoMesaAbono puede ser 0 (este abono paga únicamente lo que falta del
+    // carrito de tienda, porque la mesa ya se había terminado de pagar antes)
+    // — en ese caso no se genera ninguna línea del lado de mesa.
     const lineas =
-      input.metodoPago === "mixto"
-        ? (() => {
-            const entregado = input.montoEfectivo + input.montoBanco;
-            const efectivo = entregado > 0 ? Math.round(montoAbono * (input.montoEfectivo / entregado)) : 0;
-            return descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivo, montoBanco: montoAbono - efectivo });
-          })()
-        : descomponerPago({ metodoPago: input.metodoPago, monto: montoAbono });
+      montoMesaAbono <= 0
+        ? []
+        : input.metodoPago === "mixto"
+          ? (() => {
+              const entregado = input.montoEfectivo + input.montoBanco;
+              const efectivo = entregado > 0 ? Math.round(montoMesaAbono * (input.montoEfectivo / entregado)) : 0;
+              return descomponerPago({ metodoPago: "mixto", montoEfectivo: efectivo, montoBanco: montoMesaAbono - efectivo });
+            })()
+          : descomponerPago({ metodoPago: input.metodoPago, monto: montoMesaAbono });
 
     // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
     const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
@@ -1527,6 +1550,58 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
         usuarioId,
         client,
       );
+    }
+
+    // Lado de tienda del mismo abono — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+    // Nunca lleva propina (ya confirmado: la propina es solo de la porción de
+    // mesa, ver bloque de abajo, que sigue calculándose sobre `lineas`, no
+    // sobre esto).
+    if (montoTiendaAbono > 0 && carritoTienda) {
+      const ingresoTienda =
+        input.metodoPago === "mixto"
+          ? (() => {
+              const entregado = input.montoEfectivo + input.montoBanco;
+              const efectivo = entregado > 0 ? Math.round(montoTiendaAbono * (input.montoEfectivo / entregado)) : 0;
+              return { metodoPago: "mixto" as const, montoEfectivo: efectivo, montoBanco: montoTiendaAbono - efectivo };
+            })()
+          : { metodoPago: input.metodoPago, monto: montoTiendaAbono };
+
+      await cajaService.registrarIngreso(
+        {
+          moduloOrigenSlug: "con_sentido",
+          referenciaEntidad: "con_sentido_ventas",
+          referenciaId: carritoTienda.ventaId,
+          referenciaBanco: input.referenciaBanco,
+          ...ingresoTienda,
+        } as Parameters<typeof cajaService.registrarIngreso>[0],
+        usuarioId,
+        client,
+      );
+
+      const pagadoPorMetodo = await client.query(
+        `SELECT metodo_pago, COALESCE(SUM(monto), 0) AS monto FROM movimientos_caja
+          WHERE referencia_entidad = 'con_sentido_ventas' AND referencia_id = $1 GROUP BY metodo_pago`,
+        [carritoTienda.ventaId],
+      );
+      const efectivoAcumulado = Number(pagadoPorMetodo.rows.find((r) => r.metodo_pago === "efectivo")?.monto ?? 0);
+      const bancoAcumulado = Number(pagadoPorMetodo.rows.find((r) => r.metodo_pago === "banco")?.monto ?? 0);
+      const pagadoTiendaTotal = efectivoAcumulado + bancoAcumulado;
+
+      if (carritoTienda.monto - pagadoTiendaTotal <= 0.01) {
+        await conSentidoRepo.marcarCarritoCompletado(client, carritoTienda.ventaId, {
+          metodoPago: efectivoAcumulado > 0 && bancoAcumulado > 0 ? "mixto" : efectivoAcumulado > 0 ? "efectivo" : "banco",
+          montoEfectivo: efectivoAcumulado,
+          montoBanco: bancoAcumulado,
+        });
+        await conSentidoRepo.getOrCrearFactura(
+          {
+            ventaId: carritoTienda.ventaId,
+            subtotal: carritoTienda.monto + carritoTienda.descuentoMonto,
+            total: carritoTienda.monto,
+          },
+          client,
+        );
+      }
     }
 
     if (input.propina && input.propina.monto > 0) {

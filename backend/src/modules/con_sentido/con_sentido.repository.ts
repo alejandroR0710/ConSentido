@@ -379,3 +379,175 @@ export async function listIngresosManualesConSentido() {
   );
   return result.rows;
 }
+
+// --------------------------------------------------------------------------
+// Carrito de tienda vinculado a una parte de cuenta dividida de Migao — ver
+// docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+// Estas funciones NO tocan stock/inventario (eso vive en con_sentido.service.ts,
+// que ya importa descontarParaVenta de ./stock-venta.ts — ese archivo a su
+// vez importa de ESTE, así que acá nunca se importa stock-venta.ts, o
+// quedaría un ciclo entre los dos).
+// --------------------------------------------------------------------------
+
+export type CarritoTienda = {
+  ventaId: string;
+  estado: "pendiente" | "completada";
+  items: { productoId: string | null; nombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+  descuentoPorcentaje: number;
+  descuentoMonto: number;
+  monto: number;
+  pagado: number;
+  pendiente: number;
+};
+
+export async function getCarritoTiendaPorParte(parteId: string, executor: Executor = pool): Promise<CarritoTienda | null> {
+  const ventaResult = await executor.query(
+    `SELECT id, estado, monto, descuento_porcentaje, descuento
+       FROM con_sentido_ventas WHERE parte_id = $1 AND estado != 'anulada'`,
+    [parteId],
+  );
+  if (!ventaResult.rowCount) return null;
+  const venta = ventaResult.rows[0];
+
+  const itemsResult = await executor.query(
+    `SELECT producto_id, producto, cantidad, precio_unitario, subtotal
+       FROM con_sentido_venta_items WHERE venta_id = $1 ORDER BY id ASC`,
+    [venta.id],
+  );
+  const pagadoResult = await executor.query(
+    `SELECT COALESCE(SUM(monto), 0) AS pagado FROM movimientos_caja
+      WHERE referencia_entidad = 'con_sentido_ventas' AND referencia_id = $1`,
+    [venta.id],
+  );
+
+  const monto = Number(venta.monto);
+  const pagado = Number(pagadoResult.rows[0].pagado);
+  return {
+    ventaId: venta.id as string,
+    estado: venta.estado as "pendiente" | "completada",
+    items: itemsResult.rows.map((i) => ({
+      productoId: i.producto_id as string | null,
+      nombre: i.producto as string,
+      cantidad: Number(i.cantidad),
+      precioUnitario: Number(i.precio_unitario),
+      subtotal: Number(i.subtotal),
+    })),
+    descuentoPorcentaje: Number(venta.descuento_porcentaje ?? 0),
+    descuentoMonto: Number(venta.descuento ?? 0),
+    monto,
+    pagado,
+    pendiente: Math.max(0, monto - pagado),
+  };
+}
+
+export async function crearCarritoTienda(client: PoolClient, parteId: string, usuarioId: string) {
+  const result = await client.query(
+    `INSERT INTO con_sentido_ventas (usuario_id, monto, metodo_pago, estado, parte_id, descuento_porcentaje, descuento)
+     VALUES ($1, 0, NULL, 'pendiente', $2, 0, 0) RETURNING id`,
+    [usuarioId, parteId],
+  );
+  return result.rows[0] as { id: string };
+}
+
+/** Ítems actuales del carrito, solo para que el llamador sepa a quién
+ *  devolverle stock antes de reemplazarlos — ver con_sentido.service.ts::vincularCarritoTienda. */
+export async function getItemsCarrito(ventaId: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT producto_id, cantidad FROM con_sentido_venta_items WHERE venta_id = $1`,
+    [ventaId],
+  );
+  return result.rows as { producto_id: string | null; cantidad: string }[];
+}
+
+/** Reemplaza TODOS los ítems del carrito y recalcula monto/descuento — el
+ *  llamador ya resolvió nombre/sku/estado de inventario de cada ítem (ver
+ *  descontarParaVenta en con_sentido.service.ts), esta función solo escribe. */
+export async function reemplazarItemsCarrito(
+  client: PoolClient,
+  params: {
+    ventaId: string;
+    items: {
+      productoId: string;
+      sku: string | null;
+      nombre: string;
+      cantidad: number;
+      precioUnitario: number;
+      observacionInventario: string | null;
+    }[];
+    descuentoPorcentaje: number;
+  },
+) {
+  await client.query(`DELETE FROM con_sentido_venta_items WHERE venta_id = $1`, [params.ventaId]);
+
+  let subtotal = 0;
+  for (const item of params.items) {
+    await crearVentaItem(client, {
+      ventaId: params.ventaId,
+      productoId: item.productoId,
+      sku: item.sku,
+      producto: item.nombre,
+      cantidad: item.cantidad,
+      precioUnitario: item.precioUnitario,
+      observacionInventario: item.observacionInventario,
+    });
+    subtotal += item.cantidad * item.precioUnitario;
+  }
+
+  const descuentoMonto = Math.round(subtotal * (params.descuentoPorcentaje / 100) * 100) / 100;
+  const monto = subtotal - descuentoMonto;
+  await client.query(
+    `UPDATE con_sentido_ventas SET monto = $2, descuento_porcentaje = $3, descuento = $4 WHERE id = $1`,
+    [params.ventaId, monto, params.descuentoPorcentaje, descuentoMonto],
+  );
+  return { subtotal, descuentoMonto, monto };
+}
+
+export async function marcarCarritoCompletado(
+  client: PoolClient,
+  ventaId: string,
+  pago: { metodoPago: "efectivo" | "banco" | "mixto"; montoEfectivo: number; montoBanco: number },
+) {
+  await client.query(
+    `UPDATE con_sentido_ventas SET estado = 'completada', metodo_pago = $2, monto_efectivo = $3, monto_banco = $4 WHERE id = $1`,
+    [ventaId, pago.metodoPago, pago.montoEfectivo, pago.montoBanco],
+  );
+}
+
+/** Anula los carritos de tienda que quedaron pendientes (sin pagar nada) de
+ *  una orden al cancelarla — devuelve el stock de cada ítem. Nunca toca uno
+ *  que ya esté 'completada' (ver existenPagosTiendaPorOrden, que bloquea la
+ *  cancelación completa si ya se pagó algo). */
+export async function anularCarritosTiendaPorOrden(client: PoolClient, ordenId: string) {
+  const result = await client.query(
+    `SELECT cv.id FROM con_sentido_ventas cv
+       JOIN migao_cuenta_partes cp ON cp.id = cv.parte_id
+       JOIN ventas v ON v.id = cp.venta_id
+      WHERE v.orden_id = $1 AND cv.estado = 'pendiente'`,
+    [ordenId],
+  );
+  for (const row of result.rows) {
+    const items = await client.query(
+      `SELECT producto_id, cantidad FROM con_sentido_venta_items WHERE venta_id = $1`,
+      [row.id],
+    );
+    for (const item of items.rows) {
+      if (item.producto_id) await reponerStock(client, item.producto_id, Number(item.cantidad));
+    }
+    await client.query(`UPDATE con_sentido_ventas SET estado = 'anulada' WHERE id = $1`, [row.id]);
+  }
+}
+
+/** Si ya se cobró algo (cualquier abono) del carrito de tienda de alguna
+ *  parte de esta orden — usado por migao.service.ts::cancelarOrden, mismo
+ *  criterio que existenPagosPorOrden del lado de mesa. */
+export async function existenPagosTiendaPorOrden(ordenId: string) {
+  const result = await pool.query(
+    `SELECT 1 FROM movimientos_caja mc
+       JOIN con_sentido_ventas cv ON cv.id = mc.referencia_id
+       JOIN migao_cuenta_partes cp ON cp.id = cv.parte_id
+       JOIN ventas v ON v.id = cp.venta_id
+      WHERE mc.referencia_entidad = 'con_sentido_ventas' AND v.orden_id = $1 LIMIT 1`,
+    [ordenId],
+  );
+  return result.rowCount! > 0;
+}

@@ -79,3 +79,31 @@ export const crearClienteConSentidoSchema = z.object({
   email: z.string().trim().email().max(160).optional().or(z.literal("")),
 });
 export type CrearClienteConSentidoInput = z.infer<typeof crearClienteConSentidoSchema>;
+
+// Carrito de productos Con Sentido vinculado a una parte de cuenta dividida
+// de Migao (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+// Siempre productos reales del catálogo (con productoId) — a diferencia de
+// itemVentaSchema de arriba, acá no existe el "otro producto" a mano.
+const itemCarritoTiendaSchema = z.object({
+  productoId: z.string().uuid(),
+  cantidad: z.number().positive(),
+  precioUnitario: z.number().nonnegative(),
+  observacionInventario: z.string().trim().max(500).optional(),
+});
+
+export const vincularCarritoTiendaSchema = z.object({
+  items: z.array(itemCarritoTiendaSchema).min(1, "Agrega al menos un producto"),
+  descuentoPorcentaje: z.number().min(0).max(100).optional(),
+});
+export type VincularCarritoTiendaInput = z.infer<typeof vincularCarritoTiendaSchema>;
+
+// Puerta 2 (desde Con Sentido): además de los productos, hay que decir a
+// qué orden/mesa se vincula — parteId solo es necesario si esa mesa ya
+// tiene la cuenta dividida en 2+ partes (ver con_sentido.service.ts::vincularMesa).
+export const vincularMesaSchema = z.object({
+  ordenId: z.string().uuid(),
+  parteId: z.string().uuid().optional(),
+  items: z.array(itemCarritoTiendaSchema).min(1, "Agrega al menos un producto"),
+  descuentoPorcentaje: z.number().min(0).max(100).optional(),
+});
+export type VincularMesaInput = z.infer<typeof vincularMesaSchema>;

@@ -4,6 +4,7 @@ import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
+import { programarEnvio as programarEnvioEcommerce } from "../integracion_ecommerce/salida";
 import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as inventarioService from "./inventario.service";
 import * as repo from "./migao.repository";
@@ -827,6 +828,15 @@ export async function cerrarOrden(ordenId: string, input: CerrarOrdenInput, usua
     if (!orden) throw Errors.notFound("Orden no encontrada");
     if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
     if (orden.estado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
+    // Mismo criterio que pagarItems: si ya hay un cobro con partes en marcha
+    // (motor de iniciarCobro/registrarAbono — posiblemente con un carrito de
+    // tienda vinculado, ver hallazgo C1 de la revisión final), el cobro
+    // simple no puede pisarlo.
+    if (await repo.existeCobroDivididoAbierto(ordenId)) {
+      throw Errors.conflict(
+        "Esta cuenta ya se está cobrando con cuenta dividida/pago parcial — termina de cobrarla desde ahí",
+      );
+    }
 
     const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
     if (itemsRaw.length === 0) throw Errors.conflict("La orden no tiene productos que cobrar");
@@ -1427,6 +1437,16 @@ export async function iniciarCobro(ordenId: string, input: IniciarCobroInput, us
     await repo.getOrCrearFactura({ ventaId: venta.id, ordenId, subtotal: totalBruto, total }, client);
     await repo.crearPartes(client, venta.id, partesInput);
 
+    // La cuenta ya quedó partida y a la espera de abonos — el frontend
+    // (MigaoPage) solo carga/muestra la pantalla de cobro con partes cuando
+    // la orden está en 'pagando', así que hay que marcarla ahora mismo, no
+    // recién en el primer abono (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md,
+    // hallazgo C1 de la revisión final: sin esto, un cobro iniciado por la
+    // Puerta 2 de Con Sentido queda invisible en Migao).
+    if (orden.estado === "abierta") {
+      await client.query(`UPDATE ordenes SET estado = 'pagando' WHERE id = $1`, [ordenId]);
+    }
+
     await client.query("COMMIT");
     return repo.getCuentaPorOrden(ordenId);
   } catch (err) {
@@ -1482,7 +1502,11 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     // que falta de tienda, para que los dos lados bajen juntos.
     const carritoTienda = await conSentidoRepo.getCarritoTiendaPorParte(parteId, client);
     const pendienteTienda = carritoTienda?.pendiente ?? 0;
-    const pendienteTotal = pendiente + pendienteTienda;
+    // Math.max(0, ...): un abono anterior puede haber dejado `pendiente` en
+    // negativo por unos centavos (redondeo de un descuento porcentual) — sin
+    // el clamp, la proporción de tienda podría salir mayor a 1 (hallazgo C3
+    // de la revisión final).
+    const pendienteTotal = Math.max(0, pendiente) + pendienteTienda;
     if (pendienteTotal <= 0.001) throw Errors.conflict("Esta parte ya está completamente pagada");
 
     // Igual que cerrarOrden mixto: en un abono mixto, lo que el cajero
@@ -1501,9 +1525,18 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
 
     // Reparto proporcional: cualquier residuo de redondeo queda del lado de
     // mesa (montoMesaAbono = resta, no un segundo Math.round) para que los
-    // dos montos siempre sumen exacto el monto del abono.
+    // dos montos siempre sumen exacto el monto del abono. EXCEPCIÓN: si este
+    // abono termina de pagar TODO lo pendiente (combinado), el lado de
+    // tienda se asienta en su pendiente EXACTO (con centavos si los tiene,
+    // ej. por un descuento porcentual) en vez de una proporción redondeada —
+    // si no, un descuento con centavos podía dejar el carrito de tienda
+    // eternamente 1-2 centavos corto y nunca marcarse "completada" (hallazgo
+    // C3 de la revisión final).
+    const esUltimoAbono = montoAbono >= pendienteTotal - 0.01;
     const proporcionTienda = pendienteTotal > 0 ? pendienteTienda / pendienteTotal : 0;
-    const montoTiendaAbono = Math.round(montoAbono * proporcionTienda);
+    const montoTiendaAbono = esUltimoAbono
+      ? Math.round(pendienteTienda * 100) / 100
+      : Math.round(montoAbono * proporcionTienda);
     const montoMesaAbono = montoAbono - montoTiendaAbono;
 
     // montoMesaAbono puede ser 0 (este abono paga únicamente lo que falta del
@@ -1520,11 +1553,36 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
             })()
           : descomponerPago({ metodoPago: input.metodoPago, monto: montoMesaAbono });
 
+    // Split del lado de tienda — calculado ACÁ (antes de validar el efectivo
+    // recibido) para poder exigir/calcular el vuelto sobre el efectivo
+    // COMBINADO (mesa + tienda), no solo sobre la porción de mesa. Antes de
+    // este fix, un abono en efectivo que pagaba mesa Y tienda a la vez
+    // registraba un vuelto inflado (hallazgo I9 de la revisión final).
+    const ingresoTienda =
+      montoTiendaAbono > 0 && carritoTienda
+        ? input.metodoPago === "mixto"
+          ? (() => {
+              const entregado = input.montoEfectivo + input.montoBanco;
+              const efectivo = entregado > 0 ? Math.round(montoTiendaAbono * (input.montoEfectivo / entregado)) : 0;
+              return { metodoPago: "mixto" as const, montoEfectivo: efectivo, montoBanco: montoTiendaAbono - efectivo };
+            })()
+          : { metodoPago: input.metodoPago, monto: montoTiendaAbono }
+        : null;
+    const efectivoTienda = !ingresoTienda
+      ? 0
+      : ingresoTienda.metodoPago === "mixto"
+        ? ingresoTienda.montoEfectivo
+        : ingresoTienda.metodoPago === "efectivo"
+          ? ingresoTienda.monto
+          : 0;
+
+    const efectivoMesa = lineas.find((l) => l.metodoPago === "efectivo")?.monto ?? 0;
     // Obligatorio si hay efectivo de por medio — ver exigirMontoRecibidoEfectivo.
-    const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(
-      lineas.find((l) => l.metodoPago === "efectivo")?.monto ?? 0,
-      input.montoRecibidoEfectivo,
-    );
+    const montoRecibidoEfectivo = exigirMontoRecibidoEfectivo(efectivoMesa + efectivoTienda, input.montoRecibidoEfectivo);
+    // Vuelto real de TODO el abono (no solo de la porción de mesa) — se
+    // registra en la línea de mesa porque es la única que guarda vuelto hoy
+    // (con_sentido nunca lo trackeó, ni siquiera en una venta suelta normal).
+    const vueltoReal = montoRecibidoEfectivo != null ? montoRecibidoEfectivo - (efectivoMesa + efectivoTienda) : null;
 
     for (const linea of lineas) {
       await repo.crearPago(client, {
@@ -1535,7 +1593,8 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
         referencia: `Abono parte ${parte.indice}`,
         usuarioId,
         parteId,
-        montoRecibidoEfectivo: linea.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
+        montoRecibidoEfectivo:
+          linea.metodoPago === "efectivo" && vueltoReal != null ? linea.monto + vueltoReal : undefined,
       });
       await cajaService.registrarIngreso(
         {
@@ -1556,27 +1615,26 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     // Nunca lleva propina (ya confirmado: la propina es solo de la porción de
     // mesa, ver bloque de abajo, que sigue calculándose sobre `lineas`, no
     // sobre esto).
-    if (montoTiendaAbono > 0 && carritoTienda) {
-      const ingresoTienda =
-        input.metodoPago === "mixto"
-          ? (() => {
-              const entregado = input.montoEfectivo + input.montoBanco;
-              const efectivo = entregado > 0 ? Math.round(montoTiendaAbono * (input.montoEfectivo / entregado)) : 0;
-              return { metodoPago: "mixto" as const, montoEfectivo: efectivo, montoBanco: montoTiendaAbono - efectivo };
-            })()
-          : { metodoPago: input.metodoPago, monto: montoTiendaAbono };
-
-      await cajaService.registrarIngreso(
-        {
-          moduloOrigenSlug: "con_sentido",
-          referenciaEntidad: "con_sentido_ventas",
-          referenciaId: carritoTienda.ventaId,
-          referenciaBanco: input.referenciaBanco,
-          ...ingresoTienda,
-        } as Parameters<typeof cajaService.registrarIngreso>[0],
-        usuarioId,
-        client,
-      );
+    if (ingresoTienda && carritoTienda) {
+      const baseIngresoTienda = {
+        moduloOrigenSlug: "con_sentido" as const,
+        referenciaEntidad: "con_sentido_ventas" as const,
+        referenciaId: carritoTienda.ventaId,
+        referenciaBanco: input.referenciaBanco,
+      };
+      if (ingresoTienda.metodoPago === "mixto") {
+        await cajaService.registrarIngreso(
+          { ...baseIngresoTienda, metodoPago: "mixto", montoEfectivo: ingresoTienda.montoEfectivo, montoBanco: ingresoTienda.montoBanco },
+          usuarioId,
+          client,
+        );
+      } else {
+        await cajaService.registrarIngreso(
+          { ...baseIngresoTienda, metodoPago: ingresoTienda.metodoPago, monto: ingresoTienda.monto },
+          usuarioId,
+          client,
+        );
+      }
 
       const pagadoPorMetodo = await client.query(
         `SELECT metodo_pago, COALESCE(SUM(monto), 0) AS monto FROM movimientos_caja
@@ -1639,11 +1697,27 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     }
 
     const todasPartesResult = await client.query(
-      `SELECT cp.monto_debido, COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0) AS pagado
+      `SELECT cp.id, cp.monto_debido, COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0) AS pagado
          FROM migao_cuenta_partes cp WHERE cp.venta_id = $1`,
       [parte.venta_id],
     );
-    const todasPagadas = todasPartesResult.rows.every((r) => Number(r.monto_debido) - Number(r.pagado) <= 0.01);
+    const todasPartesMesaPagadas = todasPartesResult.rows.every(
+      (r) => Number(r.monto_debido) - Number(r.pagado) <= 0.01,
+    );
+    // No basta con que la mesa esté saldada: si CUALQUIER parte (no solo
+    // esta) tiene un carrito de tienda con algo pendiente, la orden no puede
+    // cerrarse todavía — si se cerrara, ese carrito quedaría varado para
+    // siempre (registrarAbono ya no acepta abonos sobre una orden cerrada).
+    // Ver hallazgo C2 de la revisión final.
+    let todasPartesTiendaPagadas = true;
+    for (const fila of todasPartesResult.rows) {
+      const carritoDeEsaParte = await conSentidoRepo.getCarritoTiendaPorParte(fila.id, client);
+      if (carritoDeEsaParte && carritoDeEsaParte.pendiente > 0.01) {
+        todasPartesTiendaPagadas = false;
+        break;
+      }
+    }
+    const todasPagadas = todasPartesMesaPagadas && todasPartesTiendaPagadas;
 
     let alertasInventario: string[] = [];
     if (todasPagadas) {
@@ -1733,9 +1807,10 @@ export async function cancelarOrden(ordenId: string, usuarioId: string) {
 
     // Carritos de tienda vinculados a alguna parte de esta orden que todavía
     // no se habían pagado — ya se descartó arriba que tengan algo pagado.
-    await conSentidoRepo.anularCarritosTiendaPorOrden(client, ordenId);
+    const huboAvisosEcommerceTienda = await conSentidoRepo.anularCarritosTiendaPorOrden(client, ordenId);
 
     await client.query("COMMIT");
+    if (huboAvisosEcommerceTienda) programarEnvioEcommerce();
     notificarAlertasInventario(alertasInventario);
     return { ...orden, estado: "cancelada", alertasInventario };
   } catch (err) {

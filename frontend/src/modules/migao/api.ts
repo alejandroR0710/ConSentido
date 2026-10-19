@@ -703,7 +703,15 @@ export const migaoApi = {
   // carrito de tienda de esta parte (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
   vincularCarritoTienda: (
     parteId: string,
-    input: { items: { productoId: string; cantidad: number; precioUnitario: number }[]; descuentoPorcentaje?: number },
+    input: {
+      items: {
+        productoId: string;
+        cantidad: number;
+        precioUnitario: number;
+        observacionInventario?: string;
+      }[];
+      descuentoPorcentaje?: number;
+    },
   ) =>
     apiFetch<{ ventaId: string; subtotal: number; descuentoMonto: number; monto: number }>(
       `/migao/cuentas/partes/${parteId}/carrito-tienda`,

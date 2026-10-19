@@ -1,4 +1,5 @@
 import { Pool, PoolClient, pool } from "../../shared/db/pool";
+import { encolarDeltaStock } from "../integracion_ecommerce/salida";
 
 type Executor = Pool | PoolClient;
 
@@ -170,7 +171,7 @@ export async function actualizarProducto(
  */
 export async function getProductoParaVenta(client: PoolClient, id: string) {
   const result = await client.query(
-    `SELECT p.id, p.nombre, p.sku, p.ecommerce_product_id, p.ecommerce_variant_id,
+    `SELECT p.id, p.nombre, p.sku, p.ecommerce_product_id, p.ecommerce_variant_id, p.precio,
             COALESCE(ip.cantidad_actual, 0) AS stock
        FROM productos p
        JOIN modulos m ON m.id = p.modulo_id
@@ -179,7 +180,8 @@ export async function getProductoParaVenta(client: PoolClient, id: string) {
       FOR UPDATE`,
     [id],
   );
-  return result.rowCount ? { ...result.rows[0], stock: Number(result.rows[0].stock) } : null;
+  if (!result.rowCount) return null;
+  return { ...result.rows[0], stock: Number(result.rows[0].stock), precio: Number(result.rows[0].precio) };
 }
 
 /**
@@ -290,7 +292,8 @@ export async function crearVentaItem(
 
 const SELECT_VENTA_CON_ITEMS = `
   SELECT
-    cv.id, cv.created_at, cv.monto, cv.metodo_pago, cv.monto_efectivo, cv.monto_banco,
+    cv.id, cv.created_at, cv.monto, cv.metodo_pago, cv.monto_efectivo, cv.monto_banco, cv.estado,
+    cv.parte_id, cv.descuento_porcentaje, cv.descuento,
     MAX(f.numero) AS numero_factura,
     -- GROUP_CONCAT (no JSON_ARRAYAGG) porque es el único agregado de MySQL
     -- que respeta ORDER BY; sin ítems queda NULL y cae en el [] del COALESCE.
@@ -315,10 +318,14 @@ const SELECT_VENTA_CON_ITEMS = `
 
 export async function listVentas(skip: number, limit: number, fecha?: string) {
   const params: unknown[] = [];
-  let where = "";
+  // Los carritos vinculados a una mesa que todavía no se terminan de pagar
+  // (estado='pendiente') no son ventas reales todavía — no deben aparecer
+  // en el historial normal de Con Sentido (hallazgo I6 de la revisión
+  // final). Las anuladas sí se siguen mostrando, igual que antes.
+  let where = "WHERE cv.estado != 'pendiente'";
   if (fecha) {
     params.push(fecha);
-    where = `WHERE DATE(cv.created_at) = $${params.length}`;
+    where += ` AND DATE(cv.created_at) = $${params.length}`;
   }
   params.push(limit, skip);
   const result = await pool.query(
@@ -493,7 +500,12 @@ export async function reemplazarItemsCarrito(
     subtotal += item.cantidad * item.precioUnitario;
   }
 
-  const descuentoMonto = Math.round(subtotal * (params.descuentoPorcentaje / 100) * 100) / 100;
+  // A peso entero (no a centavo) — mismo criterio que el resto de los
+  // cálculos de pago/descuento de este negocio (ver migao.service.ts). Un
+  // descuento con centavos sueltos fue la causa raíz del hallazgo C3 de la
+  // revisión final (el carrito de tienda quedaba eternamente corto por
+  // unos centavos y nunca se marcaba "completada").
+  const descuentoMonto = Math.round(subtotal * (params.descuentoPorcentaje / 100));
   const monto = subtotal - descuentoMonto;
   await client.query(
     `UPDATE con_sentido_ventas SET monto = $2, descuento_porcentaje = $3, descuento = $4 WHERE id = $1`,
@@ -517,7 +529,9 @@ export async function marcarCarritoCompletado(
  *  una orden al cancelarla — devuelve el stock de cada ítem. Nunca toca uno
  *  que ya esté 'completada' (ver existenPagosTiendaPorOrden, que bloquea la
  *  cancelación completa si ya se pagó algo). */
-export async function anularCarritosTiendaPorOrden(client: PoolClient, ordenId: string) {
+/** @returns true si quedó algo por avisarle al e-commerce — el llamador debe
+ *  llamar a `programarEnvio()` (fuera de esta transacción) si devuelve true. */
+export async function anularCarritosTiendaPorOrden(client: PoolClient, ordenId: string): Promise<boolean> {
   const result = await client.query(
     `SELECT cv.id FROM con_sentido_ventas cv
        JOIN migao_cuenta_partes cp ON cp.id = cv.parte_id
@@ -525,16 +539,37 @@ export async function anularCarritosTiendaPorOrden(client: PoolClient, ordenId: 
       WHERE v.orden_id = $1 AND cv.estado = 'pendiente'`,
     [ordenId],
   );
+  let huboAvisosEcommerce = false;
   for (const row of result.rows) {
     const items = await client.query(
       `SELECT producto_id, cantidad FROM con_sentido_venta_items WHERE venta_id = $1`,
       [row.id],
     );
     for (const item of items.rows) {
-      if (item.producto_id) await reponerStock(client, item.producto_id, Number(item.cantidad));
+      if (!item.producto_id) continue;
+      const producto = await getProductoParaVenta(client, item.producto_id);
+      if (!producto) continue; // ya no está en el catálogo
+      await reponerStock(client, producto.id, Number(item.cantidad));
+      // Mismo criterio que caja.service.ts::anularVenta — el e-commerce
+      // refleja max(stock, 0), así que una devolución solo le avisa lo que
+      // de verdad vuelve a quedar por encima de 0 (hallazgo I8 de la
+      // revisión final).
+      const delta = deltaEcommerce(producto.stock, producto.stock + Number(item.cantidad));
+      if (producto.ecommerce_product_id && delta !== 0) {
+        await encolarDeltaStock(client, {
+          productId: producto.ecommerce_product_id,
+          variantId: producto.ecommerce_variant_id ?? null,
+          sku: producto.sku,
+          delta,
+          kind: "RETURN",
+          reason: "Cancelación de mesa con carrito de tienda vinculado",
+        });
+        huboAvisosEcommerce = true;
+      }
     }
     await client.query(`UPDATE con_sentido_ventas SET estado = 'anulada' WHERE id = $1`, [row.id]);
   }
+  return huboAvisosEcommerce;
 }
 
 /** Si ya se cobró algo (cualquier abono) del carrito de tienda de alguna

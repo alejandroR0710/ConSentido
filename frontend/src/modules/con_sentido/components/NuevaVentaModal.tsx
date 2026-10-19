@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
+import { migaoApi } from "../../migao/api";
 import {
   SelectorMetodoPago,
   faltaReferenciaBanco,
@@ -64,6 +65,25 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
   // cobro de la mesa en Migao): no aplica método de pago ni "otro producto".
   const [vincularAMesa, setVincularAMesa] = useState(false);
   const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
+  // Si esa mesa ya tiene la cuenta dividida en 2+ partes, hay que elegir a
+  // cuál vincular (ver spec) — null = todavía no se revisó, [] = revisado y
+  // no hace falta elegir (0 o 1 parte, o la mesa ni siquiera tiene cobro
+  // iniciado todavía, se crea una sola parte sola) (hallazgo I4 de la
+  // revisión final).
+  const [partesDeLaMesa, setPartesDeLaMesa] = useState<{ id: string; indice: number }[] | null>(null);
+  const [parteIdElegida, setParteIdElegida] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ordenIdElegida) {
+      setPartesDeLaMesa(null);
+      setParteIdElegida(null);
+      return;
+    }
+    migaoApi
+      .obtenerCuenta(ordenIdElegida)
+      .then((cuenta) => setPartesDeLaMesa(cuenta.partes.length > 1 ? cuenta.partes : []))
+      .catch(() => setPartesDeLaMesa([])); // sin cobro iniciado todavía: se crea una sola parte sola
+  }, [ordenIdElegida]);
 
   // Por nombre o por SKU.
   const termino = normalizar(busqueda.trim());
@@ -120,8 +140,17 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
   // y hace falta haber elegido una mesa — no se valida método de pago, acá
   // no se cobra nada todavía.
   const todosConProducto = carrito.every((item) => item.producto !== null);
+  // Si la mesa tiene cuenta dividida (partesDeLaMesa con 2+), hace falta
+  // haber elegido a cuál parte vincular antes de poder confirmar.
+  const faltaElegirParte = (partesDeLaMesa?.length ?? 0) > 1 && !parteIdElegida;
   const puedeRegistrar = vincularAMesa
-    ? carrito.length > 0 && itemsValidos && total > 0 && todosConProducto && ordenIdElegida !== null
+    ? carrito.length > 0 &&
+      itemsValidos &&
+      total > 0 &&
+      todosConProducto &&
+      ordenIdElegida !== null &&
+      partesDeLaMesa !== null &&
+      !faltaElegirParte
     : carrito.length > 0 &&
       itemsValidos &&
       total > 0 &&
@@ -176,10 +205,10 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     setError(null);
 
     if (vincularAMesa) {
-      if (!ordenIdElegida) return;
       try {
         await conSentidoApi.vincularMesa({
-          ordenId: ordenIdElegida,
+          ordenId: ordenIdElegida!,
+          parteId: parteIdElegida ?? undefined,
           items: carrito.map((item) => ({
             productoId: item.producto!.id,
             cantidad: item.cantidad,
@@ -487,12 +516,35 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         {vincularAMesa && (
           <div className="mt-2">
             {ordenIdElegida ? (
-              <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-                Mesa elegida.{" "}
-                <button type="button" onClick={() => setOrdenIdElegida(null)} className="text-brand-green-700 underline dark:text-brand-vanilla">
-                  Cambiar
-                </button>
-              </p>
+              <div>
+                <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+                  Mesa elegida.{" "}
+                  <button type="button" onClick={() => setOrdenIdElegida(null)} className="text-brand-green-700 underline dark:text-brand-vanilla">
+                    Cambiar
+                  </button>
+                </p>
+                {partesDeLaMesa && partesDeLaMesa.length > 1 && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-xs font-medium">Esta mesa tiene la cuenta dividida — ¿a cuál parte se vincula?</p>
+                    <div className="flex flex-wrap gap-2">
+                      {partesDeLaMesa.map((parte) => (
+                        <button
+                          key={parte.id}
+                          type="button"
+                          onClick={() => setParteIdElegida(parte.id)}
+                          className={`rounded-md border px-3 py-1 text-xs font-medium ${
+                            parteIdElegida === parte.id
+                              ? "border-brand-green-700 bg-brand-green-100 text-brand-green-700 dark:bg-brand-green-700/40 dark:text-brand-vanilla"
+                              : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                          }`}
+                        >
+                          Parte {parte.indice}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
             )}

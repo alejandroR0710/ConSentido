@@ -99,7 +99,7 @@ export async function getIngresosConSentido(desde: string, hasta: string) {
     `SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto), 0) AS total
        FROM con_sentido_ventas
       WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2
-        AND estado != 'anulada'`,
+        AND estado = 'completada'`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -112,7 +112,7 @@ export async function getVentasPorCategoriaConSentido(desde: string, hasta: stri
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
       WHERE DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
-        AND cv.estado != 'anulada'
+        AND cv.estado = 'completada'
       GROUP BY cvi.categoria
       ORDER BY total DESC`,
     [desde, hasta],
@@ -126,7 +126,7 @@ export async function getProductosTopConSentido(desde: string, hasta: string, li
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
       WHERE DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
-        AND cv.estado != 'anulada'
+        AND cv.estado = 'completada'
       GROUP BY cvi.producto
       ORDER BY cantidad DESC
       LIMIT $3`,

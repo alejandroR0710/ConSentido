@@ -10,6 +10,8 @@ interface ItemCarrito {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  stockDisponible: number | null;
+  observacionInventario: string;
 }
 
 interface CarritoTiendaModalProps {
@@ -35,7 +37,14 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
   const [items, setItems] = useState<ItemCarrito[]>(
     (carritoActual?.items ?? [])
       .filter((i) => i.productoId)
-      .map((i) => ({ productoId: i.productoId!, nombre: i.nombre, cantidad: i.cantidad, precioUnitario: i.precioUnitario })),
+      .map((i) => ({
+        productoId: i.productoId!,
+        nombre: i.nombre,
+        cantidad: i.cantidad,
+        precioUnitario: i.precioUnitario,
+        stockDisponible: null,
+        observacionInventario: "",
+      })),
   );
   const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(carritoActual?.descuentoPorcentaje ?? 0);
   const [busqueda, setBusqueda] = useState("");
@@ -55,7 +64,17 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
       if (existente) {
         return prev.map((i) => (i.productoId === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i));
       }
-      return [...prev, { productoId: producto.id, nombre: producto.nombre, cantidad: 1, precioUnitario: producto.precio }];
+      return [
+        ...prev,
+        {
+          productoId: producto.id,
+          nombre: producto.nombre,
+          cantidad: 1,
+          precioUnitario: producto.precio,
+          stockDisponible: producto.stock,
+          observacionInventario: "",
+        },
+      ];
     });
     setBusqueda("");
   }
@@ -68,17 +87,34 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
     setItems((prev) => prev.map((i) => (i.productoId === productoId ? { ...i, cantidad } : i)));
   }
 
+  function cambiarObservacion(productoId: string, observacionInventario: string) {
+    setItems((prev) => prev.map((i) => (i.productoId === productoId ? { ...i, observacionInventario } : i)));
+  }
+
+  // Sin stock suficiente se vende igual (decisión del negocio), pero exige
+  // explicar por qué no cuadra — mismo criterio que la venta normal de Con
+  // Sentido (hallazgo I10 de la revisión final).
+  function faltaStock(item: ItemCarrito) {
+    return item.stockDisponible !== null && item.cantidad > item.stockDisponible;
+  }
+  const faltaAlgunaObservacion = items.some((i) => faltaStock(i) && i.observacionInventario.trim().length === 0);
+
   const subtotal = items.reduce((acc, i) => acc + i.cantidad * i.precioUnitario, 0);
   const descuentoMonto = Math.round(subtotal * (descuentoPorcentaje / 100));
   const total = subtotal - descuentoMonto;
 
   async function guardar() {
-    if (items.length === 0) return;
+    if (items.length === 0 || faltaAlgunaObservacion) return;
     setGuardando(true);
     setError(null);
     try {
       await migaoApi.vincularCarritoTienda(parteId, {
-        items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, precioUnitario: i.precioUnitario })),
+        items: items.map((i) => ({
+          productoId: i.productoId,
+          cantidad: i.cantidad,
+          precioUnitario: i.precioUnitario,
+          observacionInventario: faltaStock(i) ? i.observacionInventario.trim() : undefined,
+        })),
         descuentoPorcentaje: descuentoPorcentaje || undefined,
       });
       await onGuardado();
@@ -122,24 +158,34 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
       ) : (
         <div className="mb-3 flex flex-col gap-2">
           {items.map((item) => (
-            <div key={item.productoId} className="flex items-center gap-2 text-sm">
-              <span className="flex-1">{item.nombre}</span>
-              <input
-                type="number"
-                min={1}
-                value={item.cantidad}
-                onChange={(e) => cambiarCantidad(item.productoId, Math.max(1, Number(e.target.value)))}
-                className="w-16 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-center text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
-              />
-              <span className="w-20 text-right">{formatMoney(item.cantidad * item.precioUnitario)}</span>
-              <button
-                type="button"
-                onClick={() => quitarItem(item.productoId)}
-                className="text-red-600 hover:underline"
-                aria-label="Quitar"
-              >
-                ✕
-              </button>
+            <div key={item.productoId} className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="flex-1">{item.nombre}</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={item.cantidad}
+                  onChange={(e) => cambiarCantidad(item.productoId, Math.max(1, Number(e.target.value)))}
+                  className="w-16 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-center text-sm dark:border-brand-green-700 dark:bg-brand-green-900"
+                />
+                <span className="w-20 text-right">{formatMoney(item.cantidad * item.precioUnitario)}</span>
+                <button
+                  type="button"
+                  onClick={() => quitarItem(item.productoId)}
+                  className="text-red-600 hover:underline"
+                  aria-label="Quitar"
+                >
+                  ✕
+                </button>
+              </div>
+              {faltaStock(item) && (
+                <input
+                  value={item.observacionInventario}
+                  onChange={(e) => cambiarObservacion(item.productoId, e.target.value)}
+                  placeholder={`Sin stock suficiente (quedan ${item.stockDisponible}) — explica por qué no cuadra el inventario`}
+                  className="w-full rounded-md border border-amber-400 bg-brand-vanilla px-2 py-1 text-xs text-brand-ink outline-none dark:bg-brand-green-900 dark:text-brand-vanilla"
+                />
+              )}
             </div>
           ))}
         </div>
@@ -164,7 +210,7 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
 
       <button
         onClick={guardar}
-        disabled={guardando || items.length === 0}
+        disabled={guardando || items.length === 0 || faltaAlgunaObservacion}
         className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
       >
         {guardando ? "Guardando..." : "Guardar carrito"}

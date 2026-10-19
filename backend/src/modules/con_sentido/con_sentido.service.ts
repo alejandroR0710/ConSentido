@@ -1,5 +1,5 @@
 import { pool } from "../../shared/db/pool";
-import { Errors } from "../../shared/utils/app-error";
+import { AppError, Errors } from "../../shared/utils/app-error";
 import * as cajaService from "../general/caja/caja.service";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import * as migaoRepo from "../migao/migao.repository";
@@ -249,9 +249,23 @@ export async function obtenerVenta(id: string) {
 export async function obtenerFacturaVenta(ventaId: string) {
   const venta = await repo.getVentaById(ventaId);
   if (!venta) throw Errors.notFound("Venta no encontrada");
+  // Un carrito de tienda vinculado a una mesa que todavía no se terminó de
+  // pagar no tiene factura todavía — asignarle un número ahora sería
+  // prematuro (y venta.metodo_pago todavía es NULL). Ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md,
+  // hallazgo I6 de la revisión final.
+  if (venta.estado === "pendiente") {
+    throw Errors.conflict("Este carrito de tienda todavía no se ha terminado de pagar — no tiene factura todavía");
+  }
 
   const monto = Number(venta.monto);
-  const factura = await repo.getOrCrearFactura({ ventaId, subtotal: monto, total: monto });
+  // Una venta vinculada a una parte (ver parte_id) puede tener su propio
+  // descuento — una venta suelta normal nunca lo tuvo, por eso antes se
+  // hardcodeaba en 0 (hallazgo I7 de la revisión final).
+  const descuentoMonto = venta.parte_id ? Number(venta.descuento ?? 0) : 0;
+  const descuentoPorcentaje = venta.parte_id ? Number(venta.descuento_porcentaje ?? 0) : 0;
+  const subtotal = monto + descuentoMonto;
+  const factura = await repo.getOrCrearFactura({ ventaId, subtotal, total: monto });
 
   const pagos =
     venta.metodo_pago === "mixto"
@@ -275,9 +289,9 @@ export async function obtenerFacturaVenta(ventaId: string) {
       precioUnitario: Number(item.precio_unitario),
       subtotal: Number(item.subtotal),
     })),
-    subtotal: monto,
-    descuentoPorcentaje: 0,
-    descuentoMonto: 0,
+    subtotal,
+    descuentoPorcentaje,
+    descuentoMonto,
     total: monto,
     pagos,
     propina: null,
@@ -297,8 +311,24 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const parteResult = await client.query(`SELECT id FROM migao_cuenta_partes WHERE id = $1 FOR UPDATE`, [parteId]);
+    // Bloquea también la orden (no solo la parte) — sin esto, una
+    // cancelarOrden concurrente que ya pasó su propio chequeo de "sin pagos"
+    // podía colarse entre este lock de la parte y el INSERT de abajo,
+    // dejando un carrito nuevo sobre una orden recién cancelada (hallazgo I2
+    // de la revisión final).
+    const parteResult = await client.query(
+      `SELECT cp.id, o.estado AS orden_estado
+         FROM migao_cuenta_partes cp
+         JOIN ventas v ON v.id = cp.venta_id
+         JOIN ordenes o ON o.id = v.orden_id
+        WHERE cp.id = $1
+        FOR UPDATE`,
+      [parteId],
+    );
     if (!parteResult.rowCount) throw Errors.notFound("Parte de cuenta no encontrada");
+    const ordenEstado = parteResult.rows[0].orden_estado as string;
+    if (ordenEstado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
+    if (ordenEstado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
 
     const carritoExistente = await repo.getCarritoTiendaPorParte(parteId, client);
     if (carritoExistente && carritoExistente.pagado > 0) {
@@ -307,26 +337,66 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
 
     const ventaId = carritoExistente ? carritoExistente.ventaId : (await repo.crearCarritoTienda(client, parteId, usuarioId)).id;
 
+    // Avisos al e-commerce (mismo criterio que registrarVenta/anularVenta —
+    // hallazgo I8 de la revisión final): lo que se quita del carrito es una
+    // devolución (RETURN), lo nuevo es una venta (SALE). Se encolan DENTRO
+    // de esta misma transacción (si se revierte, el aviso también).
     const existentes = await repo.getItemsCarrito(ventaId, client);
+    let huboAvisosEcommerce = false;
     for (const fila of existentes) {
-      if (fila.producto_id) await repo.reponerStock(client, fila.producto_id, Number(fila.cantidad));
+      if (!fila.producto_id) continue;
+      const producto = await repo.getProductoParaVenta(client, fila.producto_id);
+      if (!producto) continue; // ya no está en el catálogo
+      await repo.reponerStock(client, fila.producto_id, Number(fila.cantidad));
+      const delta = repo.deltaEcommerce(producto.stock, producto.stock + Number(fila.cantidad));
+      if (producto.ecommerce_product_id && delta !== 0) {
+        await encolarDeltaStock(client, {
+          productId: producto.ecommerce_product_id,
+          variantId: producto.ecommerce_variant_id ?? null,
+          sku: producto.sku,
+          delta,
+          kind: "RETURN",
+          reason: "Carrito de tienda de una mesa: se reemplazó por uno nuevo",
+        });
+        huboAvisosEcommerce = true;
+      }
     }
 
     const itemsResueltos = [];
     for (const item of input.items) {
+      const producto = await repo.getProductoParaVenta(client, item.productoId);
       const vendido = await descontarParaVenta(client, {
         productoId: item.productoId,
         cantidad: item.cantidad,
-        nombre: "producto",
+        nombre: producto?.nombre ?? "producto",
         observacion: item.observacionInventario,
       });
       if (!vendido) throw Errors.badRequest("Uno de los productos del carrito ya no está en el catálogo");
+      if (vendido.producto.ecommerce_product_id) {
+        // Mismo criterio que registrarVenta: siempre se encola (sin
+        // condicionar a delta !== 0) para un producto sincronizado.
+        await encolarDeltaStock(client, {
+          productId: vendido.producto.ecommerce_product_id,
+          variantId: vendido.producto.ecommerce_variant_id ?? null,
+          sku: vendido.producto.sku,
+          delta: vendido.deltaEcommerce,
+          kind: "SALE",
+          reason: motivoVenta("Carrito de tienda vinculado a una mesa", vendido.observacion),
+        });
+        huboAvisosEcommerce = true;
+      }
       itemsResueltos.push({
         productoId: vendido.producto.id as string,
         sku: (vendido.producto.sku as string | null) ?? null,
         nombre: vendido.producto.nombre as string,
         cantidad: item.cantidad,
-        precioUnitario: item.precioUnitario,
+        // El precio se resuelve del catálogo, nunca del cliente — el Cajero
+        // tiene con_sentido.ventas.vincular_mesa precisamente porque NO
+        // tiene con_sentido.ventas.crear (sin control de precios); confiar
+        // en item.precioUnitario dejaba vender cualquier producto a
+        // cualquier precio por esta puerta (hallazgo I11 de la revisión
+        // final).
+        precioUnitario: Number(vendido.producto.precio),
         observacionInventario: vendido.observacion,
       });
     }
@@ -338,6 +408,7 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
     });
 
     await client.query("COMMIT");
+    if (huboAvisosEcommerce) programarEnvio();
     return { ventaId, ...resultado };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -354,8 +425,15 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
  * partes, exige que se diga a cuál se vincula.
  */
 export async function vincularMesa(input: VincularMesaInput, usuarioId: string) {
-  const ventaAbierta = await migaoRepo.getVentaAbiertaPorOrden(input.ordenId);
-  if (!ventaAbierta) {
+  // iniciarCobro y vincularCarritoTienda corren en transacciones separadas
+  // (iniciarCobro ya commitea la suya) — si el segundo paso falla, el cobro
+  // de la mesa ya quedó iniciado (y VISIBLE en Migao, ver hallazgo C1) y
+  // puede completarse desde ahí; se avisa explícito en vez de un error
+  // genérico (hallazgo I1 de la revisión final — atomicidad completa
+  // requeriría exponer un `client` compartido entre ambos módulos, fuera de
+  // alcance de este fix pass).
+  const yaExistiaCobro = Boolean(await migaoRepo.getVentaAbiertaPorOrden(input.ordenId));
+  if (!yaExistiaCobro) {
     await migaoService.iniciarCobro(input.ordenId, { division: { modo: "igual", numPartes: 1 } }, usuarioId);
   }
 
@@ -372,10 +450,30 @@ export async function vincularMesa(input: VincularMesaInput, usuarioId: string) 
     throw Errors.badRequest("Esa parte no corresponde a esta mesa");
   }
 
-  const resultado = await vincularCarritoTienda(
-    parteId,
-    { items: input.items, descuentoPorcentaje: input.descuentoPorcentaje },
-    usuarioId,
-  );
-  return { ...resultado, parteId };
+  // Si esa parte ya tiene un carrito de tienda (ej. alguien lo agregó desde
+  // Migao), no lo pisamos en silencio — el cajero tiene que ir a Migao a
+  // verlo y editarlo ahí, donde sí ve lo que ya hay (hallazgo I3 de la
+  // revisión final).
+  const parteElegida = cuenta.partes.find((p) => p.id === parteId)!;
+  if (parteElegida.tienda) {
+    throw Errors.conflict(
+      "Esta parte ya tiene productos de la tienda vinculados — edítalos desde el cobro de la mesa en Migao",
+    );
+  }
+
+  try {
+    const resultado = await vincularCarritoTienda(
+      parteId,
+      { items: input.items, descuentoPorcentaje: input.descuentoPorcentaje },
+      usuarioId,
+    );
+    return { ...resultado, parteId };
+  } catch (err) {
+    if (!yaExistiaCobro && err instanceof AppError) {
+      throw Errors.conflict(
+        `${err.message} — el cobro de esta mesa ya quedó iniciado (parte ${parteId}); agrega los productos desde el cobro de la mesa en Migao.`,
+      );
+    }
+    throw err;
+  }
 }

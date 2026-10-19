@@ -112,6 +112,12 @@ export function MigaoPage() {
   // que sí se pide la factura y se abre el modal de impresión. No bloquea el
   // cobro si algo falla, solo se le avisa al Cajero.
   const [preguntaFacturaOrdenId, setPreguntaFacturaOrdenId] = useState<string | null>(null);
+  // Venta combinada mesa + Con Sentido: qué partes quedaron con un carrito de
+  // tienda ya completado justo al cerrar esta orden — la vista de cuenta
+  // desaparece apenas se cierra (ver registrarPagos), así que sin esto el
+  // Cajero (que no tiene con_sentido.ventas.ver) se queda sin forma de
+  // reimprimir esa factura (hallazgo I12 de la revisión final).
+  const [partesTiendaParaFactura, setPartesTiendaParaFactura] = useState<string[]>([]);
   const [reciboFactura, setReciboFactura] = useState<ReturnType<typeof facturaAReciboProps> | null>(null);
   const [errorFactura, setErrorFactura] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -755,6 +761,9 @@ export function MigaoPage() {
         const sufijoAlertas = alertas.length > 0 ? ` ${alertas.join(" ")}` : "";
         setMensaje(`Orden cobrada y cerrada. Total: ${formatMoney(Number(cuentaActual.venta.total))}${sufijoAlertas}`);
         setPreguntaFacturaOrdenId(ordenSeleccionadaId);
+        setPartesTiendaParaFactura(
+          cuentaActual.partes.filter((p) => p.tienda?.estado === "completada").map((p) => p.id),
+        );
         setDetalle(null);
         setOrdenSeleccionadaId(null);
         reiniciarDivision();
@@ -1570,6 +1579,25 @@ export function MigaoPage() {
               Sí, imprimir
             </button>
           </div>
+          {/* Venta combinada mesa + Con Sentido — ver hallazgo I12 de la
+              revisión final: esta es la única oportunidad de imprimir la
+              factura de tienda, el Cajero no tiene con_sentido.ventas.ver. */}
+          {partesTiendaParaFactura.map((parteId) => (
+            <button
+              key={parteId}
+              onClick={async () => {
+                try {
+                  const factura = await migaoApi.obtenerFacturaTiendaDeParte(parteId);
+                  setReciboFactura(facturaAReciboProps(factura));
+                } catch {
+                  setErrorFactura("No se pudo generar la factura de tienda para imprimir");
+                }
+              }}
+              className="mt-2 w-full rounded-md border border-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+            >
+              Imprimir factura de tienda
+            </button>
+          ))}
         </Modal>
       )}
 

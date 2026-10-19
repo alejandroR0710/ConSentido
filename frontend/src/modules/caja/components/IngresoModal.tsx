@@ -20,7 +20,7 @@ import {
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { SelectorMesaVisual } from "../../con_sentido/components/SelectorMesaVisual";
-import { migaoApi } from "../../migao/api";
+import { migaoApi, type CuentaParte } from "../../migao/api";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
 import { SugerenciasProducto } from "./SugerenciasProducto";
 import { facturaCajaAReciboProps } from "../factura";
@@ -107,19 +107,28 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   // dejar un estado a medias si el cajero minimizó justo en el medio).
   const [vincularAMesa, setVincularAMesa] = useState(false);
   const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
-  const [partesDeLaMesa, setPartesDeLaMesa] = useState<{ id: string; indice: number }[] | null>(null);
+  // Todas las partes reales de esa mesa (con sus montos) — null = todavía
+  // no se consultó. Se guardan completas (no solo id/índice) para poder
+  // mostrar el panel resumen de "cuánto debe la mesa" al costado.
+  const [todasLasPartes, setTodasLasPartes] = useState<CuentaParte[] | null>(null);
   const [parteIdElegida, setParteIdElegida] = useState<string | null>(null);
+  const partesDeLaMesa = (todasLasPartes?.length ?? 0) > 1 ? todasLasPartes! : [];
+  const parteElegida: CuentaParte | null = !todasLasPartes
+    ? null
+    : todasLasPartes.length === 1
+      ? todasLasPartes[0]
+      : (todasLasPartes.find((p) => p.id === parteIdElegida) ?? null);
 
   useEffect(() => {
     if (!ordenIdElegida) {
-      setPartesDeLaMesa(null);
+      setTodasLasPartes(null);
       setParteIdElegida(null);
       return;
     }
     migaoApi
       .obtenerCuenta(ordenIdElegida)
-      .then((cuenta) => setPartesDeLaMesa(cuenta.partes.length > 1 ? cuenta.partes : []))
-      .catch(() => setPartesDeLaMesa([])); // sin cobro iniciado todavía: se crea una sola parte sola
+      .then((cuenta) => setTodasLasPartes(cuenta.partes))
+      .catch(() => setTodasLasPartes([])); // sin cobro iniciado todavía: se crea una sola parte sola al vincular
   }, [ordenIdElegida]);
 
   // Si el formulario abre YA lleno (precargado desde una cotización) o
@@ -209,12 +218,12 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   // esperaba esta función justo acá, en "Registrar ingreso", no en una
   // pantalla aparte — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
   const todasLasLineasConProducto = lineasValidas.length > 0 && lineasValidas.every((l) => Boolean(l.productoId));
-  const faltaElegirParte = (partesDeLaMesa?.length ?? 0) > 1 && !parteIdElegida;
+  const faltaElegirParte = partesDeLaMesa.length > 1 && !parteIdElegida;
   const puedeRegistrar = vincularAMesa
     ? todasLasLineasConProducto &&
       !faltaObservacion &&
       ordenIdElegida !== null &&
-      partesDeLaMesa !== null &&
+      todasLasPartes !== null &&
       !faltaElegirParte
     : montoNeto > 0 &&
       !mixtoInvalido &&
@@ -586,51 +595,99 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
                 ¿Vincular estos productos a una mesa? (se cobran junto con su cuenta, no acá)
               </label>
               {vincularAMesa && (
-                <div className="mt-2">
-                  {!todasLasLineasConProducto && (
-                    <p className="mb-2 text-xs text-red-600">
-                      Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se
-                      puede vincular texto libre.
-                    </p>
-                  )}
-                  {ordenIdElegida ? (
-                    <div>
-                      <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-                        Mesa elegida.{" "}
-                        <button
-                          type="button"
-                          onClick={() => setOrdenIdElegida(null)}
-                          className="text-brand-green-700 underline dark:text-brand-vanilla"
-                        >
-                          Cambiar
-                        </button>
+                <div className="mt-2 grid gap-4 sm:grid-cols-[1fr,260px]">
+                  <div>
+                    {!todasLasLineasConProducto && (
+                      <p className="mb-2 text-xs text-red-600">
+                        Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se
+                        puede vincular texto libre.
                       </p>
-                      {partesDeLaMesa && partesDeLaMesa.length > 1 && (
-                        <div className="mt-2">
-                          <p className="mb-1 text-xs font-medium">
-                            Esta mesa tiene la cuenta dividida — ¿a cuál parte se vincula?
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {partesDeLaMesa.map((parte) => (
-                              <button
-                                key={parte.id}
-                                type="button"
-                                onClick={() => setParteIdElegida(parte.id)}
-                                className={`rounded-md border px-3 py-1 text-xs font-medium ${
-                                  parteIdElegida === parte.id
-                                    ? "border-brand-green-700 bg-brand-green-100 text-brand-green-700 dark:bg-brand-green-700/40 dark:text-brand-vanilla"
-                                    : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
-                                }`}
-                              >
-                                Parte {parte.indice}
-                              </button>
-                            ))}
+                    )}
+                    {ordenIdElegida ? (
+                      <div>
+                        <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+                          Mesa elegida.{" "}
+                          <button
+                            type="button"
+                            onClick={() => setOrdenIdElegida(null)}
+                            className="text-brand-green-700 underline dark:text-brand-vanilla"
+                          >
+                            Cambiar
+                          </button>
+                        </p>
+                        {partesDeLaMesa.length > 1 && (
+                          <div className="mt-2">
+                            <p className="mb-1 text-xs font-medium">
+                              Esta mesa tiene la cuenta dividida — ¿a cuál parte se vincula?
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {partesDeLaMesa.map((parte) => (
+                                <button
+                                  key={parte.id}
+                                  type="button"
+                                  onClick={() => setParteIdElegida(parte.id)}
+                                  className={`rounded-md border px-3 py-1 text-xs font-medium ${
+                                    parteIdElegida === parte.id
+                                      ? "border-brand-green-700 bg-brand-green-100 text-brand-green-700 dark:bg-brand-green-700/40 dark:text-brand-vanilla"
+                                      : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                                  }`}
+                                >
+                                  Parte {parte.indice}
+                                </button>
+                              ))}
+                            </div>
                           </div>
+                        )}
+                      </div>
+                    ) : (
+                      <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
+                    )}
+                  </div>
+
+                  {parteElegida && (
+                    <div className="flex flex-col gap-3 self-start rounded-xl border border-brand-vanilla-dark bg-brand-vanilla/60 p-3 dark:border-brand-green-700 dark:bg-brand-green-900/40">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+                        Resumen
+                      </h4>
+                      <div className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 dark:bg-brand-green-900">
+                        <div className="flex items-center justify-between text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+                          <span>🍽️ Cuenta de la mesa</span>
                         </div>
-                      )}
+                        <div className="flex items-center justify-between text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+                          <span>Pendiente</span>
+                          <span>{formatMoney(parteElegida.pendiente)}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 dark:bg-brand-green-900">
+                        <div className="flex items-center justify-between text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+                          <span>🛍️ Este carrito</span>
+                        </div>
+                        <ul className="flex flex-col gap-0.5 text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                          {lineasValidas.map((l) => (
+                            <li key={l.key} className="flex items-center justify-between gap-2">
+                              <span className="truncate">
+                                {l.cantidad}× {l.nombre || "(sin nombre)"}
+                              </span>
+                              <span className="shrink-0">{formatMoney(l.cantidad * precioDe(l))}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {descuentoPorcentaje > 0 && (
+                          <div className="flex items-center justify-between text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                            <span>Descuento {descuentoPorcentaje}%</span>
+                            <span>-{formatMoney(totalLineas - montoNeto)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
+                          <span>Total</span>
+                          <span>{formatMoney(montoNeto)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg bg-brand-green-600 px-3 py-2.5 text-sm font-medium text-brand-vanilla">
+                        <span>Quedará pendiente en la mesa</span>
+                        <span className="text-lg font-bold">{formatMoney(parteElegida.pendiente + montoNeto)}</span>
+                      </div>
                     </div>
-                  ) : (
-                    <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
                   )}
                 </div>
               )}

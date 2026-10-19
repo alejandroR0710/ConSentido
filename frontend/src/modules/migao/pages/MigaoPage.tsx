@@ -34,6 +34,7 @@ import { CarritoTiendaModal } from "../components/CarritoTiendaModal";
 import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
+import { ResumenCuentasParte } from "../components/ResumenCuentasParte";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { facturaAReciboProps } from "../factura";
 import { formatCantidad } from "../format";
@@ -1312,10 +1313,11 @@ export function MigaoPage() {
                       {cuenta.partes.map((parte) => {
                         const form = abonoForms[parte.id];
                         const pendienteParte = pendienteCombinado(parte);
+                        const tieneCarritoTienda = Boolean(parte.tienda);
                         return (
                           <div
                             key={parte.id}
-                            className="flex flex-col gap-2 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700"
+                            className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
@@ -1326,30 +1328,7 @@ export function MigaoPage() {
                                   </span>
                                 )}
                               </span>
-                              <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-                                {formatMoney(parte.montoDebido)}
-                                {parte.montoPagado > 0 && (
-                                  <span className="ml-1 text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                                    (pagado {formatMoney(parte.montoPagado)})
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-
-                            {/* Venta combinada mesa + Con Sentido — ver
-                                docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-brand-green-50 px-2 py-1.5 text-xs dark:bg-brand-green-700/20">
-                              {parte.tienda ? (
-                                <span className="text-brand-ink/80 dark:text-brand-vanilla/80">
-                                  Tienda: {parte.tienda.items.map((i) => `${formatCantidad(i.cantidad)}× ${i.nombre}`).join(", ")}
-                                  {" — "}
-                                  {formatMoney(parte.tienda.monto)}
-                                  {parte.tienda.pagado > 0 && ` (pagado ${formatMoney(parte.tienda.pagado)})`}
-                                </span>
-                              ) : (
-                                <span className="text-brand-ink/60 dark:text-brand-vanilla/60">Sin productos de tienda</span>
-                              )}
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3 text-xs">
                                 {parte.tienda?.estado === "completada" && (
                                   <button
                                     type="button"
@@ -1372,80 +1351,92 @@ export function MigaoPage() {
                                     onClick={() => setParteCarritoTiendaId(parte.id)}
                                     className="font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
                                   >
-                                    + Agregar producto de la tienda
+                                    {parte.tienda ? "✏️ Editar tienda" : "+ Agregar producto de la tienda"}
                                   </button>
                                 )}
                               </div>
                             </div>
 
-                            {pendienteParte <= 0.001 || !form ? (
-                              <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
-                                ✓ Pagada por completo
-                              </p>
-                            ) : (
-                              <>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                    ¿Cuánto se paga ahora?
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={pendienteParte}
-                                    step="100"
-                                    value={form.montoPagarAhora || ""}
-                                    onChange={(e) =>
-                                      actualizarAbonoForm(parte.id, {
-                                        montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
-                                      })
-                                    }
-                                    className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                  />
-                                  <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                                    de {formatMoney(pendienteParte)} pendiente
-                                  </span>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                    Propina de este abono
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="100"
-                                    value={form.propina || ""}
-                                    onChange={(e) => actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })}
-                                    className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                  />
-                                  {cuenta.partes.length > 1 && propinaMonto > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => asignarPropinaCompletaA(parte.id)}
-                                      className="text-xs font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
-                                    >
-                                      Asignar propina completa aquí
-                                    </button>
-                                  )}
-                                </div>
-
-                                <SelectorMetodoPago
-                                  value={form.pago}
-                                  onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
-                                  totalFijo={form.montoPagarAhora + form.propina}
-                                />
-                                {form.pago.metodoPago !== "banco" && (
+                            {/* Venta combinada mesa + Con Sentido — ver
+                                docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+                                Con carrito de tienda: 2 columnas (form a la izquierda, resumen
+                                a la derecha); sin carrito: una sola columna, como siempre. */}
+                            <div className={tieneCarritoTienda ? "grid gap-4 sm:grid-cols-[1fr,260px]" : ""}>
+                              <div className="flex flex-col gap-3">
+                                {pendienteParte <= 0.001 || !form ? (
+                                  <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
+                                    ✓ Pagada por completo
+                                  </p>
+                                ) : (
                                   <>
-                                    <CalculadoraVuelta
-                                      aPagar={montoEnEfectivoDeAbono(form)}
-                                      recibido={form.montoRecibido}
-                                      onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
-                                      esParteDeMixto={form.pago.metodoPago === "mixto"}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                        ¿Cuánto se paga ahora?
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={pendienteParte}
+                                        step="100"
+                                        value={form.montoPagarAhora || ""}
+                                        onChange={(e) =>
+                                          actualizarAbonoForm(parte.id, {
+                                            montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
+                                          })
+                                        }
+                                        className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                      />
+                                      <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                        de {formatMoney(pendienteParte)} pendiente
+                                      </span>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                        Propina de este abono
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="100"
+                                        value={form.propina || ""}
+                                        onChange={(e) =>
+                                          actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })
+                                        }
+                                        className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                      />
+                                      {cuenta.partes.length > 1 && propinaMonto > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => asignarPropinaCompletaA(parte.id)}
+                                          className="text-xs font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                                        >
+                                          Asignar propina completa aquí
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <SelectorMetodoPago
+                                      value={form.pago}
+                                      onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
+                                      totalFijo={form.montoPagarAhora + form.propina}
                                     />
+                                    {form.pago.metodoPago !== "banco" && (
+                                      <CalculadoraVuelta
+                                        aPagar={montoEnEfectivoDeAbono(form)}
+                                        recibido={form.montoRecibido}
+                                        onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                                        esParteDeMixto={form.pago.metodoPago === "mixto"}
+                                      />
+                                    )}
                                   </>
                                 )}
-                              </>
-                            )}
+                              </div>
+
+                              {parte.tienda && (
+                                <ResumenCuentasParte parte={parte} montoPagarAhora={form?.montoPagarAhora ?? 0} />
+                              )}
+                            </div>
                           </div>
                         );
                       })}

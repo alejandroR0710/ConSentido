@@ -19,6 +19,8 @@ import {
   type OrigenIngreso,
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
+import { SelectorMesaVisual } from "../../con_sentido/components/SelectorMesaVisual";
+import { migaoApi } from "../../migao/api";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
 import { SugerenciasProducto } from "./SugerenciasProducto";
 import { facturaCajaAReciboProps } from "../factura";
@@ -97,6 +99,28 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   const [motivo, setMotivo] = useState(f?.motivo ?? valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Venta combinada mesa + Con Sentido — ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+  // Solo aplica con productos reales de Con Sentido (nunca con un snapshot
+  // restaurado/minimizado: se arranca siempre apagado en ese caso, para no
+  // dejar un estado a medias si el cajero minimizó justo en el medio).
+  const [vincularAMesa, setVincularAMesa] = useState(false);
+  const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
+  const [partesDeLaMesa, setPartesDeLaMesa] = useState<{ id: string; indice: number }[] | null>(null);
+  const [parteIdElegida, setParteIdElegida] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ordenIdElegida) {
+      setPartesDeLaMesa(null);
+      setParteIdElegida(null);
+      return;
+    }
+    migaoApi
+      .obtenerCuenta(ordenIdElegida)
+      .then((cuenta) => setPartesDeLaMesa(cuenta.partes.length > 1 ? cuenta.partes : []))
+      .catch(() => setPartesDeLaMesa([])); // sin cobro iniciado todavía: se crea una sola parte sola
+  }, [ordenIdElegida]);
 
   // Si el formulario abre YA lleno (precargado desde una cotización) o
   // restaurado, "sigue como arrancó" no es lo mismo que "está vacío" — lo que
@@ -178,12 +202,25 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   // valida, ver caja.service.ts::exigirMontoRecibidoEfectivo).
   const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? montoNeto : 0;
   const faltaMontoRecibido = montoEnEfectivo > 0 && montoRecibido < montoEnEfectivo;
-  const puedeRegistrar =
-    montoNeto > 0 &&
-    !mixtoInvalido &&
-    !faltaMontoRecibido &&
-    !faltaReferenciaBanco(pago) &&
-    (modoMonto === "unico" || (lineasValidas.length > 0 && !faltaObservacion));
+  // Vinculando a una mesa: todas las líneas deben ser productos reales del
+  // catálogo (el backend no acepta texto libre en el carrito de tienda) y
+  // hace falta haber elegido una mesa — no se valida método de pago ni
+  // monto, acá no se cobra nada todavía (hallazgo de uso real: el cajero
+  // esperaba esta función justo acá, en "Registrar ingreso", no en una
+  // pantalla aparte — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+  const todasLasLineasConProducto = lineasValidas.length > 0 && lineasValidas.every((l) => Boolean(l.productoId));
+  const faltaElegirParte = (partesDeLaMesa?.length ?? 0) > 1 && !parteIdElegida;
+  const puedeRegistrar = vincularAMesa
+    ? todasLasLineasConProducto &&
+      !faltaObservacion &&
+      ordenIdElegida !== null &&
+      partesDeLaMesa !== null &&
+      !faltaElegirParte
+    : montoNeto > 0 &&
+      !mixtoInvalido &&
+      !faltaMontoRecibido &&
+      !faltaReferenciaBanco(pago) &&
+      (modoMonto === "unico" || (lineasValidas.length > 0 && !faltaObservacion));
 
   function actualizarLinea(key: number, cambios: Partial<LineaIngreso>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -252,10 +289,36 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
     if (resultado) descartar(id);
   }, [resultado, id, descartar]);
 
+  const [vinculadoOk, setVinculadoOk] = useState(false);
+
   async function registrar() {
     if (!puedeRegistrar) return;
     setRegistrando(true);
     setError(null);
+
+    if (vincularAMesa) {
+      try {
+        await conSentidoApi.vincularMesa({
+          ordenId: ordenIdElegida!,
+          parteId: parteIdElegida ?? undefined,
+          items: lineasValidas.map((l) => ({
+            productoId: l.productoId!,
+            cantidad: l.cantidad,
+            precioUnitario: precioDe(l),
+            observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
+          })),
+          descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+        });
+        yaRegistradoRef.current = true;
+        setVinculadoOk(true);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "No se pudo vincular el carrito a la mesa");
+      } finally {
+        setRegistrando(false);
+      }
+      return;
+    }
+
     try {
       const items =
         modoMonto === "productos"
@@ -302,6 +365,23 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
     } finally {
       setCargandoFactura(false);
     }
+  }
+
+  if (vinculadoOk) {
+    return (
+      <Modal titulo="Productos vinculados a la mesa" onCerrar={onCerrar}>
+        <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+          Quedaron vinculados a la mesa — se cobran junto con su cuenta, no acá. La factura de estos productos se
+          genera cuando se termine de pagar esa cuenta desde Migao.
+        </p>
+        <button
+          onClick={onCerrar}
+          className="w-full rounded-md bg-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+        >
+          Listo
+        </button>
+      </Modal>
+    );
   }
 
   if (resultado) {
@@ -489,6 +569,73 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
             <span>Total</span>
             <span>{formatMoney(totalLineas)}</span>
           </div>
+
+          {/* Venta combinada mesa + Con Sentido — ver
+              docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
+          {modulo === "con_sentido" && (
+            <div className="mt-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  type="checkbox"
+                  checked={vincularAMesa}
+                  onChange={(e) => {
+                    setVincularAMesa(e.target.checked);
+                    setOrdenIdElegida(null);
+                  }}
+                />
+                ¿Vincular estos productos a una mesa? (se cobran junto con su cuenta, no acá)
+              </label>
+              {vincularAMesa && (
+                <div className="mt-2">
+                  {!todasLasLineasConProducto && (
+                    <p className="mb-2 text-xs text-red-600">
+                      Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se
+                      puede vincular texto libre.
+                    </p>
+                  )}
+                  {ordenIdElegida ? (
+                    <div>
+                      <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+                        Mesa elegida.{" "}
+                        <button
+                          type="button"
+                          onClick={() => setOrdenIdElegida(null)}
+                          className="text-brand-green-700 underline dark:text-brand-vanilla"
+                        >
+                          Cambiar
+                        </button>
+                      </p>
+                      {partesDeLaMesa && partesDeLaMesa.length > 1 && (
+                        <div className="mt-2">
+                          <p className="mb-1 text-xs font-medium">
+                            Esta mesa tiene la cuenta dividida — ¿a cuál parte se vincula?
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {partesDeLaMesa.map((parte) => (
+                              <button
+                                key={parte.id}
+                                type="button"
+                                onClick={() => setParteIdElegida(parte.id)}
+                                className={`rounded-md border px-3 py-1 text-xs font-medium ${
+                                  parteIdElegida === parte.id
+                                    ? "border-brand-green-700 bg-brand-green-100 text-brand-green-700 dark:bg-brand-green-700/40 dark:text-brand-vanilla"
+                                    : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                                }`}
+                              >
+                                Parte {parte.indice}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <SelectorMesaVisual onElegirMesa={setOrdenIdElegida} />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <MoneyInput
@@ -517,28 +664,32 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
         )}
       </div>
 
-      <label className="mb-1 block text-xs font-medium">Método</label>
-      <div className="mb-3">
-        <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={montoNeto} />
-      </div>
+      {!vincularAMesa && (
+        <>
+          <label className="mb-1 block text-xs font-medium">Método</label>
+          <div className="mb-3">
+            <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={montoNeto} />
+          </div>
 
-      <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
-      <textarea
-        value={motivo}
-        onChange={(e) => setMotivo(e.target.value)}
-        rows={3}
-        className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-
-      {pago.metodoPago !== "banco" && (
-        <div className="mb-3">
-          <CalculadoraVuelta
-            aPagar={montoEnEfectivo}
-            recibido={montoRecibido}
-            onChange={setMontoRecibido}
-            esParteDeMixto={pago.metodoPago === "mixto"}
+          <label className="mb-1 block text-xs font-medium">Motivo (opcional)</label>
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={3}
+            className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
-        </div>
+
+          {pago.metodoPago !== "banco" && (
+            <div className="mb-3">
+              <CalculadoraVuelta
+                aPagar={montoEnEfectivo}
+                recibido={montoRecibido}
+                onChange={setMontoRecibido}
+                esParteDeMixto={pago.metodoPago === "mixto"}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -548,7 +699,7 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
         disabled={registrando || !puedeRegistrar}
         className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
       >
-        {registrando ? "Registrando..." : "Registrar ingreso"}
+        {registrando ? "Guardando..." : vincularAMesa ? "Vincular a la mesa" : "Registrar ingreso"}
       </button>
     </Modal>
   );

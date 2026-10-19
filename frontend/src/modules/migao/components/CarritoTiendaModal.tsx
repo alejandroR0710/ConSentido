@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { formatMoney } from "../../../shared/format/money";
+import { SugerenciasProducto } from "../../caja/components/SugerenciasProducto";
 import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { migaoApi, type CarritoTienda } from "../api";
 
@@ -19,13 +20,6 @@ interface CarritoTiendaModalProps {
   carritoActual: CarritoTienda | null;
   onCerrar: () => void;
   onGuardado: () => Promise<void> | void;
-}
-
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
 }
 
 /** Carrito de productos Con Sentido vinculado a una parte de cuenta
@@ -55,8 +49,6 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
     conSentidoApi.listarProductos().then(setProductos).catch(() => {});
   }, []);
 
-  const termino = normalizar(busqueda.trim());
-  const productosFiltrados = termino ? productos.filter((p) => normalizar(p.nombre).includes(termino)) : [];
 
   function agregarProducto(producto: ProductoConSentido) {
     setItems((prev) => {
@@ -129,27 +121,15 @@ export function CarritoTiendaModal({ parteId, carritoActual, onCerrar, onGuardad
   return (
     <Modal titulo="Productos de la tienda" onCerrar={onCerrar} maxWidth="sm:max-w-lg">
       <label className="mb-1 block text-xs font-medium">Buscar producto</label>
-      <input
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        placeholder="Nombre del producto..."
-        className="mb-2 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
-      {productosFiltrados.length > 0 && (
-        <div className="mb-3 max-h-40 overflow-y-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
-          {productosFiltrados.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => agregarProducto(p)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-brand-green-50 dark:hover:bg-brand-green-700/40"
-            >
-              <span>{p.nombre}</span>
-              <span className="text-brand-ink/60 dark:text-brand-vanilla/60">{formatMoney(p.precio)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="relative mb-3">
+        <input
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Nombre o SKU del producto..."
+          className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        />
+        <SugerenciasProducto productos={productos} texto={busqueda} onSeleccionar={agregarProducto} />
+      </div>
 
       {items.length === 0 ? (
         <p className="mb-3 text-center text-sm text-brand-ink/60 dark:text-brand-vanilla/60">

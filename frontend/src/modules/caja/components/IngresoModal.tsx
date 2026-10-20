@@ -57,7 +57,7 @@ interface IngresoModalProps {
   // en otro lado (panelInferior del Modal de la mesa), así que acá nunca se
   // muestra método de pago — "Vincular a la mesa" solo guarda el carrito.
   embebido?: boolean;
-  vincularMesaInicial?: { ordenId: string; parteId?: string };
+  vincularMesaInicial?: { ordenId: string; parteId: string };
   // Se dispara apenas el carrito queda vinculado — reemplaza a la pantalla
   // de éxito propia (que no tiene sentido embebida: quien embebe decide qué
   // mostrar, ej. volver al resumen de la parte).
@@ -338,18 +338,32 @@ export function IngresoModal({
 
     if (vincularAMesa) {
       try {
-        await conSentidoApi.vincularMesa({
-          ordenId: ordenIdElegida!,
-          parteId: parteIdElegida ?? undefined,
-          items: lineasValidas.map((l) => ({
-            productoId: l.productoId,
-            nombre: l.productoId ? undefined : l.nombre.trim(),
-            cantidad: l.cantidad,
-            precioUnitario: precioDe(l),
-            observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
-          })),
-          descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
-        });
+        const itemsVinculo = lineasValidas.map((l) => ({
+          productoId: l.productoId,
+          nombre: l.productoId ? undefined : l.nombre.trim(),
+          cantidad: l.cantidad,
+          precioUnitario: precioDe(l),
+          observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
+        }));
+        if (embebido && vincularMesaInicial) {
+          // Embebido en el cobro de una mesa en Migao: siempre reemplaza el
+          // carrito de ESTA parte (ya elegida, no hay selector acá) — a
+          // diferencia de conSentidoApi.vincularMesa (Puerta 2, pensada para
+          // un primer vínculo desde fuera de Migao), este endpoint no
+          // rechaza cuando ya existe un carrito, porque reemplazarlo es
+          // justo lo que "Editar tienda" / quitar un producto necesita.
+          await migaoApi.vincularCarritoTienda(vincularMesaInicial.parteId, {
+            items: itemsVinculo,
+            descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+          });
+        } else {
+          await conSentidoApi.vincularMesa({
+            ordenId: ordenIdElegida!,
+            parteId: parteIdElegida ?? undefined,
+            items: itemsVinculo,
+            descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
+          });
+        }
         yaRegistradoRef.current = true;
         if (onVinculado) {
           onVinculado();

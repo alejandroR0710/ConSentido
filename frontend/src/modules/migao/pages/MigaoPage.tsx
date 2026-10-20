@@ -1027,7 +1027,7 @@ export function MigaoPage() {
                       <ResumenCuentasParte
                         key={parte.id}
                         parte={parte}
-                        montoPagarAhora={abonoForms[parte.id]?.montoPagarAhora ?? 0}
+                        montoPagarAhora={(abonoForms[parte.id]?.montoPagarAhora ?? 0) + (abonoForms[parte.id]?.propina ?? 0)}
                         indice={cuenta.partes.length > 1 ? parte.indice : undefined}
                         itemsOrden={detalle?.items}
                       />
@@ -1055,9 +1055,21 @@ export function MigaoPage() {
                             Parte {parte.indice}
                           </p>
                         )}
-                        <div className="flex items-center justify-between rounded-md bg-brand-green-50 px-3 py-2 text-sm font-semibold text-brand-ink dark:bg-brand-green-700/20 dark:text-brand-vanilla">
-                          <span>Total a cobrar (mesa + tienda)</span>
-                          <span>{formatMoney(pendienteParte)}</span>
+                        <div className="flex flex-col gap-1 rounded-md bg-brand-green-50 px-3 py-2 text-sm dark:bg-brand-green-700/20">
+                          <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+                            <span>Mesa + tienda</span>
+                            <span>{formatMoney(pendienteParte)}</span>
+                          </div>
+                          {form.propina > 0 && (
+                            <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+                              <span>Propina</span>
+                              <span>{formatMoney(form.propina)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between font-semibold text-brand-ink dark:text-brand-vanilla">
+                            <span>Total a cobrar</span>
+                            <span>{formatMoney(pendienteParte + form.propina)}</span>
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Propina</label>

@@ -30,7 +30,7 @@ import {
 import { AREAS_MESA, areaDeMesa } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
-import { CarritoTiendaModal } from "../components/CarritoTiendaModal";
+import { CarritoTiendaEditor } from "../components/CarritoTiendaEditor";
 import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
@@ -677,10 +677,19 @@ export function MigaoPage() {
       for (const parte of cuenta.partes) {
         const previo = actual[parte.id];
         const pendienteTotal = pendienteCombinado(parte);
+        // Con tienda pendiente ya no se permite pago parcial (ver
+        // registrarAbono en el backend): siempre se fuerza el monto
+        // completo, ignorando lo que el cajero haya escrito antes.
+        const tieneTiendaPendiente = (parte.tienda?.pendiente ?? 0) > 0.01;
         nuevo[parte.id] =
-          previo && previo.montoPagarAhora <= pendienteTotal
+          previo && previo.montoPagarAhora <= pendienteTotal && !tieneTiendaPendiente
             ? previo
-            : { pago: { metodoPago: "efectivo" }, montoPagarAhora: pendienteTotal, propina: propinaPorParte, montoRecibido: 0 };
+            : {
+                pago: previo?.pago ?? { metodoPago: "efectivo" },
+                montoPagarAhora: pendienteTotal,
+                propina: previo?.propina ?? propinaPorParte,
+                montoRecibido: previo?.montoRecibido ?? 0,
+              };
       }
       return nuevo;
     });
@@ -950,19 +959,32 @@ export function MigaoPage() {
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
           panelLateral={
-            cuenta?.partes.some((p) => p.tienda) ? (
+            parteCarritoTiendaId || cuenta?.partes.some((p) => p.tienda) ? (
               <div className="flex h-full flex-col gap-4">
-                {cuenta.partes
-                  .filter((parte) => parte.tienda)
-                  .map((parte) => (
-                    <ResumenCuentasParte
-                      key={parte.id}
-                      parte={parte}
-                      montoPagarAhora={abonoForms[parte.id]?.montoPagarAhora ?? 0}
-                      indice={cuenta.partes.length > 1 ? parte.indice : undefined}
-                      itemsOrden={detalle?.items}
-                    />
-                  ))}
+                {cuenta?.partes
+                  .filter((parte) => parte.id === parteCarritoTiendaId || parte.tienda)
+                  .map((parte) =>
+                    parte.id === parteCarritoTiendaId ? (
+                      <CarritoTiendaEditor
+                        key={parte.id}
+                        parteId={parte.id}
+                        carritoActual={parte.tienda}
+                        onGuardado={async () => {
+                          await recargarCuenta();
+                          setParteCarritoTiendaId(null);
+                        }}
+                        onCancelar={() => setParteCarritoTiendaId(null)}
+                      />
+                    ) : (
+                      <ResumenCuentasParte
+                        key={parte.id}
+                        parte={parte}
+                        montoPagarAhora={abonoForms[parte.id]?.montoPagarAhora ?? 0}
+                        indice={cuenta.partes.length > 1 ? parte.indice : undefined}
+                        itemsOrden={detalle?.items}
+                      />
+                    ),
+                  )}
               </div>
             ) : undefined
           }
@@ -1330,6 +1352,7 @@ export function MigaoPage() {
                       {cuenta.partes.map((parte) => {
                         const form = abonoForms[parte.id];
                         const pendienteParte = pendienteCombinado(parte);
+                        const tieneTiendaPendiente = (parte.tienda?.pendiente ?? 0) > 0.01;
                         return (
                           <div
                             key={parte.id}
@@ -1380,27 +1403,38 @@ export function MigaoPage() {
                                   </p>
                                 ) : (
                                   <>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                        ¿Cuánto se paga ahora?
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={pendienteParte}
-                                        step="100"
-                                        value={form.montoPagarAhora || ""}
-                                        onChange={(e) =>
-                                          actualizarAbonoForm(parte.id, {
-                                            montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
-                                          })
-                                        }
-                                        className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                      />
-                                      <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                                        de {formatMoney(pendienteParte)} pendiente
-                                      </span>
-                                    </div>
+                                    {tieneTiendaPendiente ? (
+                                      <div className="flex items-center gap-2 rounded-md bg-brand-green-50 px-3 py-2 text-xs dark:bg-brand-green-700/20">
+                                        <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                                          🧾 Pago único: {formatMoney(pendienteParte)} (mesa + tienda)
+                                        </span>
+                                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
+                                          — con productos de la tienda vinculados no se puede pagar por partes.
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                          ¿Cuánto se paga ahora?
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={pendienteParte}
+                                          step="100"
+                                          value={form.montoPagarAhora || ""}
+                                          onChange={(e) =>
+                                            actualizarAbonoForm(parte.id, {
+                                              montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
+                                            })
+                                          }
+                                          className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                        />
+                                        <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                          de {formatMoney(pendienteParte)} pendiente
+                                        </span>
+                                      </div>
+                                    )}
 
                                     <div className="flex flex-wrap items-center gap-2">
                                       <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
@@ -1639,15 +1673,6 @@ export function MigaoPage() {
       )}
 
       {reciboFactura && <ModalImprimir {...reciboFactura} onCerrar={() => setReciboFactura(null)} />}
-
-      {parteCarritoTiendaId && (
-        <CarritoTiendaModal
-          parteId={parteCarritoTiendaId}
-          carritoActual={cuenta?.partes.find((p) => p.id === parteCarritoTiendaId)?.tienda ?? null}
-          onCerrar={() => setParteCarritoTiendaId(null)}
-          onGuardado={recargarCuenta}
-        />
-      )}
     </div>
   );
 }

@@ -1522,6 +1522,17 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
         `El abono (${montoAbono}) no puede superar el pendiente de esta parte (${pendienteTotal})`,
       );
     }
+    // Con un carrito de tienda vinculado y pendiente, ya no se permite pago
+    // parcial/diferido: el cajero debe pagar mesa + tienda juntos en un solo
+    // abono (un solo pago, dos facturas separadas) — pedido explícito tras
+    // probar en producción que el reparto proporcional entre varios abonos
+    // se sentía como "diferido". Sin tienda pendiente, el reparto en
+    // varias partes/abonos de la mesa sigue funcionando igual que siempre.
+    if (pendienteTienda > 0.01 && montoAbono < pendienteTotal - 0.01) {
+      throw Errors.badRequest(
+        "Esta parte tiene productos de la tienda vinculados — hay que pagar mesa y tienda juntos en un solo pago, no se permite un abono parcial",
+      );
+    }
 
     // Reparto proporcional: cualquier residuo de redondeo queda del lado de
     // mesa (montoMesaAbono = resta, no un segundo Math.round) para que los

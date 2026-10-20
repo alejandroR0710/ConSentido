@@ -705,7 +705,8 @@ export const migaoApi = {
     parteId: string,
     input: {
       items: {
-        productoId: string;
+        productoId?: string;
+        nombre?: string;
         cantidad: number;
         precioUnitario: number;
         observacionInventario?: string;

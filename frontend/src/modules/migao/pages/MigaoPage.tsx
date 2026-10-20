@@ -947,11 +947,29 @@ export function MigaoPage() {
                         </span>
                       )}
                     </div>
-                    {o.estado === "pagando" && (
-                      <div className="mt-1 inline-block rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
-                        Pago parcial — falta {formatMoney(o.pendiente_cobro)}
-                      </div>
-                    )}
+                    {o.estado === "pagando" &&
+                      (() => {
+                        // "Pago parcial" solo si de verdad ya se pagó algo —
+                        // iniciarCobro pasa la orden a 'pagando' de una vez
+                        // (para que esta pantalla la muestre), así que recién
+                        // abierta (ej. tras "Agregar compra de la tienda")
+                        // todavía no se pagó nada: decirle "pago parcial" ahí
+                        // es confuso, no es un pago a medias, es el cobro
+                        // recién empezando.
+                        const pendiente = Number(o.pendiente_cobro);
+                        const yaHuboPago = Number(o.total) - pendiente > 0.01;
+                        return (
+                          <div
+                            className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold text-white ${
+                              yaHuboPago ? "bg-amber-500" : "bg-sky-600"
+                            }`}
+                          >
+                            {yaHuboPago
+                              ? `Pago parcial — falta ${formatMoney(pendiente)}`
+                              : `Cobro en curso — ${formatMoney(pendiente)} por cobrar`}
+                          </div>
+                        );
+                      })()}
                     <div className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
                       {o.mesero_nombre && <span>Mesero: {o.mesero_nombre} · </span>}
                       {o.cliente_nombre && <span>Cliente: {o.cliente_nombre} · </span>}

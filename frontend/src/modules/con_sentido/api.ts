@@ -63,13 +63,21 @@ export const conSentidoApi = {
       body: venta,
     }),
   // Puerta 2 de la venta combinada mesa + Con Sentido — vincula este carrito
-  // a una mesa de Migao en vez de registrarlo como venta suelta. Todos los
-  // ítems deben ser productos reales del catálogo (sin "otro producto" a
-  // mano) — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+  // a una mesa de Migao en vez de registrarlo como venta suelta. Con
+  // productoId es un producto real del catálogo (descuenta stock, sincroniza
+  // con la tienda en línea); sin productoId es texto libre — sin esos
+  // controles, el precio queda tal cual lo escribe el cajero — ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
   vincularMesa: (input: {
     ordenId: string;
     parteId?: string;
-    items: { productoId: string; cantidad: number; precioUnitario: number; observacionInventario?: string }[];
+    items: {
+      productoId?: string;
+      nombre?: string;
+      cantidad: number;
+      precioUnitario: number;
+      observacionInventario?: string;
+    }[];
     descuentoPorcentaje?: number;
   }) =>
     apiFetch<{ ventaId: string; parteId: string; subtotal: number; descuentoMonto: number; monto: number }>(

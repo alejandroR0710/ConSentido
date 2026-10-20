@@ -82,14 +82,23 @@ export type CrearClienteConSentidoInput = z.infer<typeof crearClienteConSentidoS
 
 // Carrito de productos Con Sentido vinculado a una parte de cuenta dividida
 // de Migao (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
-// Siempre productos reales del catálogo (con productoId) — a diferencia de
-// itemVentaSchema de arriba, acá no existe el "otro producto" a mano.
-const itemCarritoTiendaSchema = z.object({
-  productoId: z.string().uuid(),
-  cantidad: z.number().positive(),
-  precioUnitario: z.number().nonnegative(),
-  observacionInventario: z.string().trim().max(500).optional(),
-});
+// Con productoId: producto real del catálogo — precio, descuento de stock y
+// sincronía con la tienda en línea los resuelve el servidor (nunca confía en
+// el precio del cliente, ver con_sentido.service.ts::vincularCarritoTienda).
+// Sin productoId: línea de texto libre (pedido explícito) — sin control de
+// inventario ni sincronía, el precio es el que escribe el cajero a mano.
+const itemCarritoTiendaSchema = z
+  .object({
+    productoId: z.string().uuid().optional(),
+    nombre: z.string().trim().max(255).optional(),
+    cantidad: z.number().positive(),
+    precioUnitario: z.number().nonnegative(),
+    observacionInventario: z.string().trim().max(500).optional(),
+  })
+  .refine((item) => item.productoId || (item.nombre && item.nombre.trim().length > 0), {
+    message: "Cada línea necesita un producto del catálogo o, si es texto libre, un nombre",
+    path: ["nombre"],
+  });
 
 export const vincularCarritoTiendaSchema = z.object({
   items: z.array(itemCarritoTiendaSchema).min(1, "Agrega al menos un producto"),

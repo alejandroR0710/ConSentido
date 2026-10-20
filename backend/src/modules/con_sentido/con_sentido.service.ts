@@ -364,6 +364,22 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
 
     const itemsResueltos = [];
     for (const item of input.items) {
+      // Línea de texto libre (sin productoId, pedido explícito del cajero):
+      // sin catálogo no hay stock que descontar ni e-commerce que avisar, y
+      // el precio queda en manos del cajero (acá sí se confía en el
+      // cliente — no hay producto real cuyo precio real se pueda pisar).
+      if (!item.productoId) {
+        itemsResueltos.push({
+          productoId: null,
+          sku: null,
+          nombre: item.nombre!.trim(),
+          cantidad: item.cantidad,
+          precioUnitario: item.precioUnitario,
+          observacionInventario: item.observacionInventario ?? null,
+        });
+        continue;
+      }
+
       const producto = await repo.getProductoParaVenta(client, item.productoId);
       const vendido = await descontarParaVenta(client, {
         productoId: item.productoId,

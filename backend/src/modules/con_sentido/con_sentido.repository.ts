@@ -474,7 +474,10 @@ export async function reemplazarItemsCarrito(
   params: {
     ventaId: string;
     items: {
-      productoId: string;
+      // null = línea de texto libre (sin producto real del catálogo), sin
+      // control de inventario ni sincronía con la tienda en línea — ver
+      // con_sentido.service.ts::vincularCarritoTienda.
+      productoId: string | null;
       sku: string | null;
       nombre: string;
       cantidad: number;

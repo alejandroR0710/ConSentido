@@ -243,16 +243,15 @@ export function IngresoModal({
   // valida, ver caja.service.ts::exigirMontoRecibidoEfectivo).
   const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? montoNeto : 0;
   const faltaMontoRecibido = montoEnEfectivo > 0 && montoRecibido < montoEnEfectivo;
-  // Vinculando a una mesa: todas las líneas deben ser productos reales del
-  // catálogo (el backend no acepta texto libre en el carrito de tienda) y
-  // hace falta haber elegido una mesa — no se valida método de pago ni
-  // monto, acá no se cobra nada todavía (hallazgo de uso real: el cajero
-  // esperaba esta función justo acá, en "Registrar ingreso", no en una
-  // pantalla aparte — ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
-  const todasLasLineasConProducto = lineasValidas.length > 0 && lineasValidas.every((l) => Boolean(l.productoId));
+  // Vinculando a una mesa: igual que un ingreso normal, cada línea puede ser
+  // un producto real del catálogo (descuenta stock y sincroniza con la
+  // tienda en línea) o texto libre (sin esos controles, precio a mano) — y
+  // hace falta haber elegido una mesa. No se valida método de pago ni monto,
+  // acá no se cobra nada todavía — ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
   const faltaElegirParte = partesDeLaMesa.length > 1 && !parteIdElegida;
   const puedeRegistrar = vincularAMesa
-    ? todasLasLineasConProducto &&
+    ? lineasValidas.length > 0 &&
       !faltaObservacion &&
       ordenIdElegida !== null &&
       todasLasPartes !== null &&
@@ -343,7 +342,8 @@ export function IngresoModal({
           ordenId: ordenIdElegida!,
           parteId: parteIdElegida ?? undefined,
           items: lineasValidas.map((l) => ({
-            productoId: l.productoId!,
+            productoId: l.productoId,
+            nombre: l.productoId ? undefined : l.nombre.trim(),
             cantidad: l.cantidad,
             precioUnitario: precioDe(l),
             observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
@@ -670,12 +670,6 @@ export function IngresoModal({
 
           {/* En modo embebido la mesa/parte ya vienen fijas (ver
               vincularMesaInicial) — nunca se elige acá. */}
-          {embebido && !todasLasLineasConProducto && (
-            <p className="mt-3 text-xs text-red-600">
-              Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se puede
-              vincular texto libre.
-            </p>
-          )}
 
           {/* Venta combinada mesa + Con Sentido — ver
               docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
@@ -694,12 +688,6 @@ export function IngresoModal({
               </label>
               {vincularAMesa && (
                 <div className="mt-2">
-                  {!todasLasLineasConProducto && (
-                    <p className="mb-2 text-xs text-red-600">
-                      Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se
-                      puede vincular texto libre.
-                    </p>
-                  )}
                   {ordenIdElegida ? (
                     <div>
                       <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">

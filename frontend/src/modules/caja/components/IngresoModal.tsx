@@ -31,13 +31,14 @@ import { preciosConMayorista } from "../../con_sentido/mayorista";
 interface IngresoModalProps {
   // De dónde sale este formulario — viaja con el snapshot al minimizar para
   // saber a qué pantalla volver y qué hacer después de registrar (ver
-  // IngresosMinimizadosContext.tsx).
-  origen: OrigenIngreso;
+  // IngresosMinimizadosContext.tsx). No aplica en modo embebido (ver abajo).
+  origen?: OrigenIngreso;
   onCerrar: () => void;
   // Recibe el resultado del registro — quien abre este modal desde otro
   // lugar (ej. "Pasar a factura" de una cotización) lo necesita para, por
-  // ejemplo, dejar un rastro de qué venta salió de ahí.
-  onRegistrado: (resultado: RegistrarIngresoResultado) => Promise<void>;
+  // ejemplo, dejar un rastro de qué venta salió de ahí. No aplica en modo
+  // embebido (ahí nunca se llega al registro normal, solo a vincular).
+  onRegistrado?: (resultado: RegistrarIngresoResultado) => Promise<void>;
   // Precarga el formulario — usado para "Pasar a factura" desde una
   // cotización: todo queda editable, esto solo evita volver a escribirlo.
   valoresIniciales?: {
@@ -48,6 +49,19 @@ interface IngresoModalProps {
   // Formulario minimizado que se está restaurando — tiene prioridad sobre
   // valoresIniciales (que solo aplica al abrir en blanco desde una cotización).
   snapshotRestaurado?: IngresoMinimizado;
+  // Modo embebido: se usa DENTRO del panel lateral del cobro de una mesa en
+  // Migao (ver MigaoPage.tsx) en vez de como su propio popup — sin Modal
+  // propio (lo da quien lo embebe), sin selector de módulo/"monto único"
+  // (siempre Con Sentido + productos), y con la mesa/parte ya fijas (sin
+  // selector de mesa, nunca cambia). El pago combinado de mesa+tienda pasa
+  // en otro lado (panelInferior del Modal de la mesa), así que acá nunca se
+  // muestra método de pago — "Vincular a la mesa" solo guarda el carrito.
+  embebido?: boolean;
+  vincularMesaInicial?: { ordenId: string; parteId?: string };
+  // Se dispara apenas el carrito queda vinculado — reemplaza a la pantalla
+  // de éxito propia (que no tiene sentido embebida: quien embebe decide qué
+  // mostrar, ej. volver al resumen de la parte).
+  onVinculado?: () => void;
 }
 
 let siguienteKeyLinea = 1;
@@ -55,7 +69,16 @@ function lineaVacia(): LineaIngreso {
   return { key: siguienteKeyLinea++, nombre: "", cantidad: 1, precioUnitario: 0 };
 }
 
-export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales, snapshotRestaurado }: IngresoModalProps) {
+export function IngresoModal({
+  origen = { tipo: "caja" },
+  onCerrar,
+  onRegistrado,
+  valoresIniciales,
+  snapshotRestaurado,
+  embebido = false,
+  vincularMesaInicial,
+  onVinculado,
+}: IngresoModalProps) {
   const { minimizar, descartar } = useIngresosMinimizados();
   // Mismo id si se está restaurando (para que minimizar de nuevo pise la
   // misma entrada en vez de duplicarla). Si no, y el origen es una
@@ -106,13 +129,13 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
   // Solo aplica con productos reales de Con Sentido (nunca con un snapshot
   // restaurado/minimizado: se arranca siempre apagado en ese caso, para no
   // dejar un estado a medias si el cajero minimizó justo en el medio).
-  const [vincularAMesa, setVincularAMesa] = useState(false);
-  const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(null);
+  const [vincularAMesa, setVincularAMesa] = useState(Boolean(vincularMesaInicial));
+  const [ordenIdElegida, setOrdenIdElegida] = useState<string | null>(vincularMesaInicial?.ordenId ?? null);
   // Todas las partes reales de esa mesa (con sus montos) — null = todavía
   // no se consultó. Se guardan completas (no solo id/índice) para poder
   // mostrar el panel resumen de "cuánto debe la mesa" al costado.
   const [todasLasPartes, setTodasLasPartes] = useState<CuentaParte[] | null>(null);
-  const [parteIdElegida, setParteIdElegida] = useState<string | null>(null);
+  const [parteIdElegida, setParteIdElegida] = useState<string | null>(vincularMesaInicial?.parteId ?? null);
   // Productos ya pedidos en esa mesa — solo para mostrarlos en el panel
   // resumen junto a lo que debe la mesa (ver ResumenCuentasParte).
   const [itemsOrdenElegida, setItemsOrdenElegida] = useState<OrdenItem[]>([]);
@@ -266,7 +289,7 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
    *  arrancó (abrirlo y cerrarlo sin cambiar nada no debe dejar un chip en la
    *  barra, incluso si arrancó precargado desde una cotización). */
   function guardarComoMinimizado() {
-    if (resultado || yaRegistradoRef.current || !tocadoRef.current) return;
+    if (embebido || resultado || yaRegistradoRef.current || !tocadoRef.current) return;
     const formulario: FormularioIngreso = {
       modulo,
       modoMonto,
@@ -328,7 +351,11 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
           descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         });
         yaRegistradoRef.current = true;
-        setVinculadoOk(true);
+        if (onVinculado) {
+          onVinculado();
+        } else {
+          setVinculadoOk(true);
+        }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "No se pudo vincular el carrito a la mesa");
       } finally {
@@ -363,7 +390,7 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
       // setResultado llegue a commitearse — si el modal se desmonta en el
       // medio, guardarComoMinimizado ya no debe guardar nada bajo este id.
       yaRegistradoRef.current = true;
-      await onRegistrado(creado);
+      await onRegistrado?.(creado);
       setResultado(creado);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo registrar el ingreso");
@@ -497,64 +524,54 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
     </div>
   );
 
-  return (
-    <Modal
-      titulo="Registrar ingreso"
-      onCerrar={onCerrar}
-      maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
-      panelLateral={panelLateralIngreso}
-      accionExtra={
-        <button
-          type="button"
-          onClick={onCerrar}
-          className="rounded-md px-2 py-1 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-        >
-          ➖ Minimizar
-        </button>
-      }
-    >
-      <label className="mb-2 block text-xs font-medium">Viene de</label>
-      <div className="mb-3 grid grid-cols-3 gap-2">
-        {MODULOS_ORIGEN.map((m) => (
-          <button
-            key={m.value}
-            type="button"
-            onClick={() => setModulo(m.value)}
-            autoFocus={m.value === "con_sentido"}
-            className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-center transition-colors ${
-              modulo === m.value
-                ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-400 dark:bg-brand-green-700/30"
-                : "border-brand-vanilla-dark hover:border-brand-green-400 dark:border-brand-green-700 dark:hover:border-brand-green-600"
-            }`}
-          >
-            <span className="text-2xl">{m.icon}</span>
-            <span className="text-xs font-medium leading-tight text-brand-ink dark:text-brand-vanilla">{m.label}</span>
-          </button>
-        ))}
-      </div>
+  const cuerpo = (
+    <>
+      {!embebido && (
+        <>
+          <label className="mb-2 block text-xs font-medium">Viene de</label>
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {MODULOS_ORIGEN.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => setModulo(m.value)}
+                autoFocus={m.value === "con_sentido"}
+                className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-center transition-colors ${
+                  modulo === m.value
+                    ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-400 dark:bg-brand-green-700/30"
+                    : "border-brand-vanilla-dark hover:border-brand-green-400 dark:border-brand-green-700 dark:hover:border-brand-green-600"
+                }`}
+              >
+                <span className="text-2xl">{m.icon}</span>
+                <span className="text-xs font-medium leading-tight text-brand-ink dark:text-brand-vanilla">{m.label}</span>
+              </button>
+            ))}
+          </div>
 
-      <label className="mb-2 block text-xs font-medium">Monto</label>
-      <div className="mb-3 flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
-        {(
-          [
-            { valor: "productos" as const, etiqueta: "Agregar productos" },
-            { valor: "unico" as const, etiqueta: "Monto único" },
-          ]
-        ).map((op) => (
-          <button
-            key={op.valor}
-            type="button"
-            onClick={() => setModoMonto(op.valor)}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              modoMonto === op.valor
-                ? "bg-brand-green-600 text-white"
-                : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-            }`}
-          >
-            {op.etiqueta}
-          </button>
-        ))}
-      </div>
+          <label className="mb-2 block text-xs font-medium">Monto</label>
+          <div className="mb-3 flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
+            {(
+              [
+                { valor: "productos" as const, etiqueta: "Agregar productos" },
+                { valor: "unico" as const, etiqueta: "Monto único" },
+              ]
+            ).map((op) => (
+              <button
+                key={op.valor}
+                type="button"
+                onClick={() => setModoMonto(op.valor)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  modoMonto === op.valor
+                    ? "bg-brand-green-600 text-white"
+                    : "text-brand-ink/70 hover:bg-brand-green-50 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                }`}
+              >
+                {op.etiqueta}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {modoMonto === "productos" ? (
         <div className="mb-3">
@@ -651,9 +668,18 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
             <span>{formatMoney(totalLineas)}</span>
           </div>
 
+          {/* En modo embebido la mesa/parte ya vienen fijas (ver
+              vincularMesaInicial) — nunca se elige acá. */}
+          {embebido && !todasLasLineasConProducto && (
+            <p className="mt-3 text-xs text-red-600">
+              Todas las líneas deben ser un producto real del catálogo (elígelo de las sugerencias) — no se puede
+              vincular texto libre.
+            </p>
+          )}
+
           {/* Venta combinada mesa + Con Sentido — ver
               docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
-          {modulo === "con_sentido" && (
+          {!embebido && modulo === "con_sentido" && (
             <div className="mt-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
               <label className="flex items-center gap-2 text-xs font-medium">
                 <input
@@ -782,6 +808,47 @@ export function IngresoModal({ origen, onCerrar, onRegistrado, valoresIniciales,
       >
         {registrando ? "Guardando..." : vincularAMesa ? "Vincular a la mesa" : "Registrar ingreso"}
       </button>
+    </>
+  );
+
+  if (embebido) {
+    return (
+      <div className="flex h-full flex-1 flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla-dark p-3 dark:border-brand-green-600 dark:bg-brand-green-700">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
+            Agregar productos de la tienda
+          </h4>
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Cancelar"
+            className="text-xs font-medium text-brand-ink/60 hover:underline dark:text-brand-vanilla/60"
+          >
+            ✕ Cancelar
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto rounded-lg bg-brand-vanilla p-3 dark:bg-brand-green-900">{cuerpo}</div>
+      </div>
+    );
+  }
+
+  return (
+    <Modal
+      titulo="Registrar ingreso"
+      onCerrar={onCerrar}
+      maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
+      panelLateral={panelLateralIngreso}
+      accionExtra={
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="rounded-md px-2 py-1 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+        >
+          ➖ Minimizar
+        </button>
+      }
+    >
+      {cuerpo}
     </Modal>
   );
 }

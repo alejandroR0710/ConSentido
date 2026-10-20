@@ -30,7 +30,7 @@ import {
 import { AREAS_MESA, areaDeMesa } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
-import { CarritoTiendaEditor } from "../components/CarritoTiendaEditor";
+import { IngresoModal } from "../../caja/components/IngresoModal";
 import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
@@ -657,6 +657,10 @@ export function MigaoPage() {
         descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
       );
       setCuenta(cuentaNueva);
+      // Un solo clic: ya que se inició el cobro, abre de una vez el panel
+      // para agregar productos de la tienda (no hace falta un segundo clic).
+      const primeraParte = cuentaNueva.partes[0];
+      if (primeraParte) setParteCarritoTiendaId(primeraParte.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo iniciar el cobro");
     } finally {
@@ -724,6 +728,10 @@ export function MigaoPage() {
       return nuevo;
     });
   }
+
+  // Con tienda pendiente, el cobro de esa(s) parte(s) se mueve al panel de
+  // abajo (combinado con el carrito) — ver panelInferior más abajo.
+  const hayParteConTiendaPendiente = cuenta?.partes.some((p) => (p.tienda?.pendiente ?? 0) > 0.01) ?? false;
 
   const algunAbonoMixtoInvalido = cuenta
     ? cuenta.partes.some((parte) => {
@@ -958,6 +966,7 @@ export function MigaoPage() {
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
+          anchoPanelLateral={parteCarritoTiendaId ? "sm:w-[560px]" : "sm:w-70"}
           panelLateral={
             parteCarritoTiendaId || cuenta?.partes.some((p) => p.tienda) ? (
               <div className="flex h-full flex-col gap-4">
@@ -965,15 +974,33 @@ export function MigaoPage() {
                   .filter((parte) => parte.id === parteCarritoTiendaId || parte.tienda)
                   .map((parte) =>
                     parte.id === parteCarritoTiendaId ? (
-                      <CarritoTiendaEditor
+                      <IngresoModal
                         key={parte.id}
-                        parteId={parte.id}
-                        carritoActual={parte.tienda}
-                        onGuardado={async () => {
+                        embebido
+                        vincularMesaInicial={{ ordenId: ordenSeleccionadaId!, parteId: parte.id }}
+                        // "Editar tienda" sobre un carrito ya guardado: precarga sus
+                        // ítems — vincular siempre REEMPLAZA todo el carrito de la
+                        // parte de una vez, así que sin esto se perdería lo ya
+                        // guardado al agregar solo lo nuevo y volver a guardar.
+                        valoresIniciales={
+                          parte.tienda
+                            ? {
+                                items: parte.tienda.items
+                                  .filter((i) => i.productoId)
+                                  .map((i) => ({
+                                    nombre: i.nombre,
+                                    cantidad: i.cantidad,
+                                    precioUnitario: i.precioUnitario,
+                                    productoId: i.productoId!,
+                                  })),
+                              }
+                            : undefined
+                        }
+                        onCerrar={() => setParteCarritoTiendaId(null)}
+                        onVinculado={async () => {
                           await recargarCuenta();
                           setParteCarritoTiendaId(null);
                         }}
-                        onCancelar={() => setParteCarritoTiendaId(null)}
                       />
                     ) : (
                       <ResumenCuentasParte
@@ -985,6 +1012,77 @@ export function MigaoPage() {
                       />
                     ),
                   )}
+              </div>
+            ) : undefined
+          }
+          panelInferior={
+            hayParteConTiendaPendiente && cuenta ? (
+              <div className="flex flex-col gap-4 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
+                <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                  💳 Cobro combinado — mesa + tienda
+                </h3>
+                {cuenta.partes
+                  .filter((parte) => (parte.tienda?.pendiente ?? 0) > 0.01)
+                  .map((parte) => {
+                    const form = abonoForms[parte.id];
+                    if (!form) return null;
+                    const pendienteParte = pendienteCombinado(parte);
+                    return (
+                      <div key={parte.id} className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 first:border-t-0 first:pt-0 dark:border-brand-green-700">
+                        {cuenta.partes.length > 1 && (
+                          <p className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+                            Parte {parte.indice}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between rounded-md bg-brand-green-50 px-3 py-2 text-sm font-semibold text-brand-ink dark:bg-brand-green-700/20 dark:text-brand-vanilla">
+                          <span>Total a cobrar (mesa + tienda)</span>
+                          <span>{formatMoney(pendienteParte)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Propina</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="100"
+                            value={form.propina || ""}
+                            onChange={(e) => actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })}
+                            className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                          />
+                        </div>
+                        <SelectorMetodoPago
+                          value={form.pago}
+                          onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
+                          totalFijo={form.montoPagarAhora + form.propina}
+                        />
+                        {form.pago.metodoPago !== "banco" && (
+                          <CalculadoraVuelta
+                            aPagar={montoEnEfectivoDeAbono(form)}
+                            recibido={form.montoRecibido}
+                            onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                            esParteDeMixto={form.pago.metodoPago === "mixto"}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {algunAbonoMixtoInvalido && (
+                  <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
+                )}
+
+                <button
+                  onClick={registrarPagos}
+                  disabled={
+                    cobrando ||
+                    algunAbonoMixtoInvalido ||
+                    algunAbonoSinMontoRecibido ||
+                    algunAbonoSinReferencia ||
+                    totalAPagarAhora <= 0
+                  }
+                  className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                >
+                  {cobrando ? "Cobrando..." : "Registrar pago(s)"}
+                </button>
               </div>
             ) : undefined
           }
@@ -1277,9 +1375,7 @@ export function MigaoPage() {
                   disabled={iniciandoCobroPartes}
                   className="w-full rounded-md border border-brand-green-700 px-3 py-2 text-sm font-medium text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
                 >
-                  {iniciandoCobroPartes
-                    ? "Iniciando..."
-                    : "¿Dividir la cuenta o agregar productos de la tienda? Iniciar cobro con pago parcial"}
+                  {iniciandoCobroPartes ? "Iniciando..." : "🛍️ Agregar compra de la tienda"}
                 </button>
               )}
 
@@ -1384,7 +1480,7 @@ export function MigaoPage() {
                                     Factura tienda
                                   </button>
                                 )}
-                                {(parte.tienda?.pagado ?? 0) <= 0 && (
+                                {(parte.tienda?.pagado ?? 0) <= 0 && parteCarritoTiendaId !== parte.id && (
                                   <button
                                     type="button"
                                     onClick={() => setParteCarritoTiendaId(parte.id)}
@@ -1401,40 +1497,38 @@ export function MigaoPage() {
                                   <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
                                     ✓ Pagada por completo
                                   </p>
+                                ) : tieneTiendaPendiente ? (
+                                  <div className="flex items-center gap-2 rounded-md bg-brand-green-50 px-3 py-2 text-xs dark:bg-brand-green-700/20">
+                                    <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                                      🧾 Pago único: {formatMoney(pendienteParte)} (mesa + tienda)
+                                    </span>
+                                    <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
+                                      — el cobro combinado está abajo, junto con el de la tienda.
+                                    </span>
+                                  </div>
                                 ) : (
                                   <>
-                                    {tieneTiendaPendiente ? (
-                                      <div className="flex items-center gap-2 rounded-md bg-brand-green-50 px-3 py-2 text-xs dark:bg-brand-green-700/20">
-                                        <span className="font-medium text-brand-ink dark:text-brand-vanilla">
-                                          🧾 Pago único: {formatMoney(pendienteParte)} (mesa + tienda)
-                                        </span>
-                                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
-                                          — con productos de la tienda vinculados no se puede pagar por partes.
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                          ¿Cuánto se paga ahora?
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          max={pendienteParte}
-                                          step="100"
-                                          value={form.montoPagarAhora || ""}
-                                          onChange={(e) =>
-                                            actualizarAbonoForm(parte.id, {
-                                              montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
-                                            })
-                                          }
-                                          className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                        />
-                                        <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                                          de {formatMoney(pendienteParte)} pendiente
-                                        </span>
-                                      </div>
-                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                        ¿Cuánto se paga ahora?
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={pendienteParte}
+                                        step="100"
+                                        value={form.montoPagarAhora || ""}
+                                        onChange={(e) =>
+                                          actualizarAbonoForm(parte.id, {
+                                            montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
+                                          })
+                                        }
+                                        className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                      />
+                                      <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                        de {formatMoney(pendienteParte)} pendiente
+                                      </span>
+                                    </div>
 
                                     <div className="flex flex-wrap items-center gap-2">
                                       <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
@@ -1481,23 +1575,27 @@ export function MigaoPage() {
                         );
                       })}
 
-                      {algunAbonoMixtoInvalido && (
-                        <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
-                      )}
+                      {!hayParteConTiendaPendiente && (
+                        <>
+                          {algunAbonoMixtoInvalido && (
+                            <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
+                          )}
 
-                      <button
-                        onClick={registrarPagos}
-                        disabled={
-                          cobrando ||
-                          algunAbonoMixtoInvalido ||
-                          algunAbonoSinMontoRecibido ||
-                          algunAbonoSinReferencia ||
-                          totalAPagarAhora <= 0
-                        }
-                        className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-                      >
-                        {cobrando ? "Cobrando..." : "Registrar pago(s)"}
-                      </button>
+                          <button
+                            onClick={registrarPagos}
+                            disabled={
+                              cobrando ||
+                              algunAbonoMixtoInvalido ||
+                              algunAbonoSinMontoRecibido ||
+                              algunAbonoSinReferencia ||
+                              totalAPagarAhora <= 0
+                            }
+                            className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                          >
+                            {cobrando ? "Cobrando..." : "Registrar pago(s)"}
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

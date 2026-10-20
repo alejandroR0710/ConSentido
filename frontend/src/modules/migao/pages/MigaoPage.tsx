@@ -682,11 +682,14 @@ export function MigaoPage() {
         const previo = actual[parte.id];
         const pendienteTotal = pendienteCombinado(parte);
         // Con tienda pendiente ya no se permite pago parcial (ver
-        // registrarAbono en el backend): siempre se fuerza el monto
-        // completo, ignorando lo que el cajero haya escrito antes.
+        // registrarAbono en el backend). Con una sola parte tampoco hay nada
+        // que "dividir" — se fuerza el monto completo en los dos casos,
+        // ignorando lo que el cajero haya escrito antes; solo queda editable
+        // cuando de verdad hay varias partes (varios comensales).
         const tieneTiendaPendiente = (parte.tienda?.pendiente ?? 0) > 0.01;
+        const pagoUnico = tieneTiendaPendiente || cuenta.partes.length === 1;
         nuevo[parte.id] =
-          previo && previo.montoPagarAhora <= pendienteTotal && !tieneTiendaPendiente
+          previo && previo.montoPagarAhora <= pendienteTotal && !pagoUnico
             ? previo
             : {
                 pago: previo?.pago ?? { metodoPago: "efectivo" },
@@ -1449,6 +1452,12 @@ export function MigaoPage() {
                         const form = abonoForms[parte.id];
                         const pendienteParte = pendienteCombinado(parte);
                         const tieneTiendaPendiente = (parte.tienda?.pendiente ?? 0) > 0.01;
+                        // Con una sola parte no hay nada que dividir — el
+                        // monto completo se bloquea igual que con tienda
+                        // pendiente (pedido explícito: ya no debe poder
+                        // modificarse ni "dividirse" la cuenta de la mesa
+                        // cuando en realidad solo hay un cliente pagando).
+                        const pagoUnico = tieneTiendaPendiente || cuenta.partes.length === 1;
                         return (
                           <div
                             key={parte.id}
@@ -1508,27 +1517,38 @@ export function MigaoPage() {
                                   </div>
                                 ) : (
                                   <>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                        ¿Cuánto se paga ahora?
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={pendienteParte}
-                                        step="100"
-                                        value={form.montoPagarAhora || ""}
-                                        onChange={(e) =>
-                                          actualizarAbonoForm(parte.id, {
-                                            montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
-                                          })
-                                        }
-                                        className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                      />
-                                      <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                                        de {formatMoney(pendienteParte)} pendiente
-                                      </span>
-                                    </div>
+                                    {pagoUnico ? (
+                                      <div className="flex items-center gap-2 rounded-md bg-brand-green-50 px-3 py-2 text-xs dark:bg-brand-green-700/20">
+                                        <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                                          🧾 Pago único: {formatMoney(pendienteParte)}
+                                        </span>
+                                        <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
+                                          — una sola parte, no hay nada que dividir.
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                          ¿Cuánto se paga ahora?
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={pendienteParte}
+                                          step="100"
+                                          value={form.montoPagarAhora || ""}
+                                          onChange={(e) =>
+                                            actualizarAbonoForm(parte.id, {
+                                              montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
+                                            })
+                                          }
+                                          className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                        />
+                                        <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                          de {formatMoney(pendienteParte)} pendiente
+                                        </span>
+                                      </div>
+                                    )}
 
                                     <div className="flex flex-wrap items-center gap-2">
                                       <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">

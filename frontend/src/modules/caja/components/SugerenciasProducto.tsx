@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatMoney } from "../../../shared/format/money";
 import type { ProductoConSentido } from "../../con_sentido/api";
 import { textoMayorista } from "../../con_sentido/mayorista";
@@ -19,6 +20,7 @@ const MAX_SUGERENCIAS = 6;
  * ítem queda como texto libre de siempre, sin tocar inventario.
  */
 export function SugerenciasProducto({ productos, texto, onSeleccionar }: SugerenciasProductoProps) {
+  const [imagenAmpliada, setImagenAmpliada] = useState<{ url: string; nombre: string } | null>(null);
   const termino = texto.trim().toLowerCase();
   if (termino.length === 0) return null;
 
@@ -29,44 +31,82 @@ export function SugerenciasProducto({ productos, texto, onSeleccionar }: Sugeren
   if (coincidencias.length === 0) return null;
 
   return (
-    <div
-      // onMouseDown (no onClick) para que dispare ANTES del onBlur del input
-      // — si no, el blur cierra el dropdown antes de que el click lo alcance.
-      onMouseDown={(e) => e.preventDefault()}
-      className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-brand-vanilla-dark bg-white shadow-lg dark:border-brand-green-700 dark:bg-brand-green-900"
-    >
-      {coincidencias.map((p) => (
-        <button
-          type="button"
-          key={p.id}
-          onClick={() => onSeleccionar(p)}
-          className="flex w-full items-center gap-2 border-b border-brand-vanilla-dark/50 px-2 py-1.5 text-left last:border-b-0 hover:bg-brand-green-50 dark:border-brand-green-700/50 dark:hover:bg-brand-green-700/40"
-        >
-          {p.imagen_url ? (
-            <img src={p.imagen_url} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
-          ) : (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-brand-vanilla text-xs text-brand-ink/40 dark:bg-brand-green-700/40 dark:text-brand-vanilla/40">
-              🛍️
-            </span>
-          )}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-              {p.nombre}
-            </span>
-            <span className="block text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-              {p.sku ? `SKU ${p.sku}` : "Sin SKU"} · Stock {p.stock}
-            </span>
-          </span>
-          <span className="shrink-0 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-            {formatMoney(p.precio)}
-            {textoMayorista(p) && (
-              <span className="block text-[10px] font-medium text-brand-green-700 dark:text-brand-vanilla">
-                {textoMayorista(p)}
+    <>
+      <div
+        // onMouseDown (no onClick) para que dispare ANTES del onBlur del input
+        // — si no, el blur cierra el dropdown antes de que el click lo alcance.
+        onMouseDown={(e) => e.preventDefault()}
+        className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-brand-vanilla-dark bg-white shadow-lg dark:border-brand-green-700 dark:bg-brand-green-900"
+      >
+        {coincidencias.map((p) => (
+          <button
+            type="button"
+            key={p.id}
+            onClick={() => onSeleccionar(p)}
+            className="flex w-full items-center gap-2 border-b border-brand-vanilla-dark/50 px-2 py-1.5 text-left last:border-b-0 hover:bg-brand-green-50 dark:border-brand-green-700/50 dark:hover:bg-brand-green-700/40"
+          >
+            {p.imagen_url ? (
+              <span
+                onClick={(e) => {
+                  // No seleccionar el producto al hacer clic en la imagen —
+                  // solo ampliarla (ver lightbox más abajo).
+                  e.stopPropagation();
+                  setImagenAmpliada({ url: p.imagen_url!, nombre: p.nombre });
+                }}
+                title="Ver imagen en grande"
+                className="block h-9 w-9 shrink-0 cursor-zoom-in overflow-hidden rounded ring-1 ring-transparent hover:ring-brand-green-600"
+              >
+                <img src={p.imagen_url} alt="" className="h-full w-full object-cover" />
+              </span>
+            ) : (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-brand-vanilla text-xs text-brand-ink/40 dark:bg-brand-green-700/40 dark:text-brand-vanilla/40">
+                🛍️
               </span>
             )}
-          </span>
-        </button>
-      ))}
-    </div>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                {p.nombre}
+              </span>
+              <span className="block text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                {p.sku ? `SKU ${p.sku}` : "Sin SKU"} · Stock {p.stock}
+              </span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+              {formatMoney(p.precio)}
+              {textoMayorista(p) && (
+                <span className="block text-[10px] font-medium text-brand-green-700 dark:text-brand-vanilla">
+                  {textoMayorista(p)}
+                </span>
+              )}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {imagenAmpliada && (
+        <div
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setImagenAmpliada(null)}
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-6"
+        >
+          <div className="relative">
+            <img
+              src={imagenAmpliada.url}
+              alt={imagenAmpliada.nombre}
+              className="max-h-[80vh] max-w-[80vw] rounded-lg object-contain shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setImagenAmpliada(null)}
+              aria-label="Cerrar"
+              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg text-brand-ink shadow-lg hover:bg-brand-vanilla"
+            >
+              ✕
+            </button>
+            <p className="mt-2 text-center text-sm font-medium text-white">{imagenAmpliada.nombre}</p>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

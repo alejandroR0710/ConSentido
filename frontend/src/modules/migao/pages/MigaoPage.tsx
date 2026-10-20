@@ -703,6 +703,20 @@ export function MigaoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cuenta]);
 
+  // Con una sola parte no hay nada que "repartir" — toda la propina elegida
+  // arriba (¿Agregar propina (servicio)?) es de esa parte, siempre. El efecto
+  // de arriba solo resincroniza cuando cambia `cuenta` (no cuando cambia la
+  // propina elegida), así que sin esto el selector de propina no actualizaba
+  // nada hasta el próximo abono/recarga — hallazgo real de uso.
+  useEffect(() => {
+    if (!cuenta || cuenta.partes.length !== 1) return;
+    const parte = cuenta.partes[0];
+    setAbonoForms((actual) => {
+      if (!actual[parte.id] || actual[parte.id].propina === propinaMonto) return actual;
+      return { ...actual, [parte.id]: { ...actual[parte.id], propina: propinaMonto } };
+    });
+  }, [propinaMonto, cuenta]);
+
   function actualizarAbonoForm(
     parteId: string,
     cambios: Partial<{ pago: MetodoPagoValor; montoPagarAhora: number; propina: number; montoRecibido: number }>,
@@ -989,50 +1003,40 @@ export function MigaoPage() {
           maxWidth="sm:max-w-2xl"
           anchoPanelLateral={parteCarritoTiendaId ? "sm:w-[560px]" : "sm:w-70"}
           panelLateral={
-            parteCarritoTiendaId || cuenta?.partes.some((p) => p.tienda) ? (
+            parteCarritoTiendaId && cuenta ? (
               <div className="flex h-full flex-col gap-4">
-                {cuenta?.partes
-                  .filter((parte) => parte.id === parteCarritoTiendaId || parte.tienda)
-                  .map((parte) =>
-                    parte.id === parteCarritoTiendaId ? (
-                      <IngresoModal
-                        key={parte.id}
-                        embebido
-                        vincularMesaInicial={{ ordenId: ordenSeleccionadaId!, parteId: parte.id }}
-                        // "Editar tienda" sobre un carrito ya guardado: precarga sus
-                        // ítems — vincular siempre REEMPLAZA todo el carrito de la
-                        // parte de una vez, así que sin esto se perdería lo ya
-                        // guardado al agregar solo lo nuevo y volver a guardar.
-                        valoresIniciales={
-                          parte.tienda
-                            ? {
-                                items: parte.tienda.items
-                                  .filter((i) => i.productoId)
-                                  .map((i) => ({
-                                    nombre: i.nombre,
-                                    cantidad: i.cantidad,
-                                    precioUnitario: i.precioUnitario,
-                                    productoId: i.productoId!,
-                                  })),
-                              }
-                            : undefined
-                        }
-                        onCerrar={() => setParteCarritoTiendaId(null)}
-                        onVinculado={async () => {
-                          await recargarCuenta();
-                          setParteCarritoTiendaId(null);
-                        }}
-                      />
-                    ) : (
-                      <ResumenCuentasParte
-                        key={parte.id}
-                        parte={parte}
-                        montoPagarAhora={(abonoForms[parte.id]?.montoPagarAhora ?? 0) + (abonoForms[parte.id]?.propina ?? 0)}
-                        indice={cuenta.partes.length > 1 ? parte.indice : undefined}
-                        itemsOrden={detalle?.items}
-                      />
-                    ),
-                  )}
+                {cuenta.partes
+                  .filter((parte) => parte.id === parteCarritoTiendaId)
+                  .map((parte) => (
+                    <IngresoModal
+                      key={parte.id}
+                      embebido
+                      vincularMesaInicial={{ ordenId: ordenSeleccionadaId!, parteId: parte.id }}
+                      // "Editar tienda" sobre un carrito ya guardado: precarga sus
+                      // ítems — vincular siempre REEMPLAZA todo el carrito de la
+                      // parte de una vez, así que sin esto se perdería lo ya
+                      // guardado al agregar solo lo nuevo y volver a guardar.
+                      valoresIniciales={
+                        parte.tienda
+                          ? {
+                              items: parte.tienda.items
+                                .filter((i) => i.productoId)
+                                .map((i) => ({
+                                  nombre: i.nombre,
+                                  cantidad: i.cantidad,
+                                  precioUnitario: i.precioUnitario,
+                                  productoId: i.productoId!,
+                                })),
+                            }
+                          : undefined
+                      }
+                      onCerrar={() => setParteCarritoTiendaId(null)}
+                      onVinculado={async () => {
+                        await recargarCuenta();
+                        setParteCarritoTiendaId(null);
+                      }}
+                    />
+                  ))}
               </div>
             ) : undefined
           }
@@ -1047,41 +1051,14 @@ export function MigaoPage() {
                   .map((parte) => {
                     const form = abonoForms[parte.id];
                     if (!form) return null;
-                    const pendienteParte = pendienteCombinado(parte);
                     return (
                       <div key={parte.id} className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 first:border-t-0 first:pt-0 dark:border-brand-green-700">
-                        {cuenta.partes.length > 1 && (
-                          <p className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
-                            Parte {parte.indice}
-                          </p>
-                        )}
-                        <div className="flex flex-col gap-1 rounded-md bg-brand-green-50 px-3 py-2 text-sm dark:bg-brand-green-700/20">
-                          <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
-                            <span>Mesa + tienda</span>
-                            <span>{formatMoney(pendienteParte)}</span>
-                          </div>
-                          {form.propina > 0 && (
-                            <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
-                              <span>Propina</span>
-                              <span>{formatMoney(form.propina)}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between font-semibold text-brand-ink dark:text-brand-vanilla">
-                            <span>Total a cobrar</span>
-                            <span>{formatMoney(pendienteParte + form.propina)}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">Propina</label>
-                          <input
-                            type="number"
-                            min={0}
-                            step="100"
-                            value={form.propina || ""}
-                            onChange={(e) => actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })}
-                            className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                          />
-                        </div>
+                        <ResumenCuentasParte
+                          parte={parte}
+                          montoPagarAhora={form.montoPagarAhora + form.propina}
+                          indice={cuenta.partes.length > 1 ? parte.indice : undefined}
+                          itemsOrden={detalle?.items}
+                        />
                         <SelectorMetodoPago
                           value={form.pago}
                           onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}

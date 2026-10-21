@@ -29,6 +29,12 @@ interface ModalProps {
   // En mobile se apilan verticalmente, en ese mismo orden.
   panelResumen?: ReactNode;
   anchoPanelResumen?: string;
+  // Las columnas visibles (diálogo + panelLateral si está + panelResumen si
+  // está) se reparten el ancho disponible en partes iguales en vez de usar
+  // maxWidth/anchoPanelLateral/anchoPanelResumen — 50/50 con dos, 33/33/33
+  // con tres. Pedido puntual para el cobro de una mesa en Migao; el resto de
+  // los modales de la app sigue con sus anchos fijos de siempre.
+  columnasIguales?: boolean;
 }
 
 /**
@@ -47,7 +53,16 @@ export function Modal({
   anchoPanelLateral = "sm:w-70",
   panelResumen,
   anchoPanelResumen = "sm:w-80",
+  columnasIguales = false,
 }: ModalProps) {
+  // flex-1 basis-0 min-w-0 en TODAS las columnas visibles reparte el ancho
+  // disponible en partes iguales (2 columnas → 50/50, 3 → 33/33/33) sin
+  // importar cuántas haya — es el comportamiento normal de flexbox cuando
+  // todos los hijos comparten el mismo flex-grow/flex-basis.
+  const anchoDialogo = columnasIguales ? "sm:min-w-0 sm:flex-1 sm:basis-0" : `sm:shrink-0 ${maxWidth}`;
+  const anchoLateral = columnasIguales ? "sm:min-w-0 sm:flex-1 sm:basis-0" : `sm:shrink-0 ${anchoPanelLateral}`;
+  const anchoResumen = columnasIguales ? "sm:min-w-0 sm:flex-1 sm:basis-0" : `sm:shrink-0 ${anchoPanelResumen}`;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-start sm:p-4"
@@ -55,12 +70,14 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="my-auto flex w-full flex-col gap-3 sm:max-h-[85vh] sm:w-auto sm:max-w-[95vw] sm:flex-row sm:items-stretch sm:justify-center sm:overflow-x-auto"
+        className={`my-auto flex w-full flex-col gap-3 sm:max-h-[85vh] sm:w-auto sm:max-w-[95vw] sm:flex-row sm:items-stretch sm:justify-center ${
+          columnasIguales ? "" : "sm:overflow-x-auto"
+        }`}
       >
         <div
-          className={`flex max-h-[85vh] w-full shrink-0 flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
+          className={`flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
             tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
-          } ${maxWidth}`}
+          } ${anchoDialogo}`}
         >
           <div className="mb-3 flex items-center justify-between">
             <h2
@@ -88,13 +105,9 @@ export function Modal({
           <div className="flex-1 overflow-y-auto">{children}</div>
         </div>
 
-        {panelLateral && (
-          <div className={`w-full shrink-0 pb-4 ${anchoPanelLateral} sm:overflow-y-auto sm:pb-0`}>{panelLateral}</div>
-        )}
+        {panelLateral && <div className={`w-full pb-4 ${anchoLateral} sm:overflow-y-auto sm:pb-0`}>{panelLateral}</div>}
 
-        {panelResumen && (
-          <div className={`w-full shrink-0 pb-4 ${anchoPanelResumen} sm:overflow-y-auto sm:pb-0`}>{panelResumen}</div>
-        )}
+        {panelResumen && <div className={`w-full pb-4 ${anchoResumen} sm:overflow-y-auto sm:pb-0`}>{panelResumen}</div>}
       </div>
     </div>
   );

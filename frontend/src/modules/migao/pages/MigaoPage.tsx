@@ -1468,11 +1468,15 @@ export function MigaoPage() {
                         return (
                           <div
                             key={parte.id}
-                            className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700"
+                            className={
+                              parte.tienda
+                                ? "flex flex-col gap-3 rounded-lg border border-purple-400 bg-purple-100/40 p-3 dark:border-purple-500 dark:bg-purple-900/20"
+                                : "flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700"
+                            }
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                                Parte {parte.indice}
+                                {parte.tienda ? "🛍️ Compra tienda" : `Parte ${parte.indice}`}
                                 {parte.modo === "producto" && parte.unidades.length > 0 && (
                                   <span className="ml-1 text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
                                     ({parte.unidades.map((u) => `${formatCantidad(u.cantidad)}× ${u.productoNombre}`).join(", ")})
@@ -1500,7 +1504,7 @@ export function MigaoPage() {
                                   <button
                                     type="button"
                                     onClick={() => setParteCarritoTiendaId(parte.id)}
-                                    className="font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                                    className="rounded-md border border-purple-500 bg-purple-500 px-2.5 py-1 font-semibold text-white shadow-sm hover:bg-purple-600 dark:border-purple-400 dark:bg-purple-600 dark:hover:bg-purple-500"
                                   >
                                     {parte.tienda ? "✏️ Editar tienda" : "+ Agregar producto de la tienda"}
                                   </button>

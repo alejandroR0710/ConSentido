@@ -20,6 +20,7 @@ import {
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { SelectorMesaVisual } from "../../con_sentido/components/SelectorMesaVisual";
+import { BotonFactura } from "../../migao/components/BotonFactura";
 import { migaoApi, type CuentaParte, type OrdenItem } from "../../migao/api";
 import { formatCantidad } from "../../migao/format";
 import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
@@ -120,6 +121,9 @@ export function IngresoModal({
   const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(f?.descuentoPorcentaje ?? 0);
   const [pago, setPago] = useState<MetodoPagoValor>(f?.pago ?? { metodoPago: "efectivo" });
   const [montoRecibido, setMontoRecibido] = useState(f?.montoRecibido ?? 0);
+  // Propina del cobro combinado (solo aplica vinculando a mesa desde acá,
+  // standalone — ver pagarAhora más abajo).
+  const [propinaMesa, setPropinaMesa] = useState(0);
   const [motivo, setMotivo] = useState(f?.motivo ?? valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,11 +144,31 @@ export function IngresoModal({
   // resumen junto a lo que debe la mesa (ver ResumenCuentasParte).
   const [itemsOrdenElegida, setItemsOrdenElegida] = useState<OrdenItem[]>([]);
   const partesDeLaMesa = (todasLasPartes?.length ?? 0) > 1 ? todasLasPartes! : [];
+  // Mesa recién elegida, sin cobro iniciado todavía (todasLasPartes === []):
+  // vincularMesa le crea una sola parte en el momento (numPartes:1) — acá se
+  // simula cómo va a quedar esa parte (nada pagado, debe el total actual de
+  // la orden), solo para poder mostrar el resumen antes de vincular. El id
+  // vacío es intencional: nunca se usa para pegarle al backend, el parteId
+  // real sale de la respuesta de vincularMesa.
+  const totalOrdenElegida = itemsOrdenElegida
+    .filter((i) => i.estado !== "cancelado")
+    .reduce((acc, i) => acc + i.subtotal, 0);
   const parteElegida: CuentaParte | null = !todasLasPartes
     ? null
     : todasLasPartes.length === 1
       ? todasLasPartes[0]
-      : (todasLasPartes.find((p) => p.id === parteIdElegida) ?? null);
+      : todasLasPartes.length > 1
+        ? (todasLasPartes.find((p) => p.id === parteIdElegida) ?? null)
+        : {
+            id: "",
+            indice: 1,
+            modo: "igual",
+            montoDebido: totalOrdenElegida,
+            montoPagado: 0,
+            pendiente: totalOrdenElegida,
+            unidades: [],
+            tienda: null,
+          };
 
   useEffect(() => {
     if (!ordenIdElegida) {
@@ -236,26 +260,37 @@ export function IngresoModal({
   const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * precioDe(l), 0);
   const montoBruto = modoMonto === "productos" ? totalLineas : monto;
   const montoNeto = montoBruto * (1 - descuentoPorcentaje / 100);
-  const mixtoInvalido =
-    pago.metodoPago === "mixto" && Math.abs(pago.montoEfectivo + pago.montoBanco - montoNeto) > 0.01;
+  // Vinculando a una mesa desde acá (standalone, no embebido en Migao), el
+  // mismo formulario de pago cobra TODO de una vez: lo que ya debía la mesa
+  // + este carrito + propina — un solo abono, dos facturas separadas (ver
+  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+  // Embebido en Migao, en cambio, el pago sigue pasando aparte (panel de
+  // abajo del cobro de la mesa) — acá solo se guarda el carrito.
+  const pagarAhora = vincularAMesa && !embebido;
+  const pendienteMesaElegida = parteElegida?.pendiente ?? 0;
+  const totalCombinadoMesa = pendienteMesaElegida + montoNeto + propinaMesa;
+  const totalAPagar = pagarAhora ? totalCombinadoMesa : montoNeto;
+  const mixtoInvalido = pago.metodoPago === "mixto" && Math.abs(pago.montoEfectivo + pago.montoBanco - totalAPagar) > 0.01;
   // Cuánto de este ingreso va en efectivo de verdad — obligatorio indicar
   // cuánto entregó el cliente para calcular la vuelta (backend también lo
   // valida, ver caja.service.ts::exigirMontoRecibidoEfectivo).
-  const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? montoNeto : 0;
+  const montoEnEfectivo = pago.metodoPago === "mixto" ? pago.montoEfectivo : pago.metodoPago === "efectivo" ? totalAPagar : 0;
   const faltaMontoRecibido = montoEnEfectivo > 0 && montoRecibido < montoEnEfectivo;
   // Vinculando a una mesa: igual que un ingreso normal, cada línea puede ser
   // un producto real del catálogo (descuenta stock y sincroniza con la
   // tienda en línea) o texto libre (sin esos controles, precio a mano) — y
-  // hace falta haber elegido una mesa. No se valida método de pago ni monto,
-  // acá no se cobra nada todavía — ver
-  // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+  // hace falta haber elegido una mesa. Embebido, no se valida método de pago
+  // ni monto (acá no se cobra nada todavía); standalone (pagarAhora), sí —
+  // ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
   const faltaElegirParte = partesDeLaMesa.length > 1 && !parteIdElegida;
   const puedeRegistrar = vincularAMesa
     ? lineasValidas.length > 0 &&
       !faltaObservacion &&
       ordenIdElegida !== null &&
       todasLasPartes !== null &&
-      !faltaElegirParte
+      !faltaElegirParte &&
+      (!pagarAhora ||
+        (totalCombinadoMesa > 0 && !mixtoInvalido && !faltaMontoRecibido && !faltaReferenciaBanco(pago)))
     : montoNeto > 0 &&
       !mixtoInvalido &&
       !faltaMontoRecibido &&
@@ -330,6 +365,10 @@ export function IngresoModal({
   }, [resultado, id, descartar]);
 
   const [vinculadoOk, setVinculadoOk] = useState(false);
+  // Resultado del cobro combinado (pagarAhora) — ventaId de la mesa + parteId
+  // de la tienda, lo que hace falta para ofrecer las dos facturas por
+  // separado con BotonFactura.
+  const [cobradoOk, setCobradoOk] = useState<{ ventaMesaId: string; parteId: string } | null>(null);
 
   async function registrar() {
     if (!puedeRegistrar) return;
@@ -345,6 +384,7 @@ export function IngresoModal({
           precioUnitario: precioDe(l),
           observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
         }));
+        let parteIdFinal: string;
         if (embebido && vincularMesaInicial) {
           // Embebido en el cobro de una mesa en Migao: siempre reemplaza el
           // carrito de ESTA parte (ya elegida, no hay selector acá) — a
@@ -356,14 +396,47 @@ export function IngresoModal({
             items: itemsVinculo,
             descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
           });
+          parteIdFinal = vincularMesaInicial.parteId;
         } else {
-          await conSentidoApi.vincularMesa({
+          const vinculo = await conSentidoApi.vincularMesa({
             ordenId: ordenIdElegida!,
             parteId: parteIdElegida ?? undefined,
             items: itemsVinculo,
             descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
           });
+          parteIdFinal = vinculo.parteId;
         }
+
+        if (pagarAhora) {
+          // Un solo abono que liquida mesa + tienda juntas — misma mecánica
+          // que "Registrar pago(s)" en el cobro de la mesa en Migao, solo
+          // que entrando desde acá en vez de desde allá.
+          const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
+          const propinaInput = propinaMesa > 0 ? { monto: propinaMesa } : undefined;
+          const cuentaActual = await migaoApi.registrarAbono(
+            parteIdFinal,
+            pago.metodoPago === "mixto"
+              ? {
+                  metodoPago: "mixto",
+                  montoEfectivo: pago.montoEfectivo,
+                  montoBanco: pago.montoBanco,
+                  propina: propinaInput,
+                  montoRecibidoEfectivo,
+                  ...referenciaBancoPayload(pago),
+                }
+              : {
+                  metodoPago: pago.metodoPago,
+                  monto: totalCombinadoMesa,
+                  propina: propinaInput,
+                  montoRecibidoEfectivo,
+                  ...referenciaBancoPayload(pago),
+                },
+          );
+          yaRegistradoRef.current = true;
+          setCobradoOk({ ventaMesaId: cuentaActual.venta.id, parteId: parteIdFinal });
+          return;
+        }
+
         yaRegistradoRef.current = true;
         if (onVinculado) {
           onVinculado();
@@ -426,6 +499,34 @@ export function IngresoModal({
     }
   }
 
+  if (cobradoOk) {
+    return (
+      <Modal titulo="Cobro registrado" onCerrar={onCerrar}>
+        <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+          Se cobró la mesa y la tienda juntas, en un solo pago — quedan dos facturas separadas, una por cada una.
+        </p>
+        <div className="mb-4 flex gap-2">
+          <BotonFactura
+            origen={{ tipo: "venta", id: cobradoOk.ventaMesaId }}
+            etiqueta="Factura de la mesa"
+            className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-2.5 text-sm font-medium text-brand-ink hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-green-700 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+          />
+          <BotonFactura
+            origen={{ tipo: "parte_tienda", id: cobradoOk.parteId }}
+            etiqueta="Factura de la tienda"
+            className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-2.5 text-sm font-medium text-brand-ink hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-green-700 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+          />
+        </div>
+        <button
+          onClick={onCerrar}
+          className="w-full rounded-md bg-brand-green-700 px-4 py-2.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+        >
+          Listo
+        </button>
+      </Modal>
+    );
+  }
+
   if (vinculadoOk) {
     return (
       <Modal titulo="Productos vinculados a la mesa" onCerrar={onCerrar}>
@@ -476,65 +577,100 @@ export function IngresoModal({
     );
   }
 
-  // Panel lateral (afuera del diálogo, ver Modal.tsx) con el resumen de las
-  // dos cuentas que va a quedar la mesa — ver
+  // Tres columnas cuando se está vinculando a una mesa desde acá, en ese
+  // orden: 1) la compra de la tienda (el diálogo mismo, `cuerpo` más abajo),
+  // 2) la cuenta de la mesa (solo lectura, columna panelLateral) y 3) el
+  // resumen con el cobro combinado (columna panelResumen) — ver
   // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
-  const panelLateralIngreso = vincularAMesa && parteElegida && (
+  const panelMesaIngreso = vincularAMesa && parteElegida && (
     <div className="flex h-full flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla-dark p-3 dark:border-brand-green-600 dark:bg-brand-green-700">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-        Resumen
+        🍽️ Cuenta de la mesa
       </h4>
-      <div className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 dark:bg-brand-green-900">
-        <div className="flex items-center justify-between text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
-          <span>🍽️ Cuenta de la mesa</span>
-        </div>
-        {itemsOrdenElegida.length > 0 && (
-          <ul className="flex flex-col gap-0.5 text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">
-            {itemsOrdenElegida
-              .filter((i) => i.estado !== "cancelado")
-              .map((item) => (
-                <li key={item.id} className="flex items-center justify-between gap-2">
-                  <span className="truncate">
-                    {formatCantidad(item.cantidad)}× {item.producto_nombre}
-                  </span>
-                </li>
-              ))}
-          </ul>
-        )}
-        <div className="flex items-center justify-between text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-          <span>Pendiente</span>
+      {itemsOrdenElegida.length > 0 ? (
+        <ul className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 text-xs text-brand-ink/70 dark:bg-brand-green-900 dark:text-brand-vanilla/70">
+          {itemsOrdenElegida
+            .filter((i) => i.estado !== "cancelado")
+            .map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-2">
+                <span className="truncate">
+                  {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                </span>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">Sin productos de mesa.</p>
+      )}
+      <div className="mt-auto flex items-center justify-between rounded-lg bg-brand-vanilla px-3 py-2 text-sm font-semibold text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
+        <span>Pendiente</span>
+        <span>{formatMoney(parteElegida.pendiente)}</span>
+      </div>
+    </div>
+  );
+
+  const panelPagoIngreso = vincularAMesa && parteElegida && (
+    <div className="flex h-full flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
+      <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+        {pagarAhora ? "💳 Cobro combinado — mesa + tienda" : "Resumen"}
+      </h3>
+      <div className="flex flex-col gap-1 rounded-lg bg-brand-green-50 px-3 py-2 text-sm dark:bg-brand-green-700/20">
+        <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+          <span>Cuenta de la mesa</span>
           <span>{formatMoney(parteElegida.pendiente)}</span>
         </div>
-      </div>
-      <div className="flex flex-col gap-1 rounded-lg bg-brand-vanilla px-3 py-2 dark:bg-brand-green-900">
-        <div className="flex items-center justify-between text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
-          <span>🛍️ Este carrito</span>
-        </div>
-        <ul className="flex flex-col gap-0.5 text-[11px] text-brand-ink/60 dark:text-brand-vanilla/60">
-          {lineasValidas.map((l) => (
-            <li key={l.key} className="flex items-center justify-between gap-2">
-              <span className="truncate">
-                {l.cantidad}× {l.nombre || "(sin nombre)"}
-              </span>
-              <span className="shrink-0">{formatMoney(l.cantidad * precioDe(l))}</span>
-            </li>
-          ))}
-        </ul>
-        {descuentoPorcentaje > 0 && (
-          <div className="flex items-center justify-between text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-            <span>Descuento {descuentoPorcentaje}%</span>
-            <span>-{formatMoney(totalLineas - montoNeto)}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between text-sm font-semibold text-brand-ink dark:text-brand-vanilla">
-          <span>Total</span>
+        <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+          <span>Este carrito{descuentoPorcentaje > 0 ? ` (-${descuentoPorcentaje}%)` : ""}</span>
           <span>{formatMoney(montoNeto)}</span>
         </div>
+        {pagarAhora && propinaMesa > 0 && (
+          <div className="flex items-center justify-between text-brand-ink/70 dark:text-brand-vanilla/70">
+            <span>Propina</span>
+            <span>{formatMoney(propinaMesa)}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between font-semibold text-brand-ink dark:text-brand-vanilla">
+          <span>{pagarAhora ? "Total a cobrar" : "Quedará pendiente en la mesa"}</span>
+          <span>{formatMoney(totalCombinadoMesa)}</span>
+        </div>
       </div>
-      <div className="flex items-center justify-between rounded-lg bg-brand-green-600 px-3 py-2.5 text-sm font-medium text-brand-vanilla">
-        <span>Quedará pendiente en la mesa</span>
-        <span className="text-lg font-bold">{formatMoney(parteElegida.pendiente + montoNeto)}</span>
-      </div>
+
+      {pagarAhora && (
+        <>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">Propina</label>
+            <input
+              type="number"
+              min={0}
+              step="100"
+              value={propinaMesa || ""}
+              onChange={(e) => setPropinaMesa(Math.max(0, Number(e.target.value)))}
+              className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+
+          <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalCombinadoMesa} />
+
+          {pago.metodoPago !== "banco" && (
+            <CalculadoraVuelta
+              aPagar={montoEnEfectivo}
+              recibido={montoRecibido}
+              onChange={setMontoRecibido}
+              esParteDeMixto={pago.metodoPago === "mixto"}
+            />
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <button
+            onClick={registrar}
+            disabled={registrando || !puedeRegistrar}
+            className="mt-auto w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {registrando ? "Cobrando..." : `Cobrar ${formatMoney(totalCombinadoMesa)}`}
+          </button>
+        </>
+      )}
     </div>
   );
 
@@ -801,15 +937,22 @@ export function IngresoModal({
         </>
       )}
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {/* Pagando ahora (vinculando a mesa desde acá), el cobro y su botón
+          viven en la columna de resumen (panelPagoIngreso) — acá no se
+          duplica. */}
+      {!(pagarAhora && parteElegida) && (
+        <>
+          {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-      <button
-        onClick={registrar}
-        disabled={registrando || !puedeRegistrar}
-        className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-      >
-        {registrando ? "Guardando..." : vincularAMesa ? "Vincular a la mesa" : "Registrar ingreso"}
-      </button>
+          <button
+            onClick={registrar}
+            disabled={registrando || !puedeRegistrar}
+            className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {registrando ? "Guardando..." : vincularAMesa ? "Vincular a la mesa" : "Registrar ingreso"}
+          </button>
+        </>
+      )}
     </>
   );
 
@@ -839,8 +982,9 @@ export function IngresoModal({
       titulo="Registrar ingreso"
       onCerrar={onCerrar}
       maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
-      panelLateral={panelLateralIngreso}
-      columnasIguales={Boolean(panelLateralIngreso)}
+      panelLateral={panelMesaIngreso}
+      panelResumen={panelPagoIngreso}
+      columnasIguales={Boolean(panelMesaIngreso)}
       accionExtra={
         <button
           type="button"

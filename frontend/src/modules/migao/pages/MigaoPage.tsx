@@ -1040,9 +1040,9 @@ export function MigaoPage() {
               </div>
             ) : undefined
           }
-          panelInferior={
+          panelResumen={
             hayParteConTiendaPendiente && cuenta ? (
-              <div className="flex flex-col gap-4 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
+              <div className="flex h-full flex-col gap-4 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
                 <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
                   💳 Cobro combinado — mesa + tienda
                 </h3>

@@ -21,10 +21,14 @@ interface ModalProps {
   // lateral con un formulario completo (ej. otro "Registrar ingreso"
   // embebido) necesita bastante más.
   anchoPanelLateral?: string;
-  // Franja que va DEBAJO de todo el grupo (diálogo + panelLateral), ocupando
-  // todo su ancho — para un resumen/cobro que combina lo de los dos de
-  // arriba (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
-  panelInferior?: ReactNode;
+  // Segundo panel al costado, a la derecha de panelLateral (mismo criterio:
+  // afuera del área con scroll del diálogo) — para un resumen/cobro que
+  // combina lo de los dos anteriores. Las tres columnas van una al lado de
+  // la otra en pantallas sm+ en el orden: diálogo, panelLateral,
+  // panelResumen (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
+  // En mobile se apilan verticalmente, en ese mismo orden.
+  panelResumen?: ReactNode;
+  anchoPanelResumen?: string;
 }
 
 /**
@@ -41,7 +45,8 @@ export function Modal({
   accionExtra,
   panelLateral,
   anchoPanelLateral = "sm:w-70",
-  panelInferior,
+  panelResumen,
+  anchoPanelResumen = "sm:w-80",
 }: ModalProps) {
   return (
     <div
@@ -50,46 +55,46 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="my-auto flex w-full flex-col gap-3 sm:w-auto sm:max-w-[95vw]"
+        className="my-auto flex w-full flex-col gap-3 sm:max-h-[85vh] sm:w-auto sm:max-w-[95vw] sm:flex-row sm:items-stretch sm:justify-center sm:overflow-x-auto"
       >
-        <div className="flex w-full flex-col gap-3 sm:max-h-[85vh] sm:flex-row sm:items-stretch sm:justify-center">
-          <div
-            className={`flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
-              tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
-            } ${maxWidth}`}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h2
-                className={`text-lg font-semibold ${
-                  tono === "advertencia"
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-brand-green-700 dark:text-brand-vanilla"
-                }`}
+        <div
+          className={`flex max-h-[85vh] w-full shrink-0 flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
+            tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
+          } ${maxWidth}`}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              className={`text-lg font-semibold ${
+                tono === "advertencia"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-brand-green-700 dark:text-brand-vanilla"
+              }`}
+            >
+              {tono === "advertencia" && <span aria-hidden>⚠️ </span>}
+              {titulo}
+            </h2>
+            <div className="flex items-center gap-1">
+              {accionExtra}
+              <button
+                onClick={onCerrar}
+                aria-label="Cerrar"
+                className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
               >
-                {tono === "advertencia" && <span aria-hidden>⚠️ </span>}
-                {titulo}
-              </h2>
-              <div className="flex items-center gap-1">
-                {accionExtra}
-                <button
-                  onClick={onCerrar}
-                  aria-label="Cerrar"
-                  className="rounded-md px-2 py-1 text-xl text-brand-ink/60 hover:bg-brand-green-50 dark:text-brand-vanilla/60 dark:hover:bg-brand-green-700/40"
-                >
-                  ✕
-                </button>
-              </div>
+                ✕
+              </button>
             </div>
-
-            <div className="flex-1 overflow-y-auto">{children}</div>
           </div>
 
-          {panelLateral && (
-            <div className={`w-full shrink-0 pb-4 ${anchoPanelLateral} sm:overflow-y-auto sm:pb-0`}>{panelLateral}</div>
-          )}
+          <div className="flex-1 overflow-y-auto">{children}</div>
         </div>
 
-        {panelInferior && <div className="w-full">{panelInferior}</div>}
+        {panelLateral && (
+          <div className={`w-full shrink-0 pb-4 ${anchoPanelLateral} sm:overflow-y-auto sm:pb-0`}>{panelLateral}</div>
+        )}
+
+        {panelResumen && (
+          <div className={`w-full shrink-0 pb-4 ${anchoPanelResumen} sm:overflow-y-auto sm:pb-0`}>{panelResumen}</div>
+        )}
       </div>
     </div>
   );

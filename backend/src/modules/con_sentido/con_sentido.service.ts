@@ -435,6 +435,67 @@ export async function vincularCarritoTienda(parteId: string, input: VincularCarr
 }
 
 /**
+ * Quita del todo el carrito de tienda vinculado a una parte — devuelve el
+ * stock de cada ítem con producto real, avisa al e-commerce (RETURN) si
+ * aplica, y borra la venta y sus ítems (sin dejar rastro). Pedido explícito:
+ * un botón para corregir un error o un cliente que cambia de opinión, en vez
+ * de obligar a "editar" el carrito a $0 (que de todas formas no se puede
+ * guardar vacío). Mismo guardia que editar: nada si ya se pagó algo.
+ */
+export async function quitarCarritoTienda(parteId: string, usuarioId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const parteResult = await client.query(
+      `SELECT cp.id, o.estado AS orden_estado
+         FROM migao_cuenta_partes cp
+         JOIN ventas v ON v.id = cp.venta_id
+         JOIN ordenes o ON o.id = v.orden_id
+        WHERE cp.id = $1
+        FOR UPDATE`,
+      [parteId],
+    );
+    if (!parteResult.rowCount) throw Errors.notFound("Parte de cuenta no encontrada");
+
+    const carrito = await repo.getCarritoTiendaPorParte(parteId, client);
+    if (!carrito) throw Errors.notFound("Esta parte no tiene un carrito de tienda vinculado");
+    if (carrito.pagado > 0) {
+      throw Errors.conflict("Ya se registraron pagos para el carrito de tienda de esta parte, no se puede quitar");
+    }
+
+    const items = await repo.getItemsCarrito(carrito.ventaId, client);
+    let huboAvisosEcommerce = false;
+    for (const fila of items) {
+      if (!fila.producto_id) continue;
+      const producto = await repo.getProductoParaVenta(client, fila.producto_id);
+      if (!producto) continue; // ya no está en el catálogo
+      await repo.reponerStock(client, fila.producto_id, Number(fila.cantidad));
+      const delta = repo.deltaEcommerce(producto.stock, producto.stock + Number(fila.cantidad));
+      if (producto.ecommerce_product_id && delta !== 0) {
+        await encolarDeltaStock(client, {
+          productId: producto.ecommerce_product_id,
+          variantId: producto.ecommerce_variant_id ?? null,
+          sku: producto.sku,
+          delta,
+          kind: "RETURN",
+          reason: "Se quitó el carrito de tienda vinculado a la mesa",
+        });
+        huboAvisosEcommerce = true;
+      }
+    }
+
+    await repo.eliminarCarritoTienda(client, carrito.ventaId);
+    await client.query("COMMIT");
+    if (huboAvisosEcommerce) programarEnvio();
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Puerta 2: vincula una venta de Con Sentido a una mesa desde la pantalla de
  * Con Sentido. Si la orden todavía no tiene cobro iniciado, arranca uno de
  * una sola parte (igual que un cobro sin dividir); si ya tiene varias

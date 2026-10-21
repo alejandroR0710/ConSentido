@@ -637,6 +637,23 @@ export function MigaoPage() {
     setCuenta(await migaoApi.obtenerCuenta(ordenSeleccionadaId));
   }
 
+  const [quitandoTiendaDe, setQuitandoTiendaDe] = useState<string | null>(null);
+  async function quitarCompraTienda(parteId: string) {
+    if (!window.confirm("¿Quitar del todo los productos de la tienda vinculados a esta parte? Se devuelve el stock — la mesa no se toca.")) {
+      return;
+    }
+    setQuitandoTiendaDe(parteId);
+    setError(null);
+    try {
+      await migaoApi.quitarCarritoTienda(parteId);
+      await recargarCuenta();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo quitar el carrito de tienda");
+    } finally {
+      setQuitandoTiendaDe(null);
+    }
+  }
+
   // Única puerta HOY para entrar al motor de pago parcial/cuenta dividida
   // desde una mesa que arranca sin cobro — sirve igual para dividir entre
   // varios comensales (numPartes>1, no cubierto por este botón) y para una
@@ -1507,6 +1524,16 @@ export function MigaoPage() {
                                     className="rounded-md border border-purple-500 bg-purple-500 px-2.5 py-1 font-semibold text-white shadow-sm hover:bg-purple-600 dark:border-purple-400 dark:bg-purple-600 dark:hover:bg-purple-500"
                                   >
                                     {parte.tienda ? "✏️ Editar tienda" : "+ Agregar producto de la tienda"}
+                                  </button>
+                                )}
+                                {parte.tienda && (parte.tienda.pagado ?? 0) <= 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => quitarCompraTienda(parte.id)}
+                                    disabled={quitandoTiendaDe === parte.id}
+                                    className="font-medium text-red-600 hover:underline disabled:opacity-60 dark:text-red-400"
+                                  >
+                                    {quitandoTiendaDe === parte.id ? "Quitando..." : "🗑️ Quitar compra de tienda"}
                                   </button>
                                 )}
                               </div>

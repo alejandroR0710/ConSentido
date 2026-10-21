@@ -517,6 +517,13 @@ export async function reemplazarItemsCarrito(
   return { subtotal, descuentoMonto, monto };
 }
 
+/** Borra del todo el carrito de tienda de una parte — con_sentido_venta_items
+ *  cae en cascada (ON DELETE CASCADE). El llamador ya devolvió el stock y
+ *  avisó al e-commerce antes de llamar esto (ver con_sentido.service.ts::quitarCarritoTienda). */
+export async function eliminarCarritoTienda(client: PoolClient, ventaId: string) {
+  await client.query(`DELETE FROM con_sentido_ventas WHERE id = $1`, [ventaId]);
+}
+
 export async function marcarCarritoCompletado(
   client: PoolClient,
   ventaId: string,

@@ -722,6 +722,10 @@ export const migaoApi = {
   // permiso para con-sentido/ventas/:id/factura, por eso esta ruta propia).
   obtenerFacturaTiendaDeParte: (parteId: string) =>
     apiFetch<FacturaOrden>(`/migao/cuentas/partes/${parteId}/factura-tienda`),
+  // Quita del todo el carrito de tienda de esta parte (devuelve stock, no
+  // borra la mesa) — corregir un error o el cliente cambia de opinión.
+  quitarCarritoTienda: (parteId: string) =>
+    apiFetch<{ ok: boolean }>(`/migao/cuentas/partes/${parteId}/carrito-tienda`, { method: "DELETE" }),
   // Cobra solo ALGUNOS productos de una cuenta que sigue abierta — genera su
   // propia venta+factura independiente (ver PagarItemsResultado), la mesa
   // sigue aceptando productos nuevos. No se combina con iniciarCobro/dividir

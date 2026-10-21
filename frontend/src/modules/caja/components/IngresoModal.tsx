@@ -187,6 +187,29 @@ export function IngresoModal({
       .catch(() => setItemsOrdenElegida([]));
   }, [ordenIdElegida]);
 
+  // Si la parte elegida ya tiene un carrito de tienda vinculado, vincular
+  // desde acá lo pisaría en silencio — primero hay que desvincularlo (o
+  // elegir otra parte). Mismo endpoint/acción que "🗑️ Quitar compra de
+  // tienda" en el cobro de la mesa en Migao.
+  const [desvinculando, setDesvinculando] = useState(false);
+  async function desvincularMesaElegida() {
+    if (!parteElegida?.id) return;
+    if (!window.confirm("¿Quitar del todo los productos de la tienda vinculados a esa parte? Se devuelve el stock — la mesa no se toca.")) {
+      return;
+    }
+    setDesvinculando(true);
+    setError(null);
+    try {
+      await migaoApi.quitarCarritoTienda(parteElegida.id);
+      const cuenta = await migaoApi.obtenerCuenta(ordenIdElegida!);
+      setTodasLasPartes(cuenta.partes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo quitar el carrito de tienda");
+    } finally {
+      setDesvinculando(false);
+    }
+  }
+
   // Si el formulario abre YA lleno (precargado desde una cotización) o
   // restaurado, "sigue como arrancó" no es lo mismo que "está vacío" — lo que
   // importa para no dejar un chip fantasma es si el cajero cambió algo desde
@@ -289,6 +312,10 @@ export function IngresoModal({
       ordenIdElegida !== null &&
       todasLasPartes !== null &&
       !faltaElegirParte &&
+      // Ya hay un carrito vinculado a esa parte: no se puede pisar en
+      // silencio desde acá — hay que desvincularlo primero (ver botón
+      // abajo) o elegir otra parte.
+      !parteElegida?.tienda &&
       (!pagarAhora ||
         (totalCombinadoMesa > 0 && !mixtoInvalido && !faltaMontoRecibido && !faltaReferenciaBanco(pago)))
     : montoNeto > 0 &&
@@ -850,6 +877,22 @@ export function IngresoModal({
                           Cambiar
                         </button>
                       </p>
+                      {parteElegida?.tienda && (
+                        <div className="mt-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 dark:border-amber-600 dark:bg-amber-950/20">
+                          <p className="mb-2 text-xs text-amber-800 dark:text-amber-300">
+                            Esa parte ya tiene productos de la tienda vinculados — para vincular estos hay que
+                            quitar primero los que ya tiene (o elegir otra parte, si la cuenta está dividida).
+                          </p>
+                          <button
+                            type="button"
+                            onClick={desvincularMesaElegida}
+                            disabled={desvinculando}
+                            className="rounded-md border border-red-400 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            {desvinculando ? "Quitando..." : "🗑️ Desvincular mesa (quitar su compra de tienda)"}
+                          </button>
+                        </div>
+                      )}
                       {partesDeLaMesa.length > 1 && (
                         <div className="mt-2">
                           <p className="mb-1 text-xs font-medium">

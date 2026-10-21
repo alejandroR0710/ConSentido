@@ -68,6 +68,7 @@ import {
   obtenerPropinasDeHoyController,
   obtenerResumenDiarioIngresosController,
   pagarItemsController,
+  quitarCarritoTiendaController,
   registrarAbonoController,
   reiniciarTodoController,
   repartirPropinasController,
@@ -310,6 +311,13 @@ migaoRouter.put(
   "/cuentas/partes/:parteId/carrito-tienda",
   requirePermission("con_sentido.ventas.vincular_mesa"),
   asyncHandler(vincularCarritoTiendaController),
+);
+// Quitar del todo el carrito de tienda vinculado — no borra la mesa, mismo
+// permiso que vincular/editar.
+migaoRouter.delete(
+  "/cuentas/partes/:parteId/carrito-tienda",
+  requirePermission("con_sentido.ventas.vincular_mesa"),
+  asyncHandler(quitarCarritoTiendaController),
 );
 // Reimprimir la factura de ese carrito una vez pagado — mismo permiso que
 // vincularlo (el Cajero no tiene con_sentido.ventas.ver).

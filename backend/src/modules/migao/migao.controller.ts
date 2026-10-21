@@ -250,6 +250,14 @@ export async function vincularCarritoTiendaController(req: Request, res: Respons
   return ok(res, resultado);
 }
 
+// Quita del todo el carrito de tienda de una parte (corregir un error o el
+// cliente cambia de opinión) — no borra la mesa, solo el vínculo con la
+// tienda. Mismo permiso que vincular/editar.
+export async function quitarCarritoTiendaController(req: Request, res: Response) {
+  await conSentidoService.quitarCarritoTienda(req.params.parteId, req.auth!.usuarioId);
+  return ok(res, { ok: true });
+}
+
 // El Cajero tiene con_sentido.ventas.vincular_mesa pero NO con_sentido.ventas.ver
 // — por eso la factura del carrito de tienda se reimprime desde esta ruta de
 // Migao (mismo permiso que vincular), no desde GET /con-sentido/ventas/:id/factura.

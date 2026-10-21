@@ -70,8 +70,16 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`my-auto flex w-full flex-col gap-3 sm:max-h-[85vh] sm:w-auto sm:max-w-[95vw] sm:flex-row sm:items-stretch sm:justify-center ${
-          columnasIguales ? "" : "sm:overflow-x-auto"
+        className={`my-auto flex w-full flex-col gap-3 sm:max-h-[85vh] sm:flex-row sm:items-stretch sm:justify-center ${
+          columnasIguales
+            ? // Ancho FIJO (no "auto"): con columnasIguales, min-w-0 en cada
+              // columna solo sirve si el contenedor que las reparte tiene un
+              // ancho definido — con "w-auto" el contenedor crecía para
+              // acomodar lo que pidiera el contenido más ancho (ej. el aviso
+              // de referencia bancaria), ensanchando las tres columnas de
+              // golpe en vez de quedarse del mismo tamaño.
+              "sm:w-[97vw]"
+            : "sm:w-auto sm:max-w-[95vw] sm:overflow-x-auto"
         }`}
       >
         <div

@@ -840,6 +840,7 @@ export function IngresoModal({
       onCerrar={onCerrar}
       maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
       panelLateral={panelLateralIngreso}
+      columnasIguales={Boolean(panelLateralIngreso)}
       accionExtra={
         <button
           type="button"

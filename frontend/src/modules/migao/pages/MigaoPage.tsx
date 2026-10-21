@@ -1001,7 +1001,7 @@ export function MigaoPage() {
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
-          columnasIguales
+          columnasIguales={Boolean(parteCarritoTiendaId) || hayParteConTiendaPendiente}
           panelLateral={
             parteCarritoTiendaId && cuenta ? (
               <div className="flex h-full flex-col gap-4">

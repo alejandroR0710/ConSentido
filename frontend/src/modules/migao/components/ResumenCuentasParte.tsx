@@ -98,15 +98,15 @@ export function ResumenCuentasParte({ parte, montoPagarAhora, indice, itemsOrden
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 rounded-lg bg-brand-green-600 px-3 py-2.5 text-brand-vanilla">
-        <div className="flex items-center justify-between text-sm font-medium">
+      <div className="flex flex-col gap-1.5 rounded-lg bg-brand-green-600 px-3 py-2.5 text-brand-vanilla">
+        <div className="flex items-center justify-between text-xs font-medium text-brand-vanilla/75">
           <span>Total pendiente</span>
-          <span className="text-lg font-bold">{formatMoney(pendienteCombinado)}</span>
+          <span className="font-semibold">{formatMoney(pendienteCombinado)}</span>
         </div>
         {montoPagarAhora > 0 && (
-          <div className="flex items-center justify-between border-t border-white/20 pt-1 text-xs">
-            <span>Vas a pagar ahora</span>
-            <span className="font-semibold">{formatMoney(montoPagarAhora)}</span>
+          <div className="flex items-center justify-between border-t border-white/20 pt-1.5">
+            <span className="text-base font-bold">💰 Vas a pagar ahora</span>
+            <span className="text-2xl font-extrabold tracking-tight">{formatMoney(montoPagarAhora)}</span>
           </div>
         )}
       </div>

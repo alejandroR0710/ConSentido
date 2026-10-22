@@ -604,13 +604,13 @@ export function IngresoModal({
     );
   }
 
-  // Tres columnas cuando se está vinculando a una mesa desde acá, en ese
-  // orden: 1) la compra de la tienda (el diálogo mismo, `cuerpo` más abajo),
-  // 2) la cuenta de la mesa (solo lectura, columna panelLateral) y 3) el
-  // resumen con el cobro combinado (columna panelResumen) — ver
+  // Todo apilado dentro del mismo modal con scroll cuando se está vinculando
+  // a una mesa desde acá, en ese orden: 1) la compra de la tienda (el
+  // diálogo mismo, `cuerpo` más abajo), 2) la cuenta de la mesa (solo
+  // lectura) y 3) el resumen con el cobro combinado — ver
   // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
   const panelMesaIngreso = vincularAMesa && parteElegida && (
-    <div className="flex h-full flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla-dark p-3 dark:border-brand-green-600 dark:bg-brand-green-700">
+    <div className="mt-4 flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla-dark p-3 dark:border-brand-green-600 dark:bg-brand-green-700">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
         🍽️ Cuenta de la mesa
       </h4>
@@ -637,7 +637,7 @@ export function IngresoModal({
   );
 
   const panelPagoIngreso = vincularAMesa && parteElegida && (
-    <div className="flex h-full flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
+    <div className="mt-4 flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
       <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
         {pagarAhora ? "💳 Cobro combinado — mesa + tienda" : "Resumen"}
       </h3>
@@ -692,7 +692,7 @@ export function IngresoModal({
           <button
             onClick={registrar}
             disabled={registrando || !puedeRegistrar}
-            className="mt-auto w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+            className="w-full rounded-md bg-brand-green-700 px-4 py-3 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
           >
             {registrando ? "Cobrando..." : `Cobrar ${formatMoney(totalCombinadoMesa)}`}
           </button>
@@ -981,8 +981,8 @@ export function IngresoModal({
       )}
 
       {/* Pagando ahora (vinculando a mesa desde acá), el cobro y su botón
-          viven en la columna de resumen (panelPagoIngreso) — acá no se
-          duplica. */}
+          viven más abajo, en panelPagoIngreso (apilado dentro de este mismo
+          modal) — acá no se duplica. */}
       {!(pagarAhora && parteElegida) && (
         <>
           {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -1025,9 +1025,6 @@ export function IngresoModal({
       titulo="Registrar ingreso"
       onCerrar={onCerrar}
       maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
-      panelLateral={panelMesaIngreso}
-      panelResumen={panelPagoIngreso}
-      columnasIguales={Boolean(panelMesaIngreso)}
       accionExtra={
         <button
           type="button"
@@ -1039,6 +1036,8 @@ export function IngresoModal({
       }
     >
       {cuerpo}
+      {panelMesaIngreso}
+      {panelPagoIngreso}
     </Modal>
   );
 }

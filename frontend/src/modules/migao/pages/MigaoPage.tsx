@@ -1018,101 +1018,6 @@ export function MigaoPage() {
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
           maxWidth="sm:max-w-2xl"
-          columnasIguales={Boolean(parteCarritoTiendaId) || hayParteConTiendaPendiente}
-          panelLateral={
-            parteCarritoTiendaId && cuenta ? (
-              <div className="flex h-full flex-col gap-4">
-                {cuenta.partes
-                  .filter((parte) => parte.id === parteCarritoTiendaId)
-                  .map((parte) => (
-                    <IngresoModal
-                      key={parte.id}
-                      embebido
-                      vincularMesaInicial={{ ordenId: ordenSeleccionadaId!, parteId: parte.id }}
-                      // "Editar tienda" sobre un carrito ya guardado: precarga sus
-                      // ítems — vincular siempre REEMPLAZA todo el carrito de la
-                      // parte de una vez, así que sin esto se perdería lo ya
-                      // guardado al agregar solo lo nuevo y volver a guardar.
-                      valoresIniciales={
-                        parte.tienda
-                          ? {
-                              items: parte.tienda.items
-                                .filter((i) => i.productoId)
-                                .map((i) => ({
-                                  nombre: i.nombre,
-                                  cantidad: i.cantidad,
-                                  precioUnitario: i.precioUnitario,
-                                  productoId: i.productoId!,
-                                })),
-                            }
-                          : undefined
-                      }
-                      onCerrar={() => setParteCarritoTiendaId(null)}
-                      onVinculado={async () => {
-                        await recargarCuenta();
-                        setParteCarritoTiendaId(null);
-                      }}
-                    />
-                  ))}
-              </div>
-            ) : undefined
-          }
-          panelResumen={
-            hayParteConTiendaPendiente && cuenta ? (
-              <div className="flex h-full flex-col gap-4 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
-                <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                  💳 Cobro combinado — mesa + tienda
-                </h3>
-                {cuenta.partes
-                  .filter((parte) => (parte.tienda?.pendiente ?? 0) > 0.01)
-                  .map((parte) => {
-                    const form = abonoForms[parte.id];
-                    if (!form) return null;
-                    return (
-                      <div key={parte.id} className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 first:border-t-0 first:pt-0 dark:border-brand-green-700">
-                        <ResumenCuentasParte
-                          parte={parte}
-                          montoPagarAhora={form.montoPagarAhora + form.propina}
-                          indice={cuenta.partes.length > 1 ? parte.indice : undefined}
-                          itemsOrden={detalle?.items}
-                        />
-                        <SelectorMetodoPago
-                          value={form.pago}
-                          onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
-                          totalFijo={form.montoPagarAhora + form.propina}
-                        />
-                        {form.pago.metodoPago !== "banco" && (
-                          <CalculadoraVuelta
-                            aPagar={montoEnEfectivoDeAbono(form)}
-                            recibido={form.montoRecibido}
-                            onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
-                            esParteDeMixto={form.pago.metodoPago === "mixto"}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-
-                {algunAbonoMixtoInvalido && (
-                  <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
-                )}
-
-                <button
-                  onClick={registrarPagos}
-                  disabled={
-                    cobrando ||
-                    algunAbonoMixtoInvalido ||
-                    algunAbonoSinMontoRecibido ||
-                    algunAbonoSinReferencia ||
-                    totalAPagarAhora <= 0
-                  }
-                  className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-                >
-                  {cobrando ? "Cobrando..." : "Registrar pago(s)"}
-                </button>
-              </div>
-            ) : undefined
-          }
           accionExtra={
             <button
               onClick={minimizarActual}
@@ -1539,6 +1444,37 @@ export function MigaoPage() {
                               </div>
                             </div>
 
+                            {parteCarritoTiendaId === parte.id && (
+                              <IngresoModal
+                                embebido
+                                vincularMesaInicial={{ ordenId: ordenSeleccionadaId!, parteId: parte.id }}
+                                // "Editar tienda" sobre un carrito ya guardado: precarga sus
+                                // ítems — vincular siempre REEMPLAZA todo el carrito de la
+                                // parte de una vez, así que sin esto se perdería lo ya
+                                // guardado al agregar solo lo nuevo y volver a guardar.
+                                valoresIniciales={
+                                  parte.tienda
+                                    ? {
+                                        items: parte.tienda.items
+                                          .filter((i) => i.productoId)
+                                          .map((i) => ({
+                                            nombre: i.nombre,
+                                            cantidad: i.cantidad,
+                                            precioUnitario: i.precioUnitario,
+                                            productoId: i.productoId!,
+                                          })),
+                                      }
+                                    : undefined
+                                }
+                                onCerrar={() => setParteCarritoTiendaId(null)}
+                                onVinculado={async () => {
+                                  await recargarCuenta();
+                                  setParteCarritoTiendaId(null);
+                                }}
+                              />
+                            )}
+
+                            {parteCarritoTiendaId !== parte.id && (
                             <div className="flex flex-col gap-3">
                                 {pendienteParte <= 0.001 || !form ? (
                                   <p className="text-xs font-medium text-brand-green-700 dark:text-brand-vanilla">
@@ -1629,9 +1565,72 @@ export function MigaoPage() {
                                   </>
                                 )}
                             </div>
+                            )}
                           </div>
                         );
                       })}
+
+                      {/* Mientras se edita el carrito de tienda de alguna parte (el
+                          bloque de arriba ya muestra el editor ahí mismo), el
+                          resumen combinado queda oculto — recién con el carrito
+                          guardado hay algo real que cobrar, no un borrador. */}
+                      {!parteCarritoTiendaId && hayParteConTiendaPendiente && (
+                        <div className="flex flex-col gap-4 rounded-xl border border-brand-vanilla-dark bg-brand-vanilla p-4 dark:border-brand-green-700 dark:bg-brand-green-900">
+                          <h3 className="text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            💳 Cobro combinado — mesa + tienda
+                          </h3>
+                          {cuenta.partes
+                            .filter((parte) => (parte.tienda?.pendiente ?? 0) > 0.01)
+                            .map((parte) => {
+                              const form = abonoForms[parte.id];
+                              if (!form) return null;
+                              return (
+                                <div
+                                  key={parte.id}
+                                  className="flex flex-col gap-3 border-t border-brand-vanilla-dark pt-3 first:border-t-0 first:pt-0 dark:border-brand-green-700"
+                                >
+                                  <ResumenCuentasParte
+                                    parte={parte}
+                                    montoPagarAhora={form.montoPagarAhora + form.propina}
+                                    indice={cuenta.partes.length > 1 ? parte.indice : undefined}
+                                    itemsOrden={detalle?.items}
+                                  />
+                                  <SelectorMetodoPago
+                                    value={form.pago}
+                                    onChange={(nuevo) => actualizarAbonoForm(parte.id, { pago: nuevo })}
+                                    totalFijo={form.montoPagarAhora + form.propina}
+                                  />
+                                  {form.pago.metodoPago !== "banco" && (
+                                    <CalculadoraVuelta
+                                      aPagar={montoEnEfectivoDeAbono(form)}
+                                      recibido={form.montoRecibido}
+                                      onChange={(valor) => actualizarAbonoForm(parte.id, { montoRecibido: valor })}
+                                      esParteDeMixto={form.pago.metodoPago === "mixto"}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                          {algunAbonoMixtoInvalido && (
+                            <p className="text-xs text-red-600">Alguna parte mixta no cuadra con su monto + propina.</p>
+                          )}
+
+                          <button
+                            onClick={registrarPagos}
+                            disabled={
+                              cobrando ||
+                              algunAbonoMixtoInvalido ||
+                              algunAbonoSinMontoRecibido ||
+                              algunAbonoSinReferencia ||
+                              totalAPagarAhora <= 0
+                            }
+                            className="w-full rounded-md bg-brand-green-700 px-3 py-3 text-base font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+                          >
+                            {cobrando ? "Cobrando..." : "Registrar pago(s)"}
+                          </button>
+                        </div>
+                      )}
 
                       {!hayParteConTiendaPendiente && (
                         <>

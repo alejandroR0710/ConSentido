@@ -16,6 +16,7 @@ interface EditarRecetaModalProps {
   // guardar.
   onMediaActualizada: () => Promise<void> | void;
   onCategoriaCreada: (categoria: RecetarioCategoria) => void;
+  onCategoriaEliminada: (id: number) => void;
 }
 
 export function EditarRecetaModal({
@@ -25,6 +26,7 @@ export function EditarRecetaModal({
   onGuardado,
   onMediaActualizada,
   onCategoriaCreada,
+  onCategoriaEliminada,
 }: EditarRecetaModalProps) {
   const [titulo, setTitulo] = useState(receta.titulo);
   const [categoriaId, setCategoriaId] = useState<number | "">(receta.categoria_id ?? "");
@@ -40,6 +42,9 @@ export function EditarRecetaModal({
 
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [eliminandoCategoria, setEliminandoCategoria] = useState(false);
+  const [confirmandoEliminarCategoria, setConfirmandoEliminarCategoria] = useState(false);
+  const [confirmandoEliminarReceta, setConfirmandoEliminarReceta] = useState(false);
 
   async function crearCategoria() {
     if (!nuevaCategoria.trim()) return;
@@ -56,6 +61,23 @@ export function EditarRecetaModal({
       setCreandoCategoria(false);
     }
   }
+
+  async function eliminarCategoria() {
+    if (!categoriaId) return;
+    setEliminandoCategoria(true);
+    setError(null);
+    try {
+      await recetarioApi.eliminarCategoria(categoriaId);
+      onCategoriaEliminada(categoriaId);
+      setCategoriaId("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la categoría");
+    } finally {
+      setEliminandoCategoria(false);
+    }
+  }
+
+  const nombreCategoriaElegida = categorias.find((c) => c.id === categoriaId)?.nombre ?? "";
 
   async function subirImagenPrincipal(file: File) {
     const actualizada = await recetarioApi.subirImagenPrincipal(receta.id, file);
@@ -93,7 +115,6 @@ export function EditarRecetaModal({
   }
 
   async function eliminar() {
-    if (!confirm(`¿Eliminar la receta "${receta.titulo}"? Esta acción no se puede deshacer.`)) return;
     setEliminando(true);
     setError(null);
     try {
@@ -120,18 +141,30 @@ export function EditarRecetaModal({
       />
 
       <label className="mb-1 block text-xs font-medium">Categoría</label>
-      <select
-        value={categoriaId}
-        onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
-        className="mb-2 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      >
-        <option value="">Sin categoría</option>
-        {categorias.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nombre}
-          </option>
-        ))}
-      </select>
+      <div className="mb-2 flex gap-2">
+        <select
+          value={categoriaId}
+          onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
+          className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        >
+          <option value="">Sin categoría</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => setConfirmandoEliminarCategoria(true)}
+          disabled={!categoriaId || eliminandoCategoria}
+          title="Eliminar categoría"
+          aria-label="Eliminar categoría"
+          className="rounded-md border border-red-300 px-2 text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/30"
+        >
+          🗑️
+        </button>
+      </div>
 
       <div className="mb-4 flex gap-2">
         <input
@@ -197,12 +230,74 @@ export function EditarRecetaModal({
       </button>
 
       <button
-        onClick={eliminar}
+        onClick={() => setConfirmandoEliminarReceta(true)}
         disabled={bloqueado}
         className="w-full rounded-md border border-red-300 px-4 py-3 font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
       >
         {eliminando ? "Eliminando..." : "Eliminar receta"}
       </button>
+
+      {confirmandoEliminarCategoria && (
+        <Modal
+          titulo="Eliminar categoría"
+          onCerrar={() => setConfirmandoEliminarCategoria(false)}
+          maxWidth="sm:max-w-sm"
+          tono="advertencia"
+        >
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+            ¿Eliminar la categoría <span className="font-semibold">"{nombreCategoriaElegida}"</span>? Si alguna
+            receta la está usando, no se podrá eliminar hasta que se le cambie la categoría.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmandoEliminarCategoria(false)}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium dark:border-brand-green-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                setConfirmandoEliminarCategoria(false);
+                eliminarCategoria();
+              }}
+              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+            >
+              Sí, eliminar
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmandoEliminarReceta && (
+        <Modal
+          titulo="Eliminar receta"
+          onCerrar={() => setConfirmandoEliminarReceta(false)}
+          maxWidth="sm:max-w-sm"
+          tono="advertencia"
+        >
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+            ¿Eliminar la receta <span className="font-semibold">"{receta.titulo}"</span>? Esta acción no se puede
+            deshacer.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmandoEliminarReceta(false)}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium dark:border-brand-green-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                setConfirmandoEliminarReceta(false);
+                eliminar();
+              }}
+              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+            >
+              Sí, eliminar
+            </button>
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 }

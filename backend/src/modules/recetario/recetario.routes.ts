@@ -7,6 +7,7 @@ import {
   crearCategoriaController,
   crearRecetaController,
   editarRecetaController,
+  eliminarCategoriaController,
   eliminarRecetaController,
   listarCategoriasController,
   listarRecetasController,
@@ -26,6 +27,11 @@ recetarioRouter.post(
   "/categorias",
   requirePermission("recetario.administrar"),
   asyncHandler(crearCategoriaController),
+);
+recetarioRouter.delete(
+  "/categorias/:id",
+  requirePermission("recetario.administrar"),
+  asyncHandler(eliminarCategoriaController),
 );
 recetarioRouter.get("/recetas", asyncHandler(listarRecetasController));
 recetarioRouter.get("/recetas/:id", asyncHandler(obtenerRecetaController));

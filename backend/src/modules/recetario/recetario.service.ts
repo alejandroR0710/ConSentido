@@ -10,6 +10,17 @@ export async function crearCategoria(nombre: string) {
   return repo.crearCategoria(nombre);
 }
 
+export async function eliminarCategoria(id: number) {
+  const enUso = await repo.contarRecetasPorCategoria(id);
+  if (enUso > 0) {
+    throw Errors.conflict(
+      `No se puede eliminar: ${enUso} receta${enUso === 1 ? "" : "s"} ${enUso === 1 ? "usa" : "usan"} esta categoría. Cámbiale la categoría a esa${enUso === 1 ? "" : "s"} receta${enUso === 1 ? "" : "s"} primero.`,
+    );
+  }
+  const eliminada = await repo.eliminarCategoria(id);
+  if (!eliminada) throw Errors.notFound("Categoría no encontrada");
+}
+
 export async function listarRecetas() {
   return repo.listarRecetas();
 }

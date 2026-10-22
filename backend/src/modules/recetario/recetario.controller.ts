@@ -14,6 +14,11 @@ export async function crearCategoriaController(req: Request, res: Response) {
   return created(res, await service.crearCategoria(data.nombre));
 }
 
+export async function eliminarCategoriaController(req: Request, res: Response) {
+  await service.eliminarCategoria(Number(req.params.id));
+  return ok(res, { eliminada: true });
+}
+
 export async function listarRecetasController(req: Request, res: Response) {
   return ok(res, await service.listarRecetas());
 }

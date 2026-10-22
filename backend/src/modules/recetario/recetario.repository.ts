@@ -15,6 +15,18 @@ export async function crearCategoria(nombre: string, executor: Executor = pool) 
   return result.rows[0];
 }
 
+export async function contarRecetasPorCategoria(categoriaId: number, executor: Executor = pool) {
+  const result = await executor.query(`SELECT COUNT(*) AS total FROM recetario_recetas WHERE categoria_id = $1`, [
+    categoriaId,
+  ]);
+  return Number(result.rows[0].total);
+}
+
+export async function eliminarCategoria(categoriaId: number, executor: Executor = pool): Promise<boolean> {
+  const result = await executor.query(`DELETE FROM recetario_categorias WHERE id = $1`, [categoriaId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 const SELECT_RECETA = `
   SELECT r.*, c.nombre AS categoria_nombre, u.nombre AS creado_por_nombre
     FROM recetario_recetas r

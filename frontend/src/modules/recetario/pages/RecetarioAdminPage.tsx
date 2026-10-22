@@ -33,6 +33,10 @@ export function RecetarioAdminPage() {
     setCategorias((actual) => [...actual, categoria].sort((a, b) => a.nombre.localeCompare(b.nombre)));
   }
 
+  function onCategoriaEliminada(id: number) {
+    setCategorias((actual) => actual.filter((c) => c.id !== id));
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -99,6 +103,7 @@ export function RecetarioAdminPage() {
             await cargar();
           }}
           onCategoriaCreada={onCategoriaCreada}
+          onCategoriaEliminada={onCategoriaEliminada}
         />
       )}
 
@@ -113,6 +118,7 @@ export function RecetarioAdminPage() {
           }}
           onMediaActualizada={cargar}
           onCategoriaCreada={onCategoriaCreada}
+          onCategoriaEliminada={onCategoriaEliminada}
         />
       )}
     </div>

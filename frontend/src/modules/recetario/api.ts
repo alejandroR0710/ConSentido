@@ -41,6 +41,8 @@ export const recetarioApi = {
   listarCategorias: () => apiFetch<RecetarioCategoria[]>("/recetario/categorias"),
   crearCategoria: (nombre: string) =>
     apiFetch<RecetarioCategoria>("/recetario/categorias", { method: "POST", body: { nombre } }),
+  eliminarCategoria: (id: number) =>
+    apiFetch<{ eliminada: boolean }>(`/recetario/categorias/${id}`, { method: "DELETE" }),
   listar: () => apiFetch<Receta[]>("/recetario/recetas"),
   obtener: (id: string) => apiFetch<Receta>(`/recetario/recetas/${id}`),
   crear: (input: CrearRecetaInput) => apiFetch<Receta>("/recetario/recetas", { method: "POST", body: input }),

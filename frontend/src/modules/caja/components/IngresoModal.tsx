@@ -1091,7 +1091,7 @@ export function IngresoModal({
     <Modal
       titulo="Registrar ingreso"
       onCerrar={onCerrar}
-      maxWidth="sm:w-[70vw] sm:max-w-[70vw]"
+      ancho="sm:w-[60vw]"
       accionExtra={
         <button
           type="button"

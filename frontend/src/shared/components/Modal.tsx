@@ -5,6 +5,13 @@ interface ModalProps {
   onCerrar: () => void;
   children: ReactNode;
   maxWidth?: string;
+  // Ancho FIJO (no auto) en pantallas sm+, ej. "sm:w-[760px]" — por defecto
+  // el diálogo se autoajusta al contenido hasta `maxWidth` (se achica con
+  // contenido angosto); con `ancho` en cambio queda clavado a ese ancho sin
+  // importar cuánto cambie el contenido (pedido puntual para el cobro de
+  // mesa en Migao, que antes cambiaba de tamaño al abrir el editor de
+  // tienda o cambiar método de pago). Si se pasa, `maxWidth` se ignora.
+  ancho?: string;
   // "advertencia": para popups que exigen atención (algo bloquea una acción,
   // falta resolver algo) — borde y título en amber en vez del verde normal.
   tono?: "normal" | "advertencia";
@@ -18,7 +25,7 @@ interface ModalProps {
  * centrado en pantallas más grandes. Base de todos los popups de la app —
  * evita repetir el fondo oscuro + contenedor + botón de cerrar en cada uno.
  */
-export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", tono = "normal", accionExtra }: ModalProps) {
+export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", ancho, tono = "normal", accionExtra }: ModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-start sm:p-4"
@@ -28,7 +35,7 @@ export function Modal({ titulo, onCerrar, children, maxWidth = "sm:max-w-md", to
         onClick={(e) => e.stopPropagation()}
         className={`my-auto flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-brand-vanilla p-4 sm:rounded-2xl dark:bg-brand-green-900 ${
           tono === "advertencia" ? "border-t-4 border-amber-500 sm:border-4" : ""
-        } sm:w-auto sm:max-w-[95vw] sm:overflow-x-auto ${maxWidth}`}
+        } ${ancho ? `sm:shrink-0 ${ancho}` : `sm:w-auto sm:max-w-[95vw] sm:overflow-x-auto ${maxWidth}`}`}
       >
         <div className="mb-3 flex items-center justify-between">
           <h2

@@ -122,8 +122,10 @@ export function IngresoModal({
   const [pago, setPago] = useState<MetodoPagoValor>(f?.pago ?? { metodoPago: "efectivo" });
   const [montoRecibido, setMontoRecibido] = useState(f?.montoRecibido ?? 0);
   // Propina del cobro combinado (solo aplica vinculando a mesa desde acá,
-  // standalone — ver pagarAhora más abajo).
+  // standalone — ver pagarAhora más abajo). propinaMesaPorcentaje maneja
+  // los botones (0/5/10/"Otro valor"); null = monto libre en propinaMesa.
   const [propinaMesa, setPropinaMesa] = useState(0);
+  const [propinaMesaPorcentaje, setPropinaMesaPorcentaje] = useState<number | null>(0);
   const [motivo, setMotivo] = useState(f?.motivo ?? valoresIniciales?.motivo ?? "");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,11 +194,9 @@ export function IngresoModal({
   // elegir otra parte). Mismo endpoint/acción que "🗑️ Quitar compra de
   // tienda" en el cobro de la mesa en Migao.
   const [desvinculando, setDesvinculando] = useState(false);
+  const [confirmandoDesvincular, setConfirmandoDesvincular] = useState(false);
   async function desvincularMesaElegida() {
     if (!parteElegida?.id) return;
-    if (!window.confirm("¿Quitar del todo los productos de la tienda vinculados a esa parte? Se devuelve el stock — la mesa no se toca.")) {
-      return;
-    }
     setDesvinculando(true);
     setError(null);
     try {
@@ -629,10 +629,59 @@ export function IngresoModal({
       ) : (
         <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">Sin productos de mesa.</p>
       )}
-      <div className="mt-auto flex items-center justify-between rounded-lg bg-brand-vanilla px-3 py-2 text-sm font-semibold text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
+      <div className="flex items-center justify-between rounded-lg bg-brand-vanilla px-3 py-2 text-sm font-semibold text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla">
         <span>Pendiente</span>
         <span>{formatMoney(parteElegida.pendiente)}</span>
       </div>
+
+      {pagarAhora && (
+        <div className="mt-auto flex flex-col gap-2">
+          <span className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+            ¿Agregar propina (servicio)?
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {([0, 5, 10] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => {
+                  setPropinaMesaPorcentaje(p);
+                  setPropinaMesa(p === 0 ? 0 : Math.round(pendienteMesaElegida * (p / 100)));
+                }}
+                className={`rounded-md border-2 px-3 py-1.5 text-xs font-medium ${
+                  propinaMesaPorcentaje === p
+                    ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                    : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+                }`}
+              >
+                {p === 0 ? "Sin propina" : `${p}%`}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPropinaMesaPorcentaje(null)}
+              className={`rounded-md border-2 px-3 py-1.5 text-xs font-medium ${
+                propinaMesaPorcentaje === null
+                  ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                  : "border-brand-vanilla-dark text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/20"
+              }`}
+            >
+              Otro valor
+            </button>
+          </div>
+          {propinaMesaPorcentaje === null && (
+            <input
+              type="number"
+              min={0}
+              step="100"
+              value={propinaMesa || ""}
+              onChange={(e) => setPropinaMesa(Math.max(0, Number(e.target.value)))}
+              placeholder="Monto de propina"
+              className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -664,18 +713,6 @@ export function IngresoModal({
 
       {pagarAhora && (
         <>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-brand-ink/70 dark:text-brand-vanilla/70">Propina</label>
-            <input
-              type="number"
-              min={0}
-              step="100"
-              value={propinaMesa || ""}
-              onChange={(e) => setPropinaMesa(Math.max(0, Number(e.target.value)))}
-              className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-            />
-          </div>
-
           <SelectorMetodoPago value={pago} onChange={setPago} totalFijo={totalCombinadoMesa} />
 
           {pago.metodoPago !== "banco" && (
@@ -885,13 +922,43 @@ export function IngresoModal({
                           </p>
                           <button
                             type="button"
-                            onClick={desvincularMesaElegida}
+                            onClick={() => setConfirmandoDesvincular(true)}
                             disabled={desvinculando}
                             className="rounded-md border border-red-400 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/30"
                           >
                             {desvinculando ? "Quitando..." : "🗑️ Desvincular mesa (quitar su compra de tienda)"}
                           </button>
                         </div>
+                      )}
+                      {confirmandoDesvincular && (
+                        <Modal
+                          titulo="Desvincular mesa"
+                          onCerrar={() => setConfirmandoDesvincular(false)}
+                          maxWidth="sm:max-w-sm"
+                          tono="advertencia"
+                        >
+                          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+                            ¿Quitar del todo los productos de la tienda vinculados a esa parte? Se devuelve el
+                            stock — la mesa no se toca.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setConfirmandoDesvincular(false)}
+                              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium dark:border-brand-green-700"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => {
+                                setConfirmandoDesvincular(false);
+                                desvincularMesaElegida();
+                              }}
+                              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+                            >
+                              Sí, desvincular
+                            </button>
+                          </div>
+                        </Modal>
                       )}
                       {partesDeLaMesa.length > 1 && (
                         <div className="mt-2">

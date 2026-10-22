@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "../../../shared/components/Modal";
-import type { OrdenResumen } from "../api";
-import { formatDuracion } from "../format";
+import { migaoApi, type OrdenItem, type OrdenResumen } from "../api";
+import { formatCantidad, formatDuracion } from "../format";
 import type { MesaConOcupacion } from "../ocupacionMesas";
 
 type ModoFloorPlan = "editor" | "seleccionar" | "ver";
@@ -65,6 +65,28 @@ export function FloorPlanCanvas({
   // Mesa grande con varios comensales con cuenta abierta a la vez: al tocarla
   // (modo "ver") hay que elegir cuál cuenta abrir antes de continuar.
   const [mesaEligiendoCuenta, setMesaEligiendoCuenta] = useState<MesaConOcupacion | null>(null);
+  // Qué productos tiene cada cuenta de esa mesa — se piden recién al abrir
+  // el selector (nunca antes) para no disparar un fetch por cada mesa del
+  // plano. "Comensal {comensal_numero}" por sí solo no servía para elegir:
+  // ese número es un correlativo interno que puede ser grande (ej. 1664) y
+  // no dice nada del pedido — el detalle de productos sí ayuda a distinguir
+  // una cuenta de otra.
+  const [itemsPorOrden, setItemsPorOrden] = useState<Record<string, OrdenItem[]>>({});
+  useEffect(() => {
+    if (!mesaEligiendoCuenta) return;
+    let cancelado = false;
+    Promise.all(
+      mesaEligiendoCuenta.ordenes.map((orden) =>
+        migaoApi.obtenerDetalle(orden.id).then((detalle) => [orden.id, detalle.items] as const),
+      ),
+    ).then((pares) => {
+      if (cancelado) return;
+      setItemsPorOrden(Object.fromEntries(pares));
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [mesaEligiendoCuenta]);
 
   // En modo "seleccionar", una vez elegida la mesa el plano se contrae a una
   // barra compacta (menos scroll para llegar a comensales/pedido) — toca la
@@ -303,21 +325,43 @@ export function FloorPlanCanvas({
       {mesaEligiendoCuenta && (
         <Modal titulo={`Mesa ${mesaEligiendoCuenta.numero} — elige la cuenta`} onCerrar={() => setMesaEligiendoCuenta(null)}>
           <div className="flex flex-col gap-2">
-            {mesaEligiendoCuenta.ordenes.map((orden) => (
-              <button
-                key={orden.id}
-                onClick={() => {
-                  onSeleccionar?.(mesaEligiendoCuenta, orden);
-                  setMesaEligiendoCuenta(null);
-                }}
-                className="flex items-center justify-between rounded-lg border border-brand-vanilla-dark px-3 py-2 text-left text-sm hover:border-brand-green-400 hover:bg-brand-green-50 dark:border-brand-green-700 dark:hover:bg-brand-green-700/30"
-              >
-                <span className="font-medium text-brand-ink dark:text-brand-vanilla">Comensal {orden.comensal_numero}</span>
-                <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
-                  ⏱ {formatDuracion(orden.created_at)} · 👥 {orden.numero_personas ?? "—"}
-                </span>
-              </button>
-            ))}
+            {mesaEligiendoCuenta.ordenes.map((orden) => {
+              const items = itemsPorOrden[orden.id];
+              return (
+                <button
+                  key={orden.id}
+                  onClick={() => {
+                    onSeleccionar?.(mesaEligiendoCuenta, orden);
+                    setMesaEligiendoCuenta(null);
+                  }}
+                  className="flex flex-col gap-1 rounded-lg border border-brand-vanilla-dark px-3 py-2 text-left text-sm hover:border-brand-green-400 hover:bg-brand-green-50 dark:border-brand-green-700 dark:hover:bg-brand-green-700/30"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-brand-ink dark:text-brand-vanilla">
+                      {orden.nombre ?? orden.cliente_nombre ?? orden.mesero_nombre ?? `Cuenta ${orden.comensal_numero}`}
+                    </span>
+                    <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
+                      ⏱ {formatDuracion(orden.created_at)} · 👥 {orden.numero_personas ?? "—"}
+                    </span>
+                  </div>
+                  {items === undefined ? (
+                    <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">Cargando productos...</p>
+                  ) : items.length === 0 ? (
+                    <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">Sin productos todavía.</p>
+                  ) : (
+                    <ul className="flex max-h-24 flex-col gap-0.5 overflow-y-auto text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                      {items
+                        .filter((i) => i.estado !== "cancelado")
+                        .map((item) => (
+                          <li key={item.id} className="truncate">
+                            {formatCantidad(item.cantidad)}× {item.producto_nombre}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </Modal>
       )}

@@ -638,10 +638,8 @@ export function MigaoPage() {
   }
 
   const [quitandoTiendaDe, setQuitandoTiendaDe] = useState<string | null>(null);
+  const [confirmandoQuitarTiendaDe, setConfirmandoQuitarTiendaDe] = useState<string | null>(null);
   async function quitarCompraTienda(parteId: string) {
-    if (!window.confirm("¿Quitar del todo los productos de la tienda vinculados a esta parte? Se devuelve el stock — la mesa no se toca.")) {
-      return;
-    }
     setQuitandoTiendaDe(parteId);
     setError(null);
     try {
@@ -1017,7 +1015,7 @@ export function MigaoPage() {
         <Modal
           titulo={ordenActual ? `Mesa ${ordenActual.mesa_numero ?? "—"}` : "Cobro"}
           onCerrar={minimizarActual}
-          maxWidth="sm:max-w-2xl"
+          ancho="sm:w-[760px]"
           accionExtra={
             <button
               onClick={minimizarActual}
@@ -1434,7 +1432,7 @@ export function MigaoPage() {
                                 {parte.tienda && (parte.tienda.pagado ?? 0) <= 0 && (
                                   <button
                                     type="button"
-                                    onClick={() => quitarCompraTienda(parte.id)}
+                                    onClick={() => setConfirmandoQuitarTiendaDe(parte.id)}
                                     disabled={quitandoTiendaDe === parte.id}
                                     className="font-medium text-red-600 hover:underline disabled:opacity-60 dark:text-red-400"
                                   >
@@ -1494,60 +1492,63 @@ export function MigaoPage() {
                                     {pagoUnico ? (
                                       <div className="flex items-center gap-2 rounded-md bg-brand-green-50 px-3 py-2 text-xs dark:bg-brand-green-700/20">
                                         <span className="font-medium text-brand-ink dark:text-brand-vanilla">
-                                          🧾 Pago único: {formatMoney(pendienteParte)}
+                                          🧾 Pago único: {formatMoney(form.montoPagarAhora + form.propina)}
                                         </span>
                                         <span className="text-brand-ink/60 dark:text-brand-vanilla/60">
-                                          — una sola parte, no hay nada que dividir.
+                                          — una sola parte, no hay nada que dividir
+                                          {form.propina > 0 ? " (incluye la propina de arriba)" : ""}.
                                         </span>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                          ¿Cuánto se paga ahora?
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          max={pendienteParte}
-                                          step="100"
-                                          value={form.montoPagarAhora || ""}
-                                          onChange={(e) =>
-                                            actualizarAbonoForm(parte.id, {
-                                              montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
-                                            })
-                                          }
-                                          className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                        />
-                                        <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                                          de {formatMoney(pendienteParte)} pendiente
-                                        </span>
-                                      </div>
-                                    )}
+                                      <>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                            ¿Cuánto se paga ahora?
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            max={pendienteParte}
+                                            step="100"
+                                            value={form.montoPagarAhora || ""}
+                                            onChange={(e) =>
+                                              actualizarAbonoForm(parte.id, {
+                                                montoPagarAhora: Math.min(pendienteParte, Math.max(0, Number(e.target.value))),
+                                              })
+                                            }
+                                            className="w-32 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                          />
+                                          <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                                            de {formatMoney(pendienteParte)} pendiente
+                                          </span>
+                                        </div>
 
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
-                                        Propina de este abono
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step="100"
-                                        value={form.propina || ""}
-                                        onChange={(e) =>
-                                          actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })
-                                        }
-                                        className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-                                      />
-                                      {cuenta.partes.length > 1 && propinaMonto > 0 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => asignarPropinaCompletaA(parte.id)}
-                                          className="text-xs font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
-                                        >
-                                          Asignar propina completa aquí
-                                        </button>
-                                      )}
-                                    </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <label className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">
+                                            Propina de este abono
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            step="100"
+                                            value={form.propina || ""}
+                                            onChange={(e) =>
+                                              actualizarAbonoForm(parte.id, { propina: Math.max(0, Number(e.target.value)) })
+                                            }
+                                            className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                          />
+                                          {propinaMonto > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => asignarPropinaCompletaA(parte.id)}
+                                              className="text-xs font-medium text-brand-green-700 hover:underline dark:text-brand-vanilla"
+                                            >
+                                              Asignar propina completa aquí
+                                            </button>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
 
                                     <SelectorMetodoPago
                                       value={form.pago}
@@ -1668,6 +1669,38 @@ export function MigaoPage() {
             </>
           )}
         </div>
+        </Modal>
+      )}
+
+      {confirmandoQuitarTiendaDe && (
+        <Modal
+          titulo="Quitar compra de tienda"
+          onCerrar={() => setConfirmandoQuitarTiendaDe(null)}
+          maxWidth="sm:max-w-sm"
+          tono="advertencia"
+        >
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+            ¿Quitar del todo los productos de la tienda vinculados a esta parte? Se devuelve el stock — la mesa no
+            se toca.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmandoQuitarTiendaDe(null)}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium dark:border-brand-green-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                const parteId = confirmandoQuitarTiendaDe;
+                setConfirmandoQuitarTiendaDe(null);
+                quitarCompraTienda(parteId);
+              }}
+              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+            >
+              Sí, quitar
+            </button>
+          </div>
         </Modal>
       )}
 

@@ -2,6 +2,7 @@ import fs from "fs";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "path";
+import { Errors } from "../utils/app-error";
 
 // Ancla en process.cwd() (siempre backend/, por convención de "npm run dev/start" ahí)
 // en vez de __dirname: con tsx el código corre directo desde src/, así que __dirname
@@ -47,7 +48,7 @@ export function crearUploaderImagen(subcarpeta: string) {
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     fileFilter: (_req, file, cb) => {
       if (!file.mimetype.startsWith("image/")) {
-        cb(new Error("Solo se permiten archivos de imagen"));
+        cb(Errors.badRequest("Solo se permiten archivos de imagen"));
         return;
       }
       cb(null, true);

@@ -389,14 +389,6 @@ export async function agregarItem(
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se pueden agregar productos a una orden cerrada o cancelada");
   }
-  // Ya se inició el cobro CON EL MOTOR DE PARTES (dividir cuenta/pago
-  // parcial) — cambiar los productos ahora invalidaría los montos ya
-  // fijados por parte (ver migao_cuenta_partes.monto_debido). No bloquea si
-  // solo hay cobros de "productos sueltos" (pagarItems): esos SÍ permiten
-  // seguir agregando productos nuevos a la misma mesa mientras tanto.
-  if (await repo.existeCobroDivididoAbierto(ordenId)) {
-    throw Errors.conflict("Esta cuenta ya tiene pagos registrados, no se pueden agregar más productos");
-  }
 
   const client = await pool.connect();
   let item;
@@ -420,6 +412,10 @@ export async function agregarItem(
         item.id,
       );
     }
+    // Si esta orden ya tiene un cobro en marcha (motor de partes), el total a
+    // cobrar se ajusta en el momento — pedido explícito: poder seguir
+    // agregando/quitando productos de la mesa con el cobro ya arrancado.
+    await recalcularVentaDesdeOrden(ordenId, client);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -556,6 +552,14 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
       });
     }
 
+    // Cancelar o cambiar la cantidad de un ítem cambia el total a cobrar —
+    // si esta orden tiene un cobro en marcha, se ajusta ahí mismo (ver
+    // agregarItem). Una edición que solo toca la observación no afecta
+    // ningún monto, así que no hace falta recalcular nada.
+    if (input.cancelar || input.cantidad !== undefined) {
+      await recalcularVentaDesdeOrden(item.orden_id, client);
+    }
+
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -615,6 +619,66 @@ export async function entregarItem(itemId: string, usuarioId: string) {
 
 function calcularItemsConSubtotal<T extends { cantidad: string; precio_unitario: string }>(items: T[]) {
   return items.map((i) => ({ ...i, subtotal: Number(i.cantidad) * Number(i.precio_unitario) }));
+}
+
+/**
+ * Si esta orden tiene un cobro en marcha (motor de partes), recalcula la
+ * venta/partes a partir de los productos de mesa ACTUALES — se llama justo
+ * después de agregar/editar/cancelar un ítem, en la misma transacción, para
+ * que el total a cobrar quede siempre al día con lo que de verdad está en la
+ * mesa (pedido explícito: poder seguir ajustando la mesa con el cobro ya
+ * arrancado). Si no hay cobro en marcha, no hace nada.
+ *
+ * Nunca toca lo ya pagado (monto_pagado sale aparte, de la tabla `pagos`):
+ * solo cambia monto_debido de cada parte. Si eso deja a una parte con menos
+ * deuda que lo que ya pagó, su pendiente queda en $0 (Math.max(0, ...) en
+ * getCuentaPorOrden) — no se intenta "devolver" plata ya cobrada.
+ *
+ * Partes modo 'producto' (ítems asignados a un comensal específico) no se
+ * pueden redistribuir solas — un ítem nuevo no tiene dueño claro. Hoy es
+ * inalcanzable desde la UI (el botón "Dividir cuenta" ya no existe, ver
+ * iniciarCobro), así que esto es un bloqueo defensivo por si vuelve.
+ */
+async function recalcularVentaDesdeOrden(ordenId: string, client: PoolClient) {
+  const venta = await repo.getVentaAbiertaPorOrden(ordenId, client);
+  if (!venta) return;
+
+  const partesResult = await client.query(
+    `SELECT * FROM migao_cuenta_partes WHERE venta_id = $1 ORDER BY indice ASC FOR UPDATE`,
+    [venta.id],
+  );
+  const partes = partesResult.rows;
+  if (partes.some((p) => p.modo === "producto")) {
+    throw Errors.conflict(
+      "Esta cuenta está dividida por producto asignado a cada comensal — no se pueden editar los productos de la mesa así.",
+    );
+  }
+
+  const itemsRaw = await repo.getItemsPorOrden(ordenId, client);
+  const items = calcularItemsConSubtotal(itemsRaw).filter((i) => i.estado !== "cancelado" && !i.venta_id);
+  if (items.length === 0) {
+    throw Errors.conflict("No puedes quitar todos los productos de una cuenta con el cobro en marcha");
+  }
+  const totalBruto = items.reduce((acc, i) => acc + i.subtotal, 0);
+  const descuentoPorcentaje = Number(venta.descuento_porcentaje);
+  const total = totalBruto * (1 - descuentoPorcentaje / 100);
+  const descuentoMonto = totalBruto - total;
+
+  await repo.actualizarVenta(client, venta.id, { subtotal: totalBruto, descuento: descuentoMonto, total });
+  await repo.reemplazarVentaItems(
+    client,
+    venta.id,
+    items.map((i) => ({
+      productoId: i.producto_id,
+      cantidad: Number(i.cantidad),
+      precioUnitario: Number(i.precio_unitario),
+    })),
+  );
+
+  const montos = distribuirIgual(total, partes.length);
+  for (const [idx, parte] of partes.entries()) {
+    await repo.actualizarMontoDebidoParte(client, parte.id, montos[idx]);
+  }
 }
 
 /** Suma cuánto vale, en total, lo que una parte se llevó — según las unidades
@@ -1319,6 +1383,17 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
  * el cliente). Usada solo por iniciarCobro — una cuenta sin dividir es, acá,
  * una división de 1 sola parte (modo 'igual', numPartes 1).
  */
+/** Reparte `total` en `n` montos iguales — la última parte absorbe el
+ *  residuo del redondeo, así la suma de todas siempre da EXACTO el total
+ *  (nunca queda 1 centavo suelto). Usada al crear las partes (calcularPartes)
+ *  y al recalcularlas en vivo (recalcularVentaDesdeOrden). */
+function distribuirIgual(total: number, n: number): number[] {
+  const base = Math.floor((total / n) * 100) / 100;
+  const montos = Array.from({ length: n }, () => base);
+  montos[n - 1] = Math.round((total - base * (n - 1)) * 100) / 100;
+  return montos;
+}
+
 function calcularPartes<T extends { id: unknown; cantidad: string; precio_unitario: string }>(
   division: IniciarCobroInput["division"],
   items: (T & { subtotal: number })[],
@@ -1326,13 +1401,7 @@ function calcularPartes<T extends { id: unknown; cantidad: string; precio_unitar
   totalBruto: number,
 ): { modo: "producto" | "igual"; montoDebido: number; unidades?: { itemId: number; cantidad: number }[] }[] {
   if (division.modo === "igual") {
-    const n = division.numPartes;
-    const base = Math.floor((total / n) * 100) / 100;
-    const montos = Array.from({ length: n }, () => base);
-    // La última parte absorbe el residuo del redondeo, así la suma de todas
-    // las partes siempre da EXACTO el total (nunca queda 1 centavo suelto).
-    montos[n - 1] = Math.round((total - base * (n - 1)) * 100) / 100;
-    return montos.map((montoDebido) => ({ modo: "igual" as const, montoDebido }));
+    return distribuirIgual(total, division.numPartes).map((montoDebido) => ({ modo: "igual" as const, montoDebido }));
   }
 
   // modo 'producto': misma validación de cerrarOrden dividido — la suma de

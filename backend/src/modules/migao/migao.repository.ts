@@ -859,6 +859,34 @@ export async function crearVentaItems(
   }
 }
 
+/** Usado solo por recalcularVentaDesdeOrden (migao.service.ts) al ajustar
+ *  una venta ya creada a los productos de mesa actuales de la orden. */
+export async function actualizarVenta(
+  client: PoolClient,
+  ventaId: string,
+  params: { subtotal: number; descuento: number; total: number },
+) {
+  await client.query(`UPDATE ventas SET subtotal = $2, descuento = $3, total = $4 WHERE id = $1`, [
+    ventaId,
+    params.subtotal,
+    params.descuento,
+    params.total,
+  ]);
+}
+
+export async function reemplazarVentaItems(
+  client: PoolClient,
+  ventaId: string,
+  items: { productoId: string; cantidad: number; precioUnitario: number }[],
+) {
+  await client.query(`DELETE FROM venta_items WHERE venta_id = $1`, [ventaId]);
+  await crearVentaItems(client, ventaId, items);
+}
+
+export async function actualizarMontoDebidoParte(client: PoolClient, parteId: string, montoDebido: number) {
+  await client.query(`UPDATE migao_cuenta_partes SET monto_debido = $2 WHERE id = $1`, [parteId, montoDebido]);
+}
+
 export async function crearPago(
   client: PoolClient,
   params: {

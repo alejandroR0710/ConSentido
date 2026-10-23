@@ -24,16 +24,20 @@ import {
   type ItemActivo,
   type Mesa,
   type OrdenDetalle,
+  type OrdenItem,
   type OrdenResumen,
+  type Producto,
   type RegistrarAbonoInput,
 } from "../api";
 import { AREAS_MESA, areaDeMesa } from "../areas";
 import { AgregarParaLlevarModal } from "../components/AgregarParaLlevarModal";
 import { CancelarOrdenModal } from "../components/CancelarOrdenModal";
 import { IngresoModal } from "../../caja/components/IngresoModal";
+import { EditarItemModal } from "../components/EditarItemModal";
 import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
+import { SelectorProductoModal } from "../components/SelectorProductoModal";
 import { ResumenCuentasParte } from "../components/ResumenCuentasParte";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { facturaAReciboProps } from "../factura";
@@ -124,6 +128,20 @@ export function MigaoPage() {
   const [loading, setLoading] = useState(true);
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
+
+  // Agregar/editar/cancelar productos de la mesa — ya funciona aunque el
+  // cobro esté en marcha (el backend recalcula la venta/partes en el momento,
+  // ver recalcularVentaDesdeOrden en migao.service.ts).
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [selectorProductoAbierto, setSelectorProductoAbierto] = useState(false);
+  const [agregandoProductoId, setAgregandoProductoId] = useState<string | null>(null);
+  const [itemEditando, setItemEditando] = useState<OrdenItem | null>(null);
+  useEffect(() => {
+    migaoApi
+      .listarProductos()
+      .then(setProductos)
+      .catch(() => {});
+  }, []);
 
   // Aparte del cobro simple de arriba: cobrar solo ALGUNOS productos de la
   // cuenta mientras sigue abierta (se puede seguir agregando) — cada cobro
@@ -457,6 +475,49 @@ export function MigaoPage() {
       setDetalle(await migaoApi.obtenerDetalle(ordenSeleccionadaId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar el detalle de la orden");
+    }
+  }
+
+  /** Igual que refrescarDetalle, pero también recarga la cuenta (partes/
+   *  pendiente) cuando hay un cobro en marcha — el backend ya recalculó
+   *  monto_debido en el momento (ver recalcularVentaDesdeOrden), así que acá
+   *  solo hace falta volver a pedirlo para que el resumen/pago se actualicen. */
+  async function refrescarDetalleYCuenta() {
+    await refrescarDetalle();
+    if (cuenta) await recargarCuenta();
+  }
+
+  async function agregarProductoMesa(producto: Producto, cantidad: number, observaciones?: string) {
+    if (!ordenSeleccionadaId) return;
+    setAgregandoProductoId(producto.id);
+    setError(null);
+    try {
+      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio), observaciones);
+      await refrescarDetalleYCuenta();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo agregar el producto");
+    } finally {
+      setAgregandoProductoId(null);
+    }
+  }
+
+  async function guardarCantidadItemMesa(itemId: number, cantidad: number, observaciones: string) {
+    try {
+      await migaoApi.editarCantidadItem(itemId, cantidad, observaciones);
+      await refrescarDetalleYCuenta();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo editar el producto");
+      throw err;
+    }
+  }
+
+  async function cancelarItemMesa(itemId: number) {
+    try {
+      await migaoApi.cancelarItem(itemId);
+      await refrescarDetalleYCuenta();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cancelar el producto");
+      throw err;
     }
   }
 
@@ -1130,6 +1191,17 @@ export function MigaoPage() {
                         <span className="text-base font-semibold text-brand-ink dark:text-brand-vanilla">
                           {formatMoney(item.subtotal)}
                         </span>
+                        {cobrable && (
+                          <button
+                            type="button"
+                            onClick={() => setItemEditando(item)}
+                            aria-label={`Editar ${item.producto_nombre}`}
+                            title="Editar cantidad o quitar"
+                            className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-sm dark:border-brand-green-700"
+                          >
+                            ✏️
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1151,17 +1223,25 @@ export function MigaoPage() {
                 </div>
               )}
 
-              {cuenta ? (
-                <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                  Esta cuenta ya tiene un cobro en marcha — no se pueden agregar más productos.
-                </p>
-              ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectorProductoAbierto(true)}
+                  className="flex-1 rounded-md border-2 border-brand-green-700 px-3 py-2 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
+                >
+                  + Agregar producto
+                </button>
                 <button
                   onClick={() => setModalAbierto("para-llevar")}
-                  className="w-full rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                  className="rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
                 >
-                  🥡 Agregar para llevar
+                  🥡 Para llevar
                 </button>
+              </div>
+              {cuenta && (
+                <p className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                  Esta cuenta ya tiene un cobro en marcha — si agregas o quitas productos, el total a cobrar se
+                  actualiza solo.
+                </p>
               )}
 
               {detalle.items.some((i) => i.estado === "pendiente" || i.estado === "preparando") && (
@@ -1813,7 +1893,25 @@ export function MigaoPage() {
         <AgregarParaLlevarModal
           ordenId={ordenSeleccionadaId}
           onCerrar={() => setModalAbierto(null)}
-          onAgregado={refrescarDetalle}
+          onAgregado={refrescarDetalleYCuenta}
+        />
+      )}
+
+      {selectorProductoAbierto && (
+        <SelectorProductoModal
+          productos={productos}
+          agregandoId={agregandoProductoId}
+          onCerrar={() => setSelectorProductoAbierto(false)}
+          onSeleccionar={agregarProductoMesa}
+        />
+      )}
+
+      {itemEditando && (
+        <EditarItemModal
+          item={itemEditando}
+          onCerrar={() => setItemEditando(null)}
+          onGuardar={(cantidad, observaciones) => guardarCantidadItemMesa(itemEditando.id, cantidad, observaciones)}
+          onCancelarProducto={() => cancelarItemMesa(itemEditando.id)}
         />
       )}
 

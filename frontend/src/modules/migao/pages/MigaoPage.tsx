@@ -26,7 +26,6 @@ import {
   type OrdenDetalle,
   type OrdenItem,
   type OrdenResumen,
-  type Producto,
   type RegistrarAbonoInput,
 } from "../api";
 import { AREAS_MESA, areaDeMesa } from "../areas";
@@ -37,7 +36,6 @@ import { EditarItemModal } from "../components/EditarItemModal";
 import { EditarNombreOrdenModal } from "../components/EditarNombreOrdenModal";
 import { EstadoBadge } from "../components/EstadoBadge";
 import { FloorPlanCanvas } from "../components/FloorPlanCanvas";
-import { SelectorProductoModal } from "../components/SelectorProductoModal";
 import { ResumenCuentasParte } from "../components/ResumenCuentasParte";
 import { BADGE_POR_ESTADO, BORDE_POR_ESTADO, ETIQUETA_POR_ESTADO, estadoAgregadoOrden } from "../estadoOrden";
 import { facturaAReciboProps } from "../factura";
@@ -129,19 +127,12 @@ export function MigaoPage() {
   const [cobrando, setCobrando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState<"cancelar" | "para-llevar" | null>(null);
 
-  // Agregar/editar/cancelar productos de la mesa — ya funciona aunque el
-  // cobro esté en marcha (el backend recalcula la venta/partes en el momento,
-  // ver recalcularVentaDesdeOrden en migao.service.ts).
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [selectorProductoAbierto, setSelectorProductoAbierto] = useState(false);
-  const [agregandoProductoId, setAgregandoProductoId] = useState<string | null>(null);
+  // Editar/cancelar productos de la mesa — ya funciona aunque el cobro esté
+  // en marcha (el backend recalcula la venta/partes en el momento, ver
+  // recalcularVentaDesdeOrden en migao.service.ts). Agregar un producto
+  // nuevo del catálogo general sigue siendo tarea del Mesero, no de acá —
+  // desde Caja Migao solo se puede agregar un cargo "para llevar".
   const [itemEditando, setItemEditando] = useState<OrdenItem | null>(null);
-  useEffect(() => {
-    migaoApi
-      .listarProductos()
-      .then(setProductos)
-      .catch(() => {});
-  }, []);
 
   // Aparte del cobro simple de arriba: cobrar solo ALGUNOS productos de la
   // cuenta mientras sigue abierta (se puede seguir agregando) — cada cobro
@@ -485,20 +476,6 @@ export function MigaoPage() {
   async function refrescarDetalleYCuenta() {
     await refrescarDetalle();
     if (cuenta) await recargarCuenta();
-  }
-
-  async function agregarProductoMesa(producto: Producto, cantidad: number, observaciones?: string) {
-    if (!ordenSeleccionadaId) return;
-    setAgregandoProductoId(producto.id);
-    setError(null);
-    try {
-      await migaoApi.agregarItem(ordenSeleccionadaId, producto.id, cantidad, Number(producto.precio), observaciones);
-      await refrescarDetalleYCuenta();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo agregar el producto");
-    } finally {
-      setAgregandoProductoId(null);
-    }
   }
 
   async function guardarCantidadItemMesa(itemId: number, cantidad: number, observaciones: string) {
@@ -1223,24 +1200,16 @@ export function MigaoPage() {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectorProductoAbierto(true)}
-                  className="flex-1 rounded-md border-2 border-brand-green-700 px-3 py-2 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/30"
-                >
-                  + Agregar producto
-                </button>
-                <button
-                  onClick={() => setModalAbierto("para-llevar")}
-                  className="rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                >
-                  🥡 Para llevar
-                </button>
-              </div>
+              <button
+                onClick={() => setModalAbierto("para-llevar")}
+                className="w-full rounded-md border border-amber-400 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              >
+                🥡 Agregar para llevar
+              </button>
               {cuenta && (
                 <p className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                  Esta cuenta ya tiene un cobro en marcha — si agregas o quitas productos, el total a cobrar se
-                  actualiza solo.
+                  Esta cuenta ya tiene un cobro en marcha — si editas o quitas un producto (✏️ arriba), el total a
+                  cobrar se actualiza solo.
                 </p>
               )}
 
@@ -1894,15 +1863,6 @@ export function MigaoPage() {
           ordenId={ordenSeleccionadaId}
           onCerrar={() => setModalAbierto(null)}
           onAgregado={refrescarDetalleYCuenta}
-        />
-      )}
-
-      {selectorProductoAbierto && (
-        <SelectorProductoModal
-          productos={productos}
-          agregandoId={agregandoProductoId}
-          onCerrar={() => setSelectorProductoAbierto(false)}
-          onSeleccionar={agregarProductoMesa}
         />
       )}
 

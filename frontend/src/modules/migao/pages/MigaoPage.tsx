@@ -16,7 +16,7 @@ import {
   referenciaBancoPayload,
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
-import { formatMoney } from "../../../shared/format/money";
+import { formatMoney, redondearA100 } from "../../../shared/format/money";
 import { useRegistrarRefresco } from "../../../shared/refresh/RefrescoContext";
 import {
   migaoApi,
@@ -588,7 +588,11 @@ export function MigaoPage() {
   // verdad incluye la propina, el backend ya separa esa parte antes de
   // registrar el ingreso en Caja General (migao.service.ts::calcularTotalesPorMetodo).
   const propinaMonto =
-    propinaPorcentaje === 0 ? 0 : propinaPorcentaje === null ? propinaMontoCustom : totalConDescuento * (propinaPorcentaje / 100);
+    propinaPorcentaje === 0
+      ? 0
+      : propinaPorcentaje === null
+        ? propinaMontoCustom
+        : redondearA100(totalConDescuento * (propinaPorcentaje / 100));
 
   // La propina se reparte SIEMPRE en la misma proporción efectivo/banco en la
   // que de verdad se pagó la cuenta (lo calcula el backend, ver

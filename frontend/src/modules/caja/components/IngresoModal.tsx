@@ -10,7 +10,7 @@ import {
   referenciaBancoPayload,
   type MetodoPagoValor,
 } from "../../../shared/components/SelectorMetodoPago";
-import { formatMoney } from "../../../shared/format/money";
+import { formatMoney, redondearA100 } from "../../../shared/format/money";
 import {
   useIngresosMinimizados,
   type FormularioIngreso,
@@ -646,7 +646,7 @@ export function IngresoModal({
                 type="button"
                 onClick={() => {
                   setPropinaMesaPorcentaje(p);
-                  setPropinaMesa(p === 0 ? 0 : Math.round(pendienteMesaElegida * (p / 100)));
+                  setPropinaMesa(p === 0 ? 0 : redondearA100(pendienteMesaElegida * (p / 100)));
                 }}
                 className={`rounded-md border-2 px-3 py-1.5 text-xs font-medium ${
                   propinaMesaPorcentaje === p

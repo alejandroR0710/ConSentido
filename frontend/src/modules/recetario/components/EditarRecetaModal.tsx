@@ -191,7 +191,7 @@ export function EditarRecetaModal({
         className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
       <p className="mb-4 mt-1 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-        **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+        ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
       </p>
 
       <label className="mb-2 block text-xs font-medium">Medio principal</label>
@@ -221,7 +221,7 @@ export function EditarRecetaModal({
           className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
         />
         <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-          **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+          ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
         </p>
       </div>
 

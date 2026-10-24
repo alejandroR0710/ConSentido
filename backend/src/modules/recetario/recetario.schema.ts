@@ -19,7 +19,7 @@ export const crearRecetaSchema = z.object({
   instrucciones: z.string().trim().min(1, "Escribe las instrucciones de la receta"),
   categoriaId: z.number().int().positive().optional(),
   videoUrl: videoUrlSchema.optional(),
-  descripcionEmplatado: z.string().trim().max(500).optional(),
+  descripcionEmplatado: z.string().trim().optional(),
 });
 export type CrearRecetaInput = z.infer<typeof crearRecetaSchema>;
 
@@ -33,6 +33,6 @@ export const editarRecetaSchema = z.object({
   instrucciones: z.string().trim().min(1, "Escribe las instrucciones de la receta").optional(),
   categoriaId: z.number().int().positive().nullable().optional(),
   videoUrl: videoUrlSchema.nullable().optional(),
-  descripcionEmplatado: z.string().trim().max(500).nullable().optional(),
+  descripcionEmplatado: z.string().trim().nullable().optional(),
 });
 export type EditarRecetaInput = z.infer<typeof editarRecetaSchema>;

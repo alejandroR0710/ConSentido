@@ -121,7 +121,7 @@ export function NuevaRecetaModal({
   }
 
   return (
-    <Modal titulo="Nueva receta" onCerrar={onCerrar} maxWidth="sm:max-w-xl">
+    <Modal titulo="Nueva receta" onCerrar={onCerrar} ancho="sm:w-[60vw]">
       <label className="mb-1 block text-xs font-medium">Título</label>
       <input
         autoFocus
@@ -178,8 +178,11 @@ export function NuevaRecetaModal({
         value={instrucciones}
         onChange={(e) => setInstrucciones(e.target.value)}
         rows={6}
-        className="mb-4 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+      <p className="mb-4 mt-1 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+        **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+      </p>
 
       <label className="mb-2 block text-xs font-medium">Medio principal</label>
       <SelectorMedioPrincipal medio={medioPrincipal} onCambiarMedio={setMedioPrincipal}>
@@ -211,6 +214,9 @@ export function NuevaRecetaModal({
           placeholder="Detalles de cómo servirlo..."
           className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
         />
+        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+          **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+        </p>
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}

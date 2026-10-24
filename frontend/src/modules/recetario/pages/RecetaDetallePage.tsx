@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
+import { formatearTextoBasico } from "../../../shared/format/texto";
 import { recetarioApi, type Receta } from "../api";
 import { urlEmbedVideo } from "../video";
 
@@ -65,9 +66,10 @@ export function RecetaDetallePage() {
           </a>
         ))}
 
-      <p className="whitespace-pre-wrap text-xl leading-relaxed text-brand-ink dark:text-brand-vanilla">
-        {receta.instrucciones}
-      </p>
+      <p
+        className="whitespace-pre-wrap text-xl leading-relaxed text-brand-ink dark:text-brand-vanilla"
+        dangerouslySetInnerHTML={{ __html: formatearTextoBasico(receta.instrucciones) }}
+      />
 
       {(receta.imagen_emplatado_url || receta.descripcion_emplatado) && (
         <div className="flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
@@ -80,7 +82,10 @@ export function RecetaDetallePage() {
             />
           )}
           {receta.descripcion_emplatado && (
-            <p className="text-base text-brand-ink/80 dark:text-brand-vanilla/80">{receta.descripcion_emplatado}</p>
+            <p
+              className="whitespace-pre-wrap text-base text-brand-ink/80 dark:text-brand-vanilla/80"
+              dangerouslySetInnerHTML={{ __html: formatearTextoBasico(receta.descripcion_emplatado) }}
+            />
           )}
         </div>
       )}

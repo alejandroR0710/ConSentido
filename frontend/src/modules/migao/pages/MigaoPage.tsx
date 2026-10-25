@@ -478,9 +478,9 @@ export function MigaoPage() {
     if (cuenta) await recargarCuenta();
   }
 
-  async function guardarCantidadItemMesa(itemId: number, cantidad: number, observaciones: string) {
+  async function guardarCantidadItemMesa(itemId: number, cantidad: number) {
     try {
-      await migaoApi.editarCantidadItem(itemId, cantidad, observaciones);
+      await migaoApi.editarCantidadItem(itemId, cantidad);
       await refrescarDetalleYCuenta();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo editar el producto");
@@ -1874,7 +1874,7 @@ export function MigaoPage() {
         <EditarItemModal
           item={itemEditando}
           onCerrar={() => setItemEditando(null)}
-          onGuardar={(cantidad, observaciones) => guardarCantidadItemMesa(itemEditando.id, cantidad, observaciones)}
+          onGuardar={(cantidad) => guardarCantidadItemMesa(itemEditando.id, cantidad)}
           onCancelarProducto={() => cancelarItemMesa(itemEditando.id)}
         />
       )}

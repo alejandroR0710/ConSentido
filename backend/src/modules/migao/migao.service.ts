@@ -505,7 +505,10 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
         );
       }
     } else if (input.cantidad !== undefined) {
-      actualizado = await repo.updateItemCantidad(itemId, input.cantidad, input.observaciones, client);
+      // undefined (no una observación nueva): un ítem ya cargado no admite
+      // tocarle la observación — COALESCE en updateItemCantidad deja la que
+      // ya tenía (ver nota en editarItemSchema).
+      actualizado = await repo.updateItemCantidad(itemId, input.cantidad, undefined, client);
       await repo.insertHistorial(client, {
         ordenId: item.orden_id,
         ordenItemId: Number(itemId),
@@ -540,16 +543,9 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
       // Si seguía pendiente/preparando, todavía no se había consumido nada:
       // se consumirá por primera vez, ya con la cantidad correcta, al llegar a "listo".
     } else {
-      // Solo se corrigió la observación (nota para cocina): la cantidad y el
-      // estado del ítem no cambian, así que el inventario no se toca.
-      actualizado = await repo.updateItemObservaciones(itemId, input.observaciones!, client);
-      await repo.insertHistorial(client, {
-        ordenId: item.orden_id,
-        ordenItemId: Number(itemId),
-        accion: "item_editado",
-        detalle: { observacionAnterior: item.observaciones, observacionNueva: input.observaciones },
-        usuarioId,
-      });
+      // Inalcanzable en los hechos: editarItemSchema exige cantidad o
+      // cancelar, nunca ninguno de los dos.
+      throw Errors.badRequest("Debes indicar una nueva cantidad o cancelar el ítem");
     }
 
     // Cancelar o cambiar la cantidad de un ítem cambia el total a cobrar —

@@ -691,15 +691,6 @@ export async function duplicarItemParaPago(
   return result.rows[0];
 }
 
-/** Corrige solo la nota del ítem (ej. "sin azúcar"), sin tocar cantidad ni estado. */
-export async function updateItemObservaciones(itemId: string, observaciones: string, executor: Executor = pool) {
-  const result = await executor.query(
-    `UPDATE orden_items SET observaciones = $2 WHERE id = $1 RETURNING *`,
-    [itemId, observaciones],
-  );
-  return result.rows[0];
-}
-
 export async function agregarItem(
   ordenId: string,
   productoId: string,

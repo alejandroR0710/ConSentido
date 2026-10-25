@@ -292,10 +292,10 @@ export function MeseroPage() {
     }
   }
 
-  async function guardarCantidad(itemId: number, cantidad: number, observaciones: string) {
+  async function guardarCantidad(itemId: number, cantidad: number) {
     if (!ordenSeleccionadaId) return;
     try {
-      await migaoApi.editarCantidadItem(itemId, cantidad, observaciones);
+      await migaoApi.editarCantidadItem(itemId, cantidad);
       await cargarDetalle(ordenSeleccionadaId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo editar el ítem");
@@ -671,7 +671,7 @@ export function MeseroPage() {
         <EditarItemModal
           item={itemEditando}
           onCerrar={() => setItemEditando(null)}
-          onGuardar={(cantidad, observaciones) => guardarCantidad(itemEditando.id, cantidad, observaciones)}
+          onGuardar={(cantidad) => guardarCantidad(itemEditando.id, cantidad)}
           onCancelarProducto={() => cancelarItem(itemEditando.id)}
         />
       )}

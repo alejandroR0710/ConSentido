@@ -846,10 +846,12 @@ export const migaoApi = {
       method: "POST",
       body: { productoId, cantidad, precioUnitario, observaciones },
     }),
-  editarCantidadItem: (itemId: number, cantidad: number, observaciones?: string) =>
+  // Un ítem ya cargado no admite editarle la observación (ver editarItemSchema
+  // en el backend) — por eso acá solo se manda la cantidad.
+  editarCantidadItem: (itemId: number, cantidad: number) =>
     apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {
       method: "PATCH",
-      body: { cantidad, observaciones },
+      body: { cantidad },
     }),
   cancelarItem: (itemId: number) =>
     apiFetch<OrdenItem & { alertasInventario: string[] }>(`/migao/items/${itemId}`, {

@@ -69,6 +69,7 @@ import {
   obtenerResumenDiarioIngresosController,
   pagarItemsController,
   quitarCarritoTiendaController,
+  cerrarCobroAdministrativoController,
   registrarAbonoController,
   reiniciarTodoController,
   repartirPropinasController,
@@ -303,6 +304,14 @@ migaoRouter.post(
   "/cuentas/partes/:parteId/abonos",
   requirePermission("migao.ordenes.cerrar"),
   asyncHandler(registrarAbonoController),
+);
+// Cierre administrativo del cobro en curso (sin ingreso en Caja General) — el
+// permiso de Root/Super Root (migao.ordenes.pago_administrativo) lo valida el
+// service, igual que en el cobro simple.
+migaoRouter.post(
+  "/ordenes/:id/cobro/cerrar-administrativo",
+  requirePermission("migao.ordenes.cerrar"),
+  asyncHandler(cerrarCobroAdministrativoController),
 );
 // Venta combinada mesa + Con Sentido (ver
 // docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md):

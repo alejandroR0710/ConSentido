@@ -466,6 +466,9 @@ CREATE TABLE con_sentido_ventas (
   parte_id              CHAR(36) NULL,
   descuento_porcentaje  DECIMAL(5,2) DEFAULT 0,
   descuento             DECIMAL(12,2) DEFAULT 0,
+  -- 1 = el carrito de una mesa se cerró con pago administrativo (no entró a
+  -- Caja): ya no tiene nada pendiente aunque movimientos_caja no lo cubra.
+  pago_administrativo   TINYINT(1) NOT NULL DEFAULT 0,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
   FOREIGN KEY (parte_id) REFERENCES migao_cuenta_partes(id),
   INDEX idx_con_sentido_ventas_fecha (created_at DESC),

@@ -328,6 +328,11 @@ export function MigaoHistorialPage() {
                       ) : (
                         formatMoney(h.total)
                       )}
+                      {Number(h.monto_administrativo ?? 0) > 0 && (
+                        <div className="text-xs text-amber-700 dark:text-amber-400">
+                          {formatMoney(Number(h.monto_administrativo))} se cerró como pago administrativo
+                        </div>
+                      )}
                     </td>
                     {puedeEditarPagos && (
                       <td className="px-3 py-2">

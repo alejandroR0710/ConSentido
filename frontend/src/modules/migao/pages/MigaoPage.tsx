@@ -842,6 +842,41 @@ export function MigaoPage() {
   /** Registra un abono por cada parte que tenga algo que pagar ahora — puede
    *  ser el pago completo de todas (cierra la orden) o parcial de alguna(s)
    *  (la orden queda en 'pagando' hasta el próximo abono). */
+  // Cierre administrativo del cobro en curso (Root/Super Root): dos pasos
+  // (confirmar) porque no se puede deshacer desde acá.
+  const [confirmandoAdministrativo, setConfirmandoAdministrativo] = useState(false);
+  const [propinaAdministrativa, setPropinaAdministrativa] = useState(0);
+
+  async function cerrarCobroAdministrativo() {
+    if (!ordenSeleccionadaId || !cuenta) return;
+    setCobrando(true);
+    setError(null);
+    setMensaje(null);
+    try {
+      const cuentaActual = await migaoApi.cerrarCobroAdministrativo(ordenSeleccionadaId, {
+        propina:
+          propinaAdministrativa > 0
+            ? { monto: propinaAdministrativa, porcentaje: propinaPorcentaje, metodoPago: propinaMetodoPago }
+            : undefined,
+      });
+      setCuenta(cuentaActual);
+      const alertas = cuentaActual.alertasInventario ?? [];
+      const sufijoAlertas = alertas.length > 0 ? ` ${alertas.join(" ")}` : "";
+      setMensaje(`Cuenta cerrada como pago administrativo (no entra a Caja General).${sufijoAlertas}`);
+      setPreguntaFacturaOrdenId(ordenSeleccionadaId);
+      setPartesTiendaParaFactura(cuentaActual.partes.filter((p) => p.tienda?.estado === "completada").map((p) => p.id));
+      setDetalle(null);
+      setOrdenSeleccionadaId(null);
+      setConfirmandoAdministrativo(false);
+      reiniciarDivision();
+      await cargarOrdenes();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cerrar la cuenta como pago administrativo");
+    } finally {
+      setCobrando(false);
+    }
+  }
+
   async function registrarPagos() {
     if (!ordenSeleccionadaId || !cuenta || algunAbonoSinMontoRecibido || algunAbonoSinReferencia) return;
     setCobrando(true);
@@ -1706,6 +1741,82 @@ export function MigaoPage() {
                             {cobrando ? "Cobrando..." : "Registrar pago(s)"}
                           </button>
                         </>
+                      )}
+
+                      {puedeAdministrativo && (
+                        <div className="flex flex-col gap-2 rounded-md border border-amber-300 p-3 dark:border-amber-700">
+                          {!confirmandoAdministrativo ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPropinaAdministrativa(propinaMonto);
+                                setConfirmandoAdministrativo(true);
+                              }}
+                              disabled={cobrando}
+                              className="w-full rounded-md border border-amber-500 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                            >
+                              Cerrar como pago administrativo
+                            </button>
+                          ) : (
+                            <>
+                              <p className="text-xs text-amber-700 dark:text-amber-300">
+                                ⚠ Se cierra TODO lo pendiente de la mesa (
+                                {formatMoney(
+                                  cuenta.partes.reduce((acc, p) => acc + p.pendiente + (p.tienda?.pendiente ?? 0), 0),
+                                )}
+                                , mesa y tienda) sin ingreso en Caja General — queda en el historial administrativo.
+                                Lo que ya se pagó de verdad no cambia.
+                              </p>
+                              <label className="flex items-center gap-2 text-xs">
+                                <span>Propina (opcional)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={propinaAdministrativa}
+                                  onChange={(e) => setPropinaAdministrativa(Math.max(0, Number(e.target.value)))}
+                                  className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                                />
+                              </label>
+                              {propinaAdministrativa > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <span>¿En qué se recibió la propina?</span>
+                                  {(["efectivo", "banco"] as const).map((m) => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setPropinaMetodoPago(m)}
+                                      className={`rounded-md border-2 px-2 py-1 text-xs font-medium capitalize ${
+                                        propinaMetodoPago === m
+                                          ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                                          : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                                      }`}
+                                    >
+                                      {m}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={cerrarCobroAdministrativo}
+                                  disabled={cobrando}
+                                  className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                                >
+                                  {cobrando ? "Cerrando..." : "Confirmar cierre administrativo"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmandoAdministrativo(false)}
+                                  disabled={cobrando}
+                                  className="rounded-md border border-brand-vanilla-dark px-3 py-2 text-sm dark:border-brand-green-700"
+                                >
+                                  Volver
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       )}
                     </>
                   )}

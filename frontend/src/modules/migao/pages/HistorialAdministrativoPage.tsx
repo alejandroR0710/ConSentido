@@ -52,6 +52,12 @@ function formatearFechaLarga(fecha: string) {
   return `${DIAS_SEMANA[d.getDay()]} ${dia} de ${MESES[mes - 1]}`;
 }
 
+// Cierre administrativo de la cuenta (mesa + tienda). Las cuentas viejas (antes
+// de 2026-10-25) siempre traen monto_administrativo; el respaldo es por si acaso.
+function montoAdministrativo(h: HistorialAdministrativoEntrada): number {
+  return Number(h.monto_administrativo ?? h.total_cobrado);
+}
+
 interface GrupoDiaAdministrativo {
   fecha: string;
   entradas: HistorialAdministrativoEntrada[];
@@ -158,7 +164,9 @@ export function HistorialAdministrativoPage() {
               </tr>
             ) : (
               grupos.flatMap((grupo) => {
-                const totalDelDia = grupo.entradas.reduce((acc, h) => acc + Number(h.total_cobrado), 0);
+                // Lo cerrado como administrativo (mesa + tienda); en una mesa con
+                // abonos reales antes, solo esa parte (lo pagado está en Caja).
+                const totalDelDia = grupo.entradas.reduce((acc, h) => acc + montoAdministrativo(h), 0);
                 const filaEncabezado = (
                   <tr
                     key={`dia-${grupo.fecha}`}
@@ -205,7 +213,13 @@ export function HistorialAdministrativoPage() {
                           </div>
                         </>
                       ) : (
-                        formatMoney(h.total_cobrado)
+                        formatMoney(montoAdministrativo(h))
+                      )}
+                      {Number(h.monto_pagado_real ?? 0) > 0 && (
+                        <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                          Administrativo {formatMoney(montoAdministrativo(h))} · ya se había pagado{" "}
+                          {formatMoney(Number(h.monto_pagado_real))} en Caja
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-2">

@@ -404,12 +404,13 @@ export type CarritoTienda = {
   descuentoMonto: number;
   monto: number;
   pagado: number;
+  pagoAdministrativo: boolean;
   pendiente: number;
 };
 
 export async function getCarritoTiendaPorParte(parteId: string, executor: Executor = pool): Promise<CarritoTienda | null> {
   const ventaResult = await executor.query(
-    `SELECT id, estado, monto, descuento_porcentaje, descuento
+    `SELECT id, estado, monto, descuento_porcentaje, descuento, pago_administrativo
        FROM con_sentido_ventas WHERE parte_id = $1 AND estado != 'anulada'`,
     [parteId],
   );
@@ -443,7 +444,9 @@ export async function getCarritoTiendaPorParte(parteId: string, executor: Execut
     descuentoMonto: Number(venta.descuento ?? 0),
     monto,
     pagado,
-    pendiente: Math.max(0, monto - pagado),
+    // Cerrado con pago administrativo: saldado aunque no haya entrado a Caja.
+    pagoAdministrativo: Number(venta.pago_administrativo ?? 0) === 1,
+    pendiente: Number(venta.pago_administrativo ?? 0) === 1 ? 0 : Math.max(0, monto - pagado),
   };
 }
 
@@ -532,6 +535,16 @@ export async function marcarCarritoCompletado(
   await client.query(
     `UPDATE con_sentido_ventas SET estado = 'completada', metodo_pago = $2, monto_efectivo = $3, monto_banco = $4 WHERE id = $1`,
     [ventaId, pago.metodoPago, pago.montoEfectivo, pago.montoBanco],
+  );
+}
+
+/** Cierre administrativo del carrito de tienda de una mesa (ver
+ *  migao.service.ts::cerrarCobroAdministrativo): queda completada, sin método de
+ *  pago real (no entró nada a Caja) y marcada para que ya no figure pendiente. */
+export async function marcarCarritoAdministrativo(client: PoolClient, ventaId: string) {
+  await client.query(
+    `UPDATE con_sentido_ventas SET estado = 'completada', pago_administrativo = 1 WHERE id = $1`,
+    [ventaId],
   );
 }
 

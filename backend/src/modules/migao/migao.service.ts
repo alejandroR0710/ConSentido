@@ -12,6 +12,7 @@ import {
   AgregarItemInput,
   CambiarMesaInput,
   EditarNombreOrdenInput,
+  CerrarCobroAdministrativoInput,
   CerrarOrdenInput,
   CheckItemInput,
   CrearCotizacionInput,
@@ -1813,6 +1814,112 @@ export async function registrarAbono(parteId: string, input: RegistrarAbonoInput
     await client.query("COMMIT");
     notificarAlertasInventario(alertasInventario);
     return { ...(await repo.getCuentaPorOrden(parte.orden_id)), alertasInventario };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Cierre administrativo del cobro en curso (ver cerrarCobroAdministrativoSchema).
+ * Por cada parte de la cuenta: lo que falte de mesa queda como un pago
+ * 'administrativo' (sin cajaService.registrarIngreso — no entra a Caja
+ * General) y lo que falte del carrito de tienda vinculado se marca saldado de
+ * forma administrativa (conSentidoRepo.marcarCarritoAdministrativo). Lo ya
+ * abonado de verdad queda tal cual en Caja (opción "a" acordada con el negocio,
+ * 2026-10-25): la mesa figura en el historial normal por lo pagado y en el
+ * administrativo por lo que se cerró así. El stock de la tienda no se toca: ya
+ * se descontó al vincular el carrito.
+ */
+export async function cerrarCobroAdministrativo(
+  ordenId: string,
+  input: CerrarCobroAdministrativoInput,
+  usuarioId: string,
+  rolId: number,
+) {
+  if (!(await tienePermiso(rolId, "migao.ordenes.pago_administrativo"))) {
+    throw Errors.forbidden("No tiene permiso para cerrar una cuenta como pago administrativo");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const orden = await repo.getOrdenById(ordenId, client, true);
+    if (!orden) throw Errors.notFound("Orden no encontrada");
+    if (orden.estado === "cerrada") throw Errors.conflict("Esta orden ya está cerrada");
+    if (orden.estado === "cancelada") throw Errors.conflict("Esta orden fue cancelada");
+
+    const partesResult = await client.query(
+      `SELECT cp.id, cp.indice, cp.monto_debido, cp.venta_id,
+              COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.parte_id = cp.id), 0) AS pagado
+         FROM migao_cuenta_partes cp
+         JOIN ventas v ON v.id = cp.venta_id
+        WHERE v.orden_id = $1
+        ORDER BY cp.indice
+        FOR UPDATE`,
+      [ordenId],
+    );
+    if (partesResult.rowCount === 0) {
+      throw Errors.conflict("Esta cuenta no tiene un cobro en curso — usa el pago administrativo del cobro normal");
+    }
+    const ventaId = partesResult.rows[0].venta_id as string;
+
+    let cerradoAlgo = false;
+    for (const parte of partesResult.rows) {
+      const pendienteMesa = Number(parte.monto_debido) - Number(parte.pagado);
+      if (pendienteMesa > 0.01) {
+        await repo.crearPago(client, {
+          ordenId,
+          ventaId,
+          metodoPago: "administrativo",
+          monto: Math.round(pendienteMesa * 100) / 100,
+          referencia: input.referencia ?? `Pago administrativo parte ${parte.indice}`,
+          usuarioId,
+          parteId: parte.id,
+        });
+        cerradoAlgo = true;
+      }
+
+      const carrito = await conSentidoRepo.getCarritoTiendaPorParte(parte.id, client);
+      if (carrito && carrito.pendiente > 0.01) {
+        await conSentidoRepo.marcarCarritoAdministrativo(client, carrito.ventaId);
+        await conSentidoRepo.getOrCrearFactura(
+          { ventaId: carrito.ventaId, subtotal: carrito.monto + carrito.descuentoMonto, total: carrito.monto },
+          client,
+        );
+        cerradoAlgo = true;
+      }
+    }
+    if (!cerradoAlgo) throw Errors.conflict("Esta cuenta ya está completamente pagada");
+
+    if (input.propina) {
+      await repo.crearPropina(client, {
+        ordenId,
+        ventaId,
+        meseroId: orden.mesero_id,
+        usuarioId,
+        monto: input.propina.monto,
+        porcentaje: input.propina.porcentaje ?? null,
+        metodoPago: input.propina.metodoPago,
+      });
+    }
+
+    // Igual que el último abono de registrarAbono: rescate de consumo de
+    // inventario de lo que nunca llegó a "listo" y cierre de la orden.
+    const itemsDeLaOrden = await repo.getItemsPorOrden(ordenId, client);
+    const alertasInventario = await aplicarConsumoFaltanteAlCerrar(
+      client,
+      itemsDeLaOrden.filter((i) => i.estado !== "cancelado"),
+      usuarioId,
+    );
+    await repo.cerrarOrdenEstado(client, ordenId);
+
+    await client.query("COMMIT");
+    notificarAlertasInventario(alertasInventario);
+    return { ...(await repo.getCuentaPorOrden(ordenId)), alertasInventario };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

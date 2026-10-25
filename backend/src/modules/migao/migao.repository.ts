@@ -142,7 +142,8 @@ export async function listOrdenesHistorial(meseroId?: string) {
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
             MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
             MAX(f.numero) AS numero_factura,
-            MAX(pe.monto_recibido_efectivo) AS monto_recibido_efectivo, MAX(pe.vuelto_efectivo) AS vuelto_efectivo
+            MAX(pe.monto_recibido_efectivo) AS monto_recibido_efectivo, MAX(pe.vuelto_efectivo) AS vuelto_efectivo,
+            MAX(adm.monto) AS monto_administrativo
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -176,6 +177,31 @@ export async function listOrdenesHistorial(meseroId?: string) {
          FROM pagos inner_p
          WHERE inner_p.venta_id = v.id AND inner_p.monto_recibido_efectivo IS NOT NULL
        ) pe ON true
+       -- Lo cerrado como pago administrativo (mesa: pagos 'administrativo';
+       -- tienda: carritos con pago_administrativo = 1) y lo que entró de verdad
+       -- a Caja (mesa + tienda). Subconsultas laterales (1 fila por venta) para
+       -- no multiplicar las filas de orden_items en el SUM del total. Una mesa
+       -- con abonos reales y el resto cerrado administrativo (2026-10-25)
+       -- aparece en los DOS historiales, cada uno con su parte.
+       LEFT JOIN LATERAL (
+         SELECT COALESCE((SELECT SUM(pa.monto) FROM pagos pa
+                           WHERE pa.venta_id = v.id AND pa.metodo_pago = 'administrativo'), 0)
+              + COALESCE((SELECT SUM(csa.monto) FROM con_sentido_ventas csa
+                            JOIN migao_cuenta_partes cpa ON cpa.id = csa.parte_id
+                           WHERE cpa.venta_id = v.id AND csa.pago_administrativo = 1), 0) AS monto,
+                (SELECT MAX(pa2.referencia) FROM pagos pa2
+                  WHERE pa2.venta_id = v.id AND pa2.metodo_pago = 'administrativo') AS referencia
+       ) adm ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS movimientos, COALESCE(SUM(r.monto), 0) AS monto
+           FROM movimientos_caja r
+          WHERE r.tipo = 'ingreso'
+            AND ((r.referencia_entidad = 'ventas' AND r.referencia_id = v.id)
+              OR (r.referencia_entidad = 'con_sentido_ventas' AND r.referencia_id IN (
+                    SELECT csr.id FROM con_sentido_ventas csr
+                      JOIN migao_cuenta_partes cpr ON cpr.id = csr.parte_id
+                     WHERE cpr.venta_id = v.id)))
+       ) pagado_real ON true
       -- Cajero ($1 = NULL): solo cobradas — las canceladas viven en su propio
       -- historial aparte (ver listOrdenesHistorialCancelado), no tiene sentido
       -- mezclar cuentas que nunca generaron un peso con el pago diario real.
@@ -183,11 +209,12 @@ export async function listOrdenesHistorial(meseroId?: string) {
       -- también las que él mismo canceló, como siempre.
       WHERE (($1 IS NULL AND o.estado = 'cerrada')
          OR  ($1 IS NOT NULL AND o.estado IN ('cerrada', 'cancelada') AND o.mesero_id = $1))
-        -- Las cuentas cerradas con pago administrativo no cuentan como "pago
-        -- diario": viven en su propio historial (ver listOrdenesHistorialAdministrativo).
-        AND NOT EXISTS (
-          SELECT 1 FROM pagos WHERE pagos.venta_id = v.id AND pagos.metodo_pago = 'administrativo'
-        )
+        -- Las cuentas cerradas SOLO con pago administrativo no cuentan como
+        -- "pago diario": viven en su propio historial (ver
+        -- listOrdenesHistorialAdministrativo). Si además tuvieron abonos reales,
+        -- sí aparecen acá (por lo que entró de verdad), marcadas con
+        -- monto_administrativo > 0.
+        AND (COALESCE(adm.monto, 0) = 0 OR pagado_real.movimientos > 0)
       GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
                c.nombre, u.nombre
       ORDER BY o.closed_at DESC
@@ -242,17 +269,42 @@ export async function listOrdenesHistorialAdministrativo() {
     `SELECT o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas,
             m.numero AS mesa_numero, m.piso AS mesa_piso, u.nombre AS mesero_nombre,
             MAX(v.descuento_porcentaje) AS descuento_porcentaje, MAX(v.total) AS total_cobrado,
-            MAX(p.referencia) AS referencia,
+            MAX(adm.referencia) AS referencia,
             COALESCE(SUM(oi.cantidad * oi.precio_unitario), 0) AS total,
-            MAX(f.numero) AS numero_factura
+            MAX(f.numero) AS numero_factura,
+            MAX(adm.monto) AS monto_administrativo, MAX(pagado_real.monto) AS monto_pagado_real
        FROM ordenes o
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
        LEFT JOIN orden_items oi ON oi.orden_id = o.id AND oi.estado != 'cancelado'
        JOIN ventas v ON v.orden_id = o.id
-       JOIN pagos p ON p.venta_id = v.id AND p.metodo_pago = 'administrativo'
        LEFT JOIN facturas f ON f.venta_id = v.id
-      WHERE o.estado = 'cerrada'
+       -- Lo cerrado como pago administrativo (mesa: pagos 'administrativo';
+       -- tienda: carritos con pago_administrativo = 1) y lo que entró de verdad
+       -- a Caja (mesa + tienda). Subconsultas laterales (1 fila por venta) para
+       -- no multiplicar las filas de orden_items en el SUM del total. Una mesa
+       -- con abonos reales y el resto cerrado administrativo (2026-10-25)
+       -- aparece en los DOS historiales, cada uno con su parte.
+       LEFT JOIN LATERAL (
+         SELECT COALESCE((SELECT SUM(pa.monto) FROM pagos pa
+                           WHERE pa.venta_id = v.id AND pa.metodo_pago = 'administrativo'), 0)
+              + COALESCE((SELECT SUM(csa.monto) FROM con_sentido_ventas csa
+                            JOIN migao_cuenta_partes cpa ON cpa.id = csa.parte_id
+                           WHERE cpa.venta_id = v.id AND csa.pago_administrativo = 1), 0) AS monto,
+                (SELECT MAX(pa2.referencia) FROM pagos pa2
+                  WHERE pa2.venta_id = v.id AND pa2.metodo_pago = 'administrativo') AS referencia
+       ) adm ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS movimientos, COALESCE(SUM(r.monto), 0) AS monto
+           FROM movimientos_caja r
+          WHERE r.tipo = 'ingreso'
+            AND ((r.referencia_entidad = 'ventas' AND r.referencia_id = v.id)
+              OR (r.referencia_entidad = 'con_sentido_ventas' AND r.referencia_id IN (
+                    SELECT csr.id FROM con_sentido_ventas csr
+                      JOIN migao_cuenta_partes cpr ON cpr.id = csr.parte_id
+                     WHERE cpr.venta_id = v.id)))
+       ) pagado_real ON true
+      WHERE o.estado = 'cerrada' AND adm.monto > 0
       GROUP BY o.id, o.estado, o.created_at, o.closed_at, o.comensal_numero, o.numero_personas, m.numero, m.piso,
                u.nombre
       ORDER BY o.closed_at DESC

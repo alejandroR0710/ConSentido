@@ -213,6 +213,24 @@ export const registrarAbonoSchema = z.union([
 ]);
 export type RegistrarAbonoInput = z.infer<typeof registrarAbonoSchema>;
 
+// Cierre administrativo del cobro EN CURSO (motor de partes/abonos, incluidas
+// mesas con productos de la tienda): liquida TODO lo pendiente de la mesa sin
+// ingreso en Caja General. Lo ya pagado de verdad no se toca. Exclusivo de
+// Root/Super Root (permiso migao.ordenes.pago_administrativo, validado en el
+// service). La propina no tiene un pago real del que derivar el método: lo
+// elige el cajero, igual que en el cobro simple administrativo.
+export const cerrarCobroAdministrativoSchema = z.object({
+  propina: z
+    .object({
+      monto: z.number().positive(),
+      porcentaje: z.number().nullable().optional(),
+      metodoPago: z.enum(["efectivo", "banco"]),
+    })
+    .optional(),
+  referencia: z.string().max(100).optional(),
+});
+export type CerrarCobroAdministrativoInput = z.infer<typeof cerrarCobroAdministrativoSchema>;
+
 // Cobra solo ALGUNOS productos de una cuenta que sigue abierta (el mesero
 // puede seguir agregando productos nuevos mientras tanto) — genera su propia
 // venta+factura independiente, aparte de cerrarOrden/iniciarCobro de arriba.

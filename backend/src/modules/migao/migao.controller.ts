@@ -23,6 +23,7 @@ import {
   marcarCotizacionFacturadaSchema,
   pagarItemsSchema,
   posicionMesaSchema,
+  cerrarCobroAdministrativoSchema,
   registrarAbonoSchema,
   reiniciarTodoSchema,
   repartirPropinasSchema,
@@ -233,6 +234,12 @@ export async function iniciarCobroController(req: Request, res: Response) {
 
 export async function obtenerCuentaController(req: Request, res: Response) {
   const cuenta = await service.obtenerCuenta(req.params.id);
+  return ok(res, cuenta);
+}
+
+export async function cerrarCobroAdministrativoController(req: Request, res: Response) {
+  const data = cerrarCobroAdministrativoSchema.parse(req.body);
+  const cuenta = await service.cerrarCobroAdministrativo(req.params.id, data, req.auth!.usuarioId, req.auth!.rolId);
   return ok(res, cuenta);
 }
 

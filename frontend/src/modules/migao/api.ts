@@ -58,6 +58,9 @@ export interface HistorialEntradaOrden extends OrdenHistorialResumen {
   // null si no hubo nada de efectivo de por medio. Ver pagos.monto_recibido_efectivo.
   monto_recibido_efectivo: string | null;
   vuelto_efectivo: string | null;
+  // > 0 si además una parte se cerró como pago administrativo (cobro en curso
+  // mixto): esa parte vive en el Historial Administrativo.
+  monto_administrativo?: string | null;
 }
 
 /** Cuenta cerrada con pago "administrativo": no generó ingreso en Caja
@@ -75,6 +78,10 @@ export interface HistorialAdministrativoEntrada {
   descuento_porcentaje: number;
   total_cobrado: string;
   numero_factura: string | null;
+  // Lo cerrado como administrativo (mesa + tienda) y lo que sí se pagó de verdad
+  // antes (abonos del cobro en curso) — una mesa mixta aparece en los dos historiales.
+  monto_administrativo: string;
+  monto_pagado_real: string;
 }
 
 export interface ItemHistorialCancelado {
@@ -699,6 +706,13 @@ export const migaoApi = {
   // independiente de la de otros abonos de la misma cuenta.
   registrarAbono: (parteId: string, input: RegistrarAbonoInput) =>
     apiFetch<CuentaDetalle>(`/migao/cuentas/partes/${parteId}/abonos`, { method: "POST", body: input }),
+  // Cierre administrativo del cobro en curso (Root/Super Root): liquida TODO lo
+  // pendiente de la mesa (mesa + tienda) sin ingreso en Caja General. Lo ya
+  // abonado de verdad queda como está.
+  cerrarCobroAdministrativo: (
+    ordenId: string,
+    input: { propina?: { monto: number; porcentaje?: number | null; metodoPago: "efectivo" | "banco" } },
+  ) => apiFetch<CuentaDetalle>(`/migao/ordenes/${ordenId}/cobro/cerrar-administrativo`, { method: "POST", body: input }),
   // Venta combinada mesa + Con Sentido: crea o reemplaza por completo el
   // carrito de tienda de esta parte (ver docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md).
   vincularCarritoTienda: (

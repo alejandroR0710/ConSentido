@@ -312,10 +312,14 @@ export function IngresoModal({
       ordenIdElegida !== null &&
       todasLasPartes !== null &&
       !faltaElegirParte &&
-      // Ya hay un carrito vinculado a esa parte: no se puede pisar en
-      // silencio desde acá — hay que desvincularlo primero (ver botón
-      // abajo) o elegir otra parte.
-      !parteElegida?.tienda &&
+      // Ya hay un carrito vinculado a esa parte: desde Caja no se puede
+      // pisar en silencio — hay que desvincularlo primero (ver botón abajo)
+      // o elegir otra parte. Embebido en el cobro de la mesa ("Editar
+      // tienda") sí: reemplazar ese carrito es justo lo que se está haciendo
+      // (migaoApi.vincularCarritoTienda lo reemplaza, ver registrar()).
+      // Antes esto también aplicaba embebido y el botón "Vincular a la mesa"
+      // quedaba deshabilitado al editar (hallazgo real 2026-10-25).
+      (embebido || !parteElegida?.tienda) &&
       (!pagarAhora ||
         (totalCombinadoMesa > 0 && !mixtoInvalido && !faltaMontoRecibido && !faltaReferenciaBanco(pago)))
     : montoNeto > 0 &&

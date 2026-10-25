@@ -53,12 +53,6 @@ function formatearFechaCorta(fecha: string) {
   return `${DIAS_SEMANA[d.getDay()].slice(0, 3)} ${d.getDate()} ${MESES_CORTO[d.getMonth()]}`;
 }
 
-/** Hoy en hora Colombia, 'YYYY-MM-DD' — mismo criterio usado en el resto del
- *  módulo para agrupar/filtrar por día calendario. */
-function hoyBogota() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
-}
-
 /** Lunes de la semana (ISO) a la que pertenece esta fecha — clave para
  *  agrupar los días pendientes en bloques de "semana completa". */
 function lunesDeLaSemana(fecha: string) {
@@ -91,31 +85,23 @@ function agruparPorSemana(dias: PendientePropinaDia[]): GrupoSemana[] {
 /**
  * Reparto de propinas: primero se eligen qué días concretos entran (una
  * semana completa o sueltos, vía checkboxes agrupados por semana) — cada día
- * trae su pendiente en efectivo y en banco. Después se desglosa ese total
- * entre las personas del equipo, cada entrega con su propio método de pago
- * (en qué se le entrega a ESA persona, sin importar en qué método vino la
- * propina original) — la suma de las entregas en efectivo tiene que dar
- * exactamente el pendiente en efectivo elegido, y lo mismo banco, así el
- * historial por persona siempre cuadra con la plata real repartida en cada
- * método.
+ * trae su pendiente en efectivo y en banco. Después se desglosa CADA DÍA por
+ * separado entre quienes trabajaron ESE día (pueden ser personas distintas
+ * de un día a otro, y no hace falta incluir a todos en todos los días) —
+ * cada entrega con su propio método de pago (en qué se le entrega a ESA
+ * persona, sin importar en qué método vino la propina original). Cada día
+ * tiene que cuadrar exacto, en efectivo y en banco, antes de poder repartir
+ * (pedido explícito: evita repartir por accidente la plata de un día usando
+ * el sobrante de otro). Al final se muestra un resumen con el total que le
+ * toca a cada persona, sumando todas sus entregas de todos los días
+ * elegidos.
  */
 export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropinasModalProps) {
   const [pendientesDia, setPendientesDia] = useState<PendientePropinaDia[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
-  const [entregas, setEntregas] = useState<FilaEntrega[]>([
-    {
-      nombrePersona: "",
-      nombreManual: false,
-      metodoPago: "efectivo",
-      monto: 0,
-      montoEfectivo: 0,
-      montoBanco: 0,
-      fechaEntrega: hoyBogota(),
-      motivo: "",
-    },
-  ]);
+  const [entregas, setEntregas] = useState<FilaEntrega[]>([]);
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,12 +144,17 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const restanteBanco = totalBancoSeleccionado - sumaEntregasBanco;
 
   function alternarDia(fecha: string) {
+    const estabaMarcado = diasSeleccionados.has(fecha);
     setDiasSeleccionados((prev) => {
       const siguiente = new Set(prev);
       if (siguiente.has(fecha)) siguiente.delete(fecha);
       else siguiente.add(fecha);
       return siguiente;
     });
+    // Un día que se desmarca ya no entra en el reparto — las entregas que
+    // tenía quedarían colgando de un día fuera del lote, así que se
+    // descartan con él (evita un reparto "fantasma" si se vuelve a marcar).
+    if (estabaMarcado) setEntregas((prev) => prev.filter((e) => e.fechaEntrega !== fecha));
   }
 
   function alternarSemana(grupo: GrupoSemana, marcar: boolean) {
@@ -175,13 +166,20 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
       }
       return siguiente;
     });
+    if (!marcar) {
+      const fechasQuitadas = new Set(grupo.dias.map((d) => d.fecha));
+      setEntregas((prev) => prev.filter((e) => !fechasQuitadas.has(e.fechaEntrega)));
+    }
   }
 
   function actualizarEntrega(indice: number, campo: keyof FilaEntrega, valor: string | number | boolean) {
     setEntregas((prev) => prev.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e)));
   }
 
-  function agregarEntrega() {
+  /** Agrega una fila de entrega para UN día puntual — cada día elegido tiene
+   *  su propio botón "+ Agregar persona", así la fila ya nace con la fecha
+   *  correcta (ya no es un campo editable, ver el JSX más abajo). */
+  function agregarEntrega(fecha: string) {
     setEntregas((prev) => [
       ...prev,
       {
@@ -191,7 +189,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
         monto: 0,
         montoEfectivo: 0,
         montoBanco: 0,
-        fechaEntrega: hoyBogota(),
+        fechaEntrega: fecha,
         motivo: "",
       },
     ]);
@@ -201,27 +199,73 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     setEntregas((prev) => prev.filter((_, i) => i !== indice));
   }
 
-  /** Llena el/los monto(s) de esta fila con lo que falte para cuadrar —
-   *  atajo para el caso más común (repartir todo entre 1-2 personas). En
-   *  mixto llena efectivo y banco por separado, cada uno con lo que quede
-   *  de SU método. */
+  /** Llena el/los monto(s) de esta fila con lo que falte para cuadrar el
+   *  pendiente de SU PROPIO día (no el total del reparto completo) — atajo
+   *  para el caso más común (repartir el día entre 1-2 personas). En mixto
+   *  llena efectivo y banco por separado, cada uno con lo que quede de SU
+   *  método ese día. */
   function usarRestante(indice: number) {
     const fila = entregas[indice];
+    const diaActual = pendientesDia.find((d) => d.fecha === fila.fechaEntrega);
+    if (!diaActual) return;
+    const entregasMismoDia = entregas.filter((e, i) => i !== indice && e.fechaEntrega === fila.fechaEntrega);
     if (fila.metodoPago === "mixto") {
-      const otrasEfectivo = entregas.reduce((acc, e, i) => (i === indice ? acc : acc + montoEfectivoDeFila(e)), 0);
-      const otrasBanco = entregas.reduce((acc, e, i) => (i === indice ? acc : acc + montoBancoDeFila(e)), 0);
-      actualizarEntrega(indice, "montoEfectivo", Math.max(0, totalEfectivoSeleccionado - otrasEfectivo));
-      actualizarEntrega(indice, "montoBanco", Math.max(0, totalBancoSeleccionado - otrasBanco));
+      const otrasEfectivo = entregasMismoDia.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
+      const otrasBanco = entregasMismoDia.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
+      actualizarEntrega(indice, "montoEfectivo", Math.max(0, diaActual.montoEfectivo - otrasEfectivo));
+      actualizarEntrega(indice, "montoBanco", Math.max(0, diaActual.montoBanco - otrasBanco));
       return;
     }
-    const totalDelMetodo = fila.metodoPago === "efectivo" ? totalEfectivoSeleccionado : totalBancoSeleccionado;
-    const otras = entregas.reduce(
-      (acc, e, i) => (i === indice || e.metodoPago !== fila.metodoPago ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)),
+    const totalDelMetodo = fila.metodoPago === "efectivo" ? diaActual.montoEfectivo : diaActual.montoBanco;
+    const otras = entregasMismoDia.reduce(
+      (acc, e) => (e.metodoPago !== fila.metodoPago ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)),
       0,
     );
     const sugerido = Math.max(0, totalDelMetodo - otras);
     actualizarEntrega(indice, "monto", sugerido);
   }
+
+  /** Cuánto cuadra cada día elegido por separado — cada uno tiene que dar
+   *  EXACTO en efectivo y en banco antes de poder repartir (pedido
+   *  explícito: nunca tapar el hueco de un día con el sobrante de otro). */
+  const cuadreDias = useMemo(
+    () =>
+      diasElegidos.map((dia) => {
+        const entregasDia = entregas.filter((e) => e.fechaEntrega === dia.fecha);
+        const efectivoAsignado = entregasDia.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
+        const bancoAsignado = entregasDia.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
+        const faltaEfectivo = dia.montoEfectivo - efectivoAsignado;
+        const faltaBanco = dia.montoBanco - bancoAsignado;
+        return {
+          dia,
+          entregasDia,
+          cuadra: Math.abs(faltaEfectivo) < 1 && Math.abs(faltaBanco) < 1,
+          faltaEfectivo,
+          faltaBanco,
+        };
+      }),
+    [diasElegidos, entregas],
+  );
+  const todosLosDiasCuadran = cuadreDias.every((c) => c.cuadra);
+
+  /** Total consolidado por persona (sumando TODAS sus entregas, de todos los
+   *  días elegidos) — lo que de verdad le toca recibir, pedido explícito. Se
+   *  agrupa por el nombre tal cual quedó escrito (trim), ya que una persona
+   *  sin cuenta en la plataforma no tiene ID con qué agrupar distinto. */
+  const resumenPorPersona = useMemo(() => {
+    const mapa = new Map<string, { efectivo: number; banco: number }>();
+    for (const e of entregas) {
+      const nombre = e.nombrePersona.trim();
+      if (!nombre) continue;
+      const actual = mapa.get(nombre) ?? { efectivo: 0, banco: 0 };
+      actual.efectivo += montoEfectivoDeFila(e);
+      actual.banco += montoBancoDeFila(e);
+      mapa.set(nombre, actual);
+    }
+    return Array.from(mapa.entries())
+      .map(([nombre, m]) => ({ nombre, ...m, total: m.efectivo + m.banco }))
+      .sort((a, b) => b.total - a.total);
+  }, [entregas]);
 
   const entregasValidas = entregas.every((e) => {
     if (e.nombrePersona.trim().length === 0) return false;
@@ -234,6 +278,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     totalSeleccionado > 0 &&
     entregas.length > 0 &&
     entregasValidas &&
+    todosLosDiasCuadran &&
     Math.abs(restanteEfectivo) < 1 &&
     Math.abs(restanteBanco) < 1;
 
@@ -342,144 +387,195 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
             </p>
           </div>
 
-          {/* Paso 2: entregas por persona */}
+          {/* Paso 2: un bloque por día elegido — cada uno con sus propias
+              personas/montos, y su propio indicador de cuadre (no se puede
+              repartir hasta que TODOS los días cuadren). */}
           <div>
             <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-              2. ¿A quién se le entrega, y en qué método?
+              2. ¿Quién trabajó cada día, y cuánto le toca?
             </h3>
-            <div className="flex flex-col gap-2">
-              {entregas.map((entrega, indice) => (
-                <div
-                  key={indice}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1fr_1.3fr_auto] sm:items-center dark:border-brand-green-700"
-                >
-                  <div>
-                    <div className="mb-0.5 flex items-center justify-between gap-1">
-                      <label className="text-[11px] font-medium">Persona</label>
+            {diasElegidos.length === 0 ? (
+              <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Elige al menos un día arriba.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {diasElegidos.map((dia) => {
+                  const cuadre = cuadreDias.find((c) => c.dia.fecha === dia.fecha)!;
+                  const descripcionFalta = [
+                    Math.abs(cuadre.faltaEfectivo) >= 1
+                      ? cuadre.faltaEfectivo > 0
+                        ? `falta ${formatMoney(cuadre.faltaEfectivo)} efvo.`
+                        : `sobran ${formatMoney(-cuadre.faltaEfectivo)} efvo.`
+                      : null,
+                    Math.abs(cuadre.faltaBanco) >= 1
+                      ? cuadre.faltaBanco > 0
+                        ? `falta ${formatMoney(cuadre.faltaBanco)} banco`
+                        : `sobran ${formatMoney(-cuadre.faltaBanco)} banco`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <div
+                      key={dia.fecha}
+                      className="rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
+                    >
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold capitalize text-brand-ink dark:text-brand-vanilla">
+                          {formatearFechaCorta(dia.fecha)}{" "}
+                          <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                            · pendiente {formatMoney(dia.montoEfectivo + dia.montoBanco)}
+                          </span>
+                        </h4>
+                        <span
+                          className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                            cuadre.cuadra
+                              ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                          }`}
+                        >
+                          {cuadre.cuadra ? "cuadrado" : descripcionFalta}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        {entregas.map((entrega, indice) => {
+                          if (entrega.fechaEntrega !== dia.fecha) return null;
+                          return (
+                            <div
+                              key={indice}
+                              className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1.3fr_auto] sm:items-center dark:border-brand-green-700"
+                            >
+                              <div>
+                                <div className="mb-0.5 flex items-center justify-between gap-1">
+                                  <label className="text-[11px] font-medium">Persona</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      actualizarEntrega(indice, "nombreManual", !entrega.nombreManual);
+                                      actualizarEntrega(indice, "nombrePersona", "");
+                                    }}
+                                    className="rounded-full border border-brand-green-600 px-2 py-0.5 text-[10px] font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                                  >
+                                    {entrega.nombreManual ? "← elegir de la lista" : "✎ escribir nombre"}
+                                  </button>
+                                </div>
+                                {entrega.nombreManual ? (
+                                  <input
+                                    value={entrega.nombrePersona}
+                                    onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
+                                    placeholder="Ej. Juan Pérez"
+                                    className={inputClase}
+                                  />
+                                ) : (
+                                  <select
+                                    value={entrega.nombrePersona}
+                                    onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
+                                    className={inputClase}
+                                  >
+                                    <option value="">Elegir...</option>
+                                    {usuarios.map((u) => (
+                                      <option key={u.id} value={u.nombre}>
+                                        {u.nombre} · {u.rol_nombre}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                              <div>
+                                <label className="mb-0.5 block text-[11px] font-medium">Método</label>
+                                <select
+                                  value={entrega.metodoPago}
+                                  onChange={(e) => actualizarEntrega(indice, "metodoPago", e.target.value)}
+                                  className={inputClase}
+                                >
+                                  <option value="efectivo">Efectivo</option>
+                                  <option value="banco">Banco</option>
+                                  <option value="mixto">Mixto</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
+                                {entrega.metodoPago === "mixto" ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1">
+                                      <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                                        Ef.
+                                      </span>
+                                      <MoneyInput
+                                        value={entrega.montoEfectivo}
+                                        onChange={(v) => actualizarEntrega(indice, "montoEfectivo", v)}
+                                        className={inputClase}
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                                        Bc.
+                                      </span>
+                                      <MoneyInput
+                                        value={entrega.montoBanco}
+                                        onChange={(v) => actualizarEntrega(indice, "montoBanco", v)}
+                                        className={inputClase}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <MoneyInput
+                                      value={entrega.monto}
+                                      onChange={(v) => actualizarEntrega(indice, "monto", v)}
+                                      className={inputClase}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <label className="mb-0.5 block text-[11px] font-medium">Motivo (opcional)</label>
+                                <input
+                                  value={entrega.motivo}
+                                  onChange={(e) => actualizarEntrega(indice, "motivo", e.target.value)}
+                                  placeholder="Ej. turno completo"
+                                  className={inputClase}
+                                />
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => usarRestante(indice)}
+                                  title="Llenar con lo que falte de este día/método"
+                                  className="rounded-md border border-brand-green-600 px-2 py-1.5 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                                >
+                                  =Resto
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => quitarEntrega(indice)}
+                                  title="Quitar"
+                                  className="rounded-md border border-red-400 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {cuadre.entregasDia.length === 0 && (
+                          <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                            Todavía no agregaste a nadie este día.
+                          </p>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          actualizarEntrega(indice, "nombreManual", !entrega.nombreManual);
-                          actualizarEntrega(indice, "nombrePersona", "");
-                        }}
-                        className="rounded-full border border-brand-green-600 px-2 py-0.5 text-[10px] font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                        onClick={() => agregarEntrega(dia.fecha)}
+                        className="mt-2 rounded-md border border-brand-green-600 px-3 py-1.5 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
                       >
-                        {entrega.nombreManual ? "← elegir de la lista" : "✎ escribir nombre"}
+                        + Agregar persona
                       </button>
                     </div>
-                    {entrega.nombreManual ? (
-                      <input
-                        value={entrega.nombrePersona}
-                        onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                        placeholder="Ej. Juan Pérez"
-                        className={inputClase}
-                      />
-                    ) : (
-                      <select
-                        value={entrega.nombrePersona}
-                        onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                        className={inputClase}
-                      >
-                        <option value="">Elegir...</option>
-                        {usuarios.map((u) => (
-                          <option key={u.id} value={u.nombre}>
-                            {u.nombre} · {u.rol_nombre}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Método</label>
-                    <select
-                      value={entrega.metodoPago}
-                      onChange={(e) => actualizarEntrega(indice, "metodoPago", e.target.value)}
-                      className={inputClase}
-                    >
-                      <option value="efectivo">Efectivo</option>
-                      <option value="banco">Banco</option>
-                      <option value="mixto">Mixto</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
-                    {entrega.metodoPago === "mixto" ? (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1">
-                          <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Ef.</span>
-                          <MoneyInput
-                            value={entrega.montoEfectivo}
-                            onChange={(v) => actualizarEntrega(indice, "montoEfectivo", v)}
-                            className={inputClase}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Bc.</span>
-                          <MoneyInput
-                            value={entrega.montoBanco}
-                            onChange={(v) => actualizarEntrega(indice, "montoBanco", v)}
-                            className={inputClase}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <MoneyInput
-                          value={entrega.monto}
-                          onChange={(v) => actualizarEntrega(indice, "monto", v)}
-                          className={inputClase}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Fecha</label>
-                    <input
-                      type="date"
-                      value={entrega.fechaEntrega}
-                      onChange={(e) => actualizarEntrega(indice, "fechaEntrega", e.target.value)}
-                      className={inputClase}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-0.5 block text-[11px] font-medium">Motivo (opcional)</label>
-                    <input
-                      value={entrega.motivo}
-                      onChange={(e) => actualizarEntrega(indice, "motivo", e.target.value)}
-                      placeholder="Ej. turno completo"
-                      className={inputClase}
-                    />
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => usarRestante(indice)}
-                      title="Llenar con lo que falte de este método"
-                      className="rounded-md border border-brand-green-600 px-2 py-1.5 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-                    >
-                      =Resto
-                    </button>
-                    {entregas.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => quitarEntrega(indice)}
-                        title="Quitar"
-                        className="rounded-md border border-red-400 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={agregarEntrega}
-              className="mt-2 rounded-md border border-brand-green-600 px-3 py-1.5 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-            >
-              + Agregar persona
-            </button>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:gap-3">
               <div
@@ -489,7 +585,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                     : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
                 }`}
               >
-                Efectivo:{" "}
+                Total efectivo:{" "}
                 {Math.abs(restanteEfectivo) < 1
                   ? "cuadrado"
                   : restanteEfectivo > 0
@@ -503,7 +599,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                     : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
                 }`}
               >
-                Banco:{" "}
+                Total banco:{" "}
                 {Math.abs(restanteBanco) < 1
                   ? "cuadrado"
                   : restanteBanco > 0
@@ -512,6 +608,24 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
               </div>
             </div>
           </div>
+
+          {/* Paso 3: cuánto le toca a cada quien en total, sumando todos los
+              días elegidos — lo que de verdad hay que entregarle a cada uno. */}
+          {resumenPorPersona.length > 0 && (
+            <div className="rounded-lg border border-brand-green-600 bg-brand-green-50 p-3 dark:border-brand-vanilla dark:bg-brand-green-700/20">
+              <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                3. Total a recibir por persona
+              </h3>
+              <div className="flex flex-col gap-1">
+                {resumenPorPersona.map((r) => (
+                  <div key={r.nombre} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-brand-ink dark:text-brand-vanilla">{r.nombre}</span>
+                    <span className="font-semibold text-brand-ink dark:text-brand-vanilla">{formatMoney(r.total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-medium">Nota general del reparto (opcional)</label>

@@ -166,12 +166,22 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   }, [usuarios, participantesExtra]);
 
   function alternarDia(fecha: string) {
+    const estabaMarcado = diasSeleccionados.has(fecha);
     setDiasSeleccionados((prev) => {
       const siguiente = new Set(prev);
       if (siguiente.has(fecha)) siguiente.delete(fecha);
       else siguiente.add(fecha);
       return siguiente;
     });
+    // Un día que se desmarca pierde quién estaba marcado ahí — si se vuelve
+    // a marcar el mismo día, hay que elegir de nuevo quién trabajó (pedido
+    // explícito: no dejar presencias "fantasma" de una selección anterior).
+    if (estabaMarcado) {
+      setPresenciaPorDia((prev) => {
+        const { [fecha]: _omitido, ...resto } = prev;
+        return resto;
+      });
+    }
   }
 
   function alternarSemana(grupo: GrupoSemana, marcar: boolean) {
@@ -183,6 +193,14 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
       }
       return siguiente;
     });
+    if (!marcar) {
+      const fechasQuitadas = new Set(grupo.dias.map((d) => d.fecha));
+      setPresenciaPorDia((prev) => {
+        const siguiente = { ...prev };
+        for (const f of fechasQuitadas) delete siguiente[f];
+        return siguiente;
+      });
+    }
   }
 
   function alternarPresencia(fecha: string, nombre: string) {
@@ -491,7 +509,15 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                     key={a.nombre}
                     className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla p-2 dark:border-brand-green-700 dark:bg-brand-green-900 sm:grid-cols-[1.2fr_0.9fr_1fr_1.2fr] sm:items-center"
                   >
-                    <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">{a.nombre}</span>
+                    <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                      {a.nombre}{" "}
+                      <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                        · total{" "}
+                        <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                          {formatMoney(montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a))}
+                        </span>
+                      </span>
+                    </span>
                     <div>
                       <label className="mb-0.5 block text-[11px] font-medium">Método</label>
                       <select

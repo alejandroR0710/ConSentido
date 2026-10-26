@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
+import { ImagenConZoom } from "../../../shared/components/ImagenConZoom";
 import { formatearTextoBasico } from "../../../shared/format/texto";
 import { recetarioApi, type Receta } from "../api";
 import { urlEmbedVideo } from "../video";
@@ -43,9 +44,9 @@ export function RecetaDetallePage() {
       )}
 
       {receta.imagen_principal_url && (
-        <img
-          src={resolveImageUrl(receta.imagen_principal_url) ?? undefined}
-          alt=""
+        <ImagenConZoom
+          src={resolveImageUrl(receta.imagen_principal_url)!}
+          alt={receta.titulo}
           className="w-full rounded-xl object-cover"
         />
       )}
@@ -75,9 +76,9 @@ export function RecetaDetallePage() {
         <div className="flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
           <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Ejemplo de emplatado</h2>
           {receta.imagen_emplatado_url && (
-            <img
-              src={resolveImageUrl(receta.imagen_emplatado_url) ?? undefined}
-              alt=""
+            <ImagenConZoom
+              src={resolveImageUrl(receta.imagen_emplatado_url)!}
+              alt="Ejemplo de emplatado"
               className="w-full rounded-lg object-cover"
             />
           )}

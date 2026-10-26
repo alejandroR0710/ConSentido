@@ -11,32 +11,44 @@ interface RepartirPropinasModalProps {
   onRepartido: () => Promise<void> | void;
 }
 
-interface FilaEntrega {
-  nombrePersona: string;
-  // true = nombre libre (persona sin cuenta en la plataforma) en vez de
-  // elegido de la lista de usuarios.
-  nombreManual: boolean;
+interface Asignacion {
+  nombre: string;
   metodoPago: "efectivo" | "banco" | "mixto";
   // Solo se usa si metodoPago es "efectivo" o "banco".
   monto: number;
-  // Solo se usan si metodoPago es "mixto" — al confirmar, esta fila se
+  // Solo se usan si metodoPago es "mixto" — al confirmar, esta asignación se
   // descompone en 1-2 entregas ya puras (mismo criterio que "mixto" en
   // cualquier otro cobro de la app, ver descomponerPago en el backend).
   montoEfectivo: number;
   montoBanco: number;
-  fechaEntrega: string;
   motivo: string;
+  // true en cuanto el cajero toca el monto/método/motivo a mano — a partir
+  // de ahí deja de recalcularse solo con el reparto sugerido (ver el
+  // useEffect de sincronización más abajo), para no pisarle un ajuste manual
+  // sin avisar si después marca/desmarca a alguien en otro día.
+  editadoManual: boolean;
 }
 
-function montoEfectivoDeFila(e: FilaEntrega) {
-  if (e.metodoPago === "efectivo") return Number.isFinite(e.monto) ? e.monto : 0;
-  if (e.metodoPago === "mixto") return Number.isFinite(e.montoEfectivo) ? e.montoEfectivo : 0;
+function montoEfectivoDeAsignacion(a: Asignacion) {
+  if (a.metodoPago === "efectivo") return Number.isFinite(a.monto) ? a.monto : 0;
+  if (a.metodoPago === "mixto") return Number.isFinite(a.montoEfectivo) ? a.montoEfectivo : 0;
   return 0;
 }
-function montoBancoDeFila(e: FilaEntrega) {
-  if (e.metodoPago === "banco") return Number.isFinite(e.monto) ? e.monto : 0;
-  if (e.metodoPago === "mixto") return Number.isFinite(e.montoBanco) ? e.montoBanco : 0;
+function montoBancoDeAsignacion(a: Asignacion) {
+  if (a.metodoPago === "banco") return Number.isFinite(a.monto) ? a.monto : 0;
+  if (a.metodoPago === "mixto") return Number.isFinite(a.montoBanco) ? a.montoBanco : 0;
   return 0;
+}
+
+/** Reparte `total` en `n` montos iguales — la última persona absorbe el
+ *  residuo del redondeo, así la suma siempre da EXACTO el total (mismo
+ *  criterio que distribuirIgual en el backend, ver migao.service.ts). */
+function distribuirIgual(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor((total / n) * 100) / 100;
+  const montos = Array.from({ length: n }, () => base);
+  montos[n - 1] = Math.round((total - base * (n - 1)) * 100) / 100;
+  return montos;
 }
 
 const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -85,23 +97,30 @@ function agruparPorSemana(dias: PendientePropinaDia[]): GrupoSemana[] {
 /**
  * Reparto de propinas: primero se eligen qué días concretos entran (una
  * semana completa o sueltos, vía checkboxes agrupados por semana) — cada día
- * trae su pendiente en efectivo y en banco. Después se desglosa CADA DÍA por
- * separado entre quienes trabajaron ESE día (pueden ser personas distintas
- * de un día a otro, y no hace falta incluir a todos en todos los días) —
- * cada entrega con su propio método de pago (en qué se le entrega a ESA
- * persona, sin importar en qué método vino la propina original). Cada día
- * tiene que cuadrar exacto, en efectivo y en banco, antes de poder repartir
- * (pedido explícito: evita repartir por accidente la plata de un día usando
- * el sobrante de otro). Al final se muestra un resumen con el total que le
- * toca a cada persona, sumando todas sus entregas de todos los días
- * elegidos.
+ * trae su pendiente en efectivo y en banco. Después, para CADA día, se
+ * marca por checkbox quién trabajó ese día (de la lista de usuarios, o un
+ * participante nuevo escrito a mano) — pueden ser personas distintas de un
+ * día a otro, y no hace falta incluir a todos en todos los días. Al final se
+ * arma un resumen con el total consolidado de cada persona (repartido en
+ * partes iguales entre los días que marcó, como sugerencia de partida) con
+ * su monto y método de pago totalmente editables — si alguien debe recibir
+ * más o menos, se ajusta ahí mismo. La suma de todas las asignaciones tiene
+ * que cuadrar exacto con el pendiente total (efectivo y banco) antes de
+ * poder repartir.
  */
 export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropinasModalProps) {
   const [pendientesDia, setPendientesDia] = useState<PendientePropinaDia[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set());
-  const [entregas, setEntregas] = useState<FilaEntrega[]>([]);
+  // Participantes escritos a mano (sin cuenta en la plataforma) — se suman a
+  // los usuarios en la lista de checkboxes de todos los días, no solo el día
+  // en que se agregaron, para no tener que volver a escribirlos.
+  const [participantesExtra, setParticipantesExtra] = useState<string[]>([]);
+  // Quién está marcado como presente en cada día (clave = fecha).
+  const [presenciaPorDia, setPresenciaPorDia] = useState<Record<string, Set<string>>>({});
+  const [nuevoParticipante, setNuevoParticipante] = useState<Record<string, string>>({});
+  const [asignaciones, setAsignaciones] = useState<Record<string, Asignacion>>({});
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,23 +157,21 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const totalBancoSeleccionado = diasElegidos.reduce((acc, d) => acc + d.montoBanco, 0);
   const totalSeleccionado = totalEfectivoSeleccionado + totalBancoSeleccionado;
 
-  const sumaEntregasEfectivo = entregas.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
-  const sumaEntregasBanco = entregas.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
-  const restanteEfectivo = totalEfectivoSeleccionado - sumaEntregasEfectivo;
-  const restanteBanco = totalBancoSeleccionado - sumaEntregasBanco;
+  const todosLosParticipantes = useMemo(() => {
+    const nombres = usuarios.map((u) => u.nombre);
+    for (const extra of participantesExtra) {
+      if (!nombres.some((n) => n.toLowerCase() === extra.toLowerCase())) nombres.push(extra);
+    }
+    return nombres.sort((a, b) => a.localeCompare(b, "es"));
+  }, [usuarios, participantesExtra]);
 
   function alternarDia(fecha: string) {
-    const estabaMarcado = diasSeleccionados.has(fecha);
     setDiasSeleccionados((prev) => {
       const siguiente = new Set(prev);
       if (siguiente.has(fecha)) siguiente.delete(fecha);
       else siguiente.add(fecha);
       return siguiente;
     });
-    // Un día que se desmarca ya no entra en el reparto — las entregas que
-    // tenía quedarían colgando de un día fuera del lote, así que se
-    // descartan con él (evita un reparto "fantasma" si se vuelve a marcar).
-    if (estabaMarcado) setEntregas((prev) => prev.filter((e) => e.fechaEntrega !== fecha));
   }
 
   function alternarSemana(grupo: GrupoSemana, marcar: boolean) {
@@ -166,119 +183,111 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
       }
       return siguiente;
     });
-    if (!marcar) {
-      const fechasQuitadas = new Set(grupo.dias.map((d) => d.fecha));
-      setEntregas((prev) => prev.filter((e) => !fechasQuitadas.has(e.fechaEntrega)));
+  }
+
+  function alternarPresencia(fecha: string, nombre: string) {
+    setPresenciaPorDia((prev) => {
+      const actual = new Set(prev[fecha] ?? []);
+      if (actual.has(nombre)) actual.delete(nombre);
+      else actual.add(nombre);
+      return { ...prev, [fecha]: actual };
+    });
+  }
+
+  /** Agrega un participante nuevo (sin cuenta en la plataforma) a la lista
+   *  compartida de checkboxes, y lo marca de una vez como presente en el día
+   *  desde el que se agregó — para eso se estaba escribiendo, al fin y al
+   *  cabo. */
+  function agregarParticipante(fecha: string) {
+    const nombre = (nuevoParticipante[fecha] ?? "").trim();
+    if (!nombre) return;
+    if (!todosLosParticipantes.some((n) => n.toLowerCase() === nombre.toLowerCase())) {
+      setParticipantesExtra((prev) => [...prev, nombre]);
     }
+    setPresenciaPorDia((prev) => {
+      const actual = new Set(prev[fecha] ?? []);
+      actual.add(nombre);
+      return { ...prev, [fecha]: actual };
+    });
+    setNuevoParticipante((prev) => ({ ...prev, [fecha]: "" }));
   }
 
-  function actualizarEntrega(indice: number, campo: keyof FilaEntrega, valor: string | number | boolean) {
-    setEntregas((prev) => prev.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e)));
-  }
-
-  /** Agrega una fila de entrega para UN día puntual — cada día elegido tiene
-   *  su propio botón "+ Agregar persona", así la fila ya nace con la fecha
-   *  correcta (ya no es un campo editable, ver el JSX más abajo). */
-  function agregarEntrega(fecha: string) {
-    setEntregas((prev) => [
-      ...prev,
-      {
-        nombrePersona: "",
-        nombreManual: false,
-        metodoPago: "efectivo",
-        monto: 0,
-        montoEfectivo: 0,
-        montoBanco: 0,
-        fechaEntrega: fecha,
-        motivo: "",
-      },
-    ]);
-  }
-
-  function quitarEntrega(indice: number) {
-    setEntregas((prev) => prev.filter((_, i) => i !== indice));
-  }
-
-  /** Llena el/los monto(s) de esta fila con lo que falte para cuadrar el
-   *  pendiente de SU PROPIO día (no el total del reparto completo) — atajo
-   *  para el caso más común (repartir el día entre 1-2 personas). En mixto
-   *  llena efectivo y banco por separado, cada uno con lo que quede de SU
-   *  método ese día. */
-  function usarRestante(indice: number) {
-    const fila = entregas[indice];
-    const diaActual = pendientesDia.find((d) => d.fecha === fila.fechaEntrega);
-    if (!diaActual) return;
-    const entregasMismoDia = entregas.filter((e, i) => i !== indice && e.fechaEntrega === fila.fechaEntrega);
-    if (fila.metodoPago === "mixto") {
-      const otrasEfectivo = entregasMismoDia.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
-      const otrasBanco = entregasMismoDia.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
-      actualizarEntrega(indice, "montoEfectivo", Math.max(0, diaActual.montoEfectivo - otrasEfectivo));
-      actualizarEntrega(indice, "montoBanco", Math.max(0, diaActual.montoBanco - otrasBanco));
-      return;
+  // Sincroniza el resumen con quién quedó marcado en cada día: reparte el
+  // pendiente de cada día en partes iguales entre sus marcados y lo suma por
+  // persona (puede trabajar varios días). Una persona que el cajero ya ajustó
+  // a mano (editadoManual) conserva su valor tal cual, aunque se siga
+  // marcando/desmarcando gente en otros días — nunca le pisa un ajuste manual
+  // sin avisar.
+  useEffect(() => {
+    const sugerido = new Map<string, { efectivo: number; banco: number }>();
+    for (const dia of diasElegidos) {
+      const marcados = Array.from(presenciaPorDia[dia.fecha] ?? []);
+      if (marcados.length === 0) continue;
+      const partesEfectivo = distribuirIgual(dia.montoEfectivo, marcados.length);
+      const partesBanco = distribuirIgual(dia.montoBanco, marcados.length);
+      marcados.forEach((nombre, idx) => {
+        const actual = sugerido.get(nombre) ?? { efectivo: 0, banco: 0 };
+        actual.efectivo += partesEfectivo[idx] ?? 0;
+        actual.banco += partesBanco[idx] ?? 0;
+        sugerido.set(nombre, actual);
+      });
     }
-    const totalDelMetodo = fila.metodoPago === "efectivo" ? diaActual.montoEfectivo : diaActual.montoBanco;
-    const otras = entregasMismoDia.reduce(
-      (acc, e) => (e.metodoPago !== fila.metodoPago ? acc : acc + (Number.isFinite(e.monto) ? e.monto : 0)),
-      0,
-    );
-    const sugerido = Math.max(0, totalDelMetodo - otras);
-    actualizarEntrega(indice, "monto", sugerido);
-  }
 
-  /** Cuánto cuadra cada día elegido por separado — cada uno tiene que dar
-   *  EXACTO en efectivo y en banco antes de poder repartir (pedido
-   *  explícito: nunca tapar el hueco de un día con el sobrante de otro). */
-  const cuadreDias = useMemo(
-    () =>
-      diasElegidos.map((dia) => {
-        const entregasDia = entregas.filter((e) => e.fechaEntrega === dia.fecha);
-        const efectivoAsignado = entregasDia.reduce((acc, e) => acc + montoEfectivoDeFila(e), 0);
-        const bancoAsignado = entregasDia.reduce((acc, e) => acc + montoBancoDeFila(e), 0);
-        const faltaEfectivo = dia.montoEfectivo - efectivoAsignado;
-        const faltaBanco = dia.montoBanco - bancoAsignado;
-        return {
-          dia,
-          entregasDia,
-          cuadra: Math.abs(faltaEfectivo) < 1 && Math.abs(faltaBanco) < 1,
-          faltaEfectivo,
-          faltaBanco,
+    setAsignaciones((prev) => {
+      const siguiente: Record<string, Asignacion> = {};
+      for (const [nombre, montos] of sugerido) {
+        const existente = prev[nombre];
+        if (existente?.editadoManual) {
+          siguiente[nombre] = existente;
+          continue;
+        }
+        const esMixto = montos.efectivo > 0 && montos.banco > 0;
+        siguiente[nombre] = {
+          nombre,
+          metodoPago: esMixto ? "mixto" : montos.banco > 0 ? "banco" : "efectivo",
+          monto: esMixto ? 0 : montos.efectivo > 0 ? montos.efectivo : montos.banco,
+          montoEfectivo: montos.efectivo,
+          montoBanco: montos.banco,
+          motivo: existente?.motivo ?? "",
+          editadoManual: false,
         };
-      }),
-    [diasElegidos, entregas],
+      }
+      return siguiente;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diasSeleccionados, presenciaPorDia, pendientesDia]);
+
+  function actualizarAsignacion(nombre: string, campo: keyof Asignacion, valor: string | number | boolean) {
+    setAsignaciones((prev) => ({
+      ...prev,
+      [nombre]: { ...prev[nombre], [campo]: valor, editadoManual: true },
+    }));
+  }
+
+  const listaAsignaciones = useMemo(
+    () =>
+      Object.values(asignaciones).sort(
+        (a, b) =>
+          montoEfectivoDeAsignacion(b) + montoBancoDeAsignacion(b) - (montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a)),
+      ),
+    [asignaciones],
   );
-  const todosLosDiasCuadran = cuadreDias.every((c) => c.cuadra);
 
-  /** Total consolidado por persona (sumando TODAS sus entregas, de todos los
-   *  días elegidos) — lo que de verdad le toca recibir, pedido explícito. Se
-   *  agrupa por el nombre tal cual quedó escrito (trim), ya que una persona
-   *  sin cuenta en la plataforma no tiene ID con qué agrupar distinto. */
-  const resumenPorPersona = useMemo(() => {
-    const mapa = new Map<string, { efectivo: number; banco: number }>();
-    for (const e of entregas) {
-      const nombre = e.nombrePersona.trim();
-      if (!nombre) continue;
-      const actual = mapa.get(nombre) ?? { efectivo: 0, banco: 0 };
-      actual.efectivo += montoEfectivoDeFila(e);
-      actual.banco += montoBancoDeFila(e);
-      mapa.set(nombre, actual);
-    }
-    return Array.from(mapa.entries())
-      .map(([nombre, m]) => ({ nombre, ...m, total: m.efectivo + m.banco }))
-      .sort((a, b) => b.total - a.total);
-  }, [entregas]);
+  const sumaAsigEfectivo = listaAsignaciones.reduce((acc, a) => acc + montoEfectivoDeAsignacion(a), 0);
+  const sumaAsigBanco = listaAsignaciones.reduce((acc, a) => acc + montoBancoDeAsignacion(a), 0);
+  const restanteEfectivo = totalEfectivoSeleccionado - sumaAsigEfectivo;
+  const restanteBanco = totalBancoSeleccionado - sumaAsigBanco;
 
-  const entregasValidas = entregas.every((e) => {
-    if (e.nombrePersona.trim().length === 0) return false;
-    if (e.metodoPago === "mixto") return (e.montoEfectivo || 0) + (e.montoBanco || 0) > 0;
-    return e.monto > 0;
+  const asignacionesValidas = listaAsignaciones.every((a) => {
+    if (a.metodoPago === "mixto") return (a.montoEfectivo || 0) + (a.montoBanco || 0) > 0;
+    return a.monto > 0;
   });
   const puedeRepartir =
     !cargando &&
     diasSeleccionados.size > 0 &&
     totalSeleccionado > 0 &&
-    entregas.length > 0 &&
-    entregasValidas &&
-    todosLosDiasCuadran &&
+    listaAsignaciones.length > 0 &&
+    asignacionesValidas &&
     Math.abs(restanteEfectivo) < 1 &&
     Math.abs(restanteBanco) < 1;
 
@@ -288,21 +297,17 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     setError(null);
     try {
       // "Mixto" no es un método real en la base (mismo criterio que en
-      // cualquier otro cobro de la app) — cada fila mixta se descompone acá
-      // en 1-2 entregas ya puras antes de mandarlas.
-      const entregasParaEnviar = entregas.flatMap((e) => {
-        const base = {
-          nombrePersona: e.nombrePersona.trim(),
-          fechaEntrega: e.fechaEntrega || undefined,
-          motivo: e.motivo.trim() || undefined,
-        };
-        if (e.metodoPago === "mixto") {
+      // cualquier otro cobro de la app) — cada persona mixta se descompone
+      // acá en 1-2 entregas ya puras antes de mandarlas.
+      const entregasParaEnviar = listaAsignaciones.flatMap((a) => {
+        const base = { nombrePersona: a.nombre, motivo: a.motivo.trim() || undefined };
+        if (a.metodoPago === "mixto") {
           const lineas: (typeof base & { metodoPago: "efectivo" | "banco"; monto: number })[] = [];
-          if (e.montoEfectivo > 0) lineas.push({ ...base, metodoPago: "efectivo", monto: e.montoEfectivo });
-          if (e.montoBanco > 0) lineas.push({ ...base, metodoPago: "banco", monto: e.montoBanco });
+          if (a.montoEfectivo > 0) lineas.push({ ...base, metodoPago: "efectivo", monto: a.montoEfectivo });
+          if (a.montoBanco > 0) lineas.push({ ...base, metodoPago: "banco", monto: a.montoBanco });
           return lineas;
         }
-        return [{ ...base, metodoPago: e.metodoPago, monto: e.monto }];
+        return [{ ...base, metodoPago: a.metodoPago, monto: a.monto }];
       });
       await migaoApi.repartirPropinas({
         fechas: Array.from(diasSeleccionados),
@@ -387,242 +392,193 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
             </p>
           </div>
 
-          {/* Paso 2: un bloque por día elegido — cada uno con sus propias
-              personas/montos, y su propio indicador de cuadre (no se puede
-              repartir hasta que TODOS los días cuadren). */}
+          {/* Paso 2: un bloque por día elegido — checkbox de quién estuvo
+              presente ese día, más la opción de sumar un participante nuevo
+              a la lista. Acá todavía no se habla de plata, solo de quién
+              estuvo. */}
           <div>
             <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-              2. ¿Quién trabajó cada día, y cuánto le toca?
+              2. ¿Quién trabajó cada día?
             </h3>
             {diasElegidos.length === 0 ? (
               <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">Elige al menos un día arriba.</p>
             ) : (
               <div className="flex flex-col gap-3">
                 {diasElegidos.map((dia) => {
-                  const cuadre = cuadreDias.find((c) => c.dia.fecha === dia.fecha)!;
-                  const descripcionFalta = [
-                    Math.abs(cuadre.faltaEfectivo) >= 1
-                      ? cuadre.faltaEfectivo > 0
-                        ? `falta ${formatMoney(cuadre.faltaEfectivo)} efvo.`
-                        : `sobran ${formatMoney(-cuadre.faltaEfectivo)} efvo.`
-                      : null,
-                    Math.abs(cuadre.faltaBanco) >= 1
-                      ? cuadre.faltaBanco > 0
-                        ? `falta ${formatMoney(cuadre.faltaBanco)} banco`
-                        : `sobran ${formatMoney(-cuadre.faltaBanco)} banco`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
+                  const marcados = presenciaPorDia[dia.fecha] ?? new Set<string>();
                   return (
                     <div
                       key={dia.fecha}
                       className="rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700"
                     >
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <h4 className="text-sm font-semibold capitalize text-brand-ink dark:text-brand-vanilla">
-                          {formatearFechaCorta(dia.fecha)}{" "}
-                          <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                            · pendiente {formatMoney(dia.montoEfectivo + dia.montoBanco)}
-                          </span>
-                        </h4>
-                        <span
-                          className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                            cuadre.cuadra
-                              ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                          }`}
-                        >
-                          {cuadre.cuadra ? "cuadrado" : descripcionFalta}
+                      <h4 className="mb-2 text-sm font-semibold capitalize text-brand-ink dark:text-brand-vanilla">
+                        {formatearFechaCorta(dia.fecha)}{" "}
+                        <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                          · pendiente {formatMoney(dia.montoEfectivo + dia.montoBanco)} · {marcados.size} marcado
+                          {marcados.size === 1 ? "" : "s"}
                         </span>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        {entregas.map((entrega, indice) => {
-                          if (entrega.fechaEntrega !== dia.fecha) return null;
-                          return (
-                            <div
-                              key={indice}
-                              className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark p-2 sm:grid-cols-[1.3fr_0.9fr_1fr_1.3fr_auto] sm:items-center dark:border-brand-green-700"
-                            >
-                              <div>
-                                <div className="mb-0.5 flex items-center justify-between gap-1">
-                                  <label className="text-[11px] font-medium">Persona</label>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      actualizarEntrega(indice, "nombreManual", !entrega.nombreManual);
-                                      actualizarEntrega(indice, "nombrePersona", "");
-                                    }}
-                                    className="rounded-full border border-brand-green-600 px-2 py-0.5 text-[10px] font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-                                  >
-                                    {entrega.nombreManual ? "← elegir de la lista" : "✎ escribir nombre"}
-                                  </button>
-                                </div>
-                                {entrega.nombreManual ? (
-                                  <input
-                                    value={entrega.nombrePersona}
-                                    onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                                    placeholder="Ej. Juan Pérez"
-                                    className={inputClase}
-                                  />
-                                ) : (
-                                  <select
-                                    value={entrega.nombrePersona}
-                                    onChange={(e) => actualizarEntrega(indice, "nombrePersona", e.target.value)}
-                                    className={inputClase}
-                                  >
-                                    <option value="">Elegir...</option>
-                                    {usuarios.map((u) => (
-                                      <option key={u.id} value={u.nombre}>
-                                        {u.nombre} · {u.rol_nombre}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                              </div>
-                              <div>
-                                <label className="mb-0.5 block text-[11px] font-medium">Método</label>
-                                <select
-                                  value={entrega.metodoPago}
-                                  onChange={(e) => actualizarEntrega(indice, "metodoPago", e.target.value)}
-                                  className={inputClase}
-                                >
-                                  <option value="efectivo">Efectivo</option>
-                                  <option value="banco">Banco</option>
-                                  <option value="mixto">Mixto</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
-                                {entrega.metodoPago === "mixto" ? (
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-1">
-                                      <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
-                                        Ef.
-                                      </span>
-                                      <MoneyInput
-                                        value={entrega.montoEfectivo}
-                                        onChange={(v) => actualizarEntrega(indice, "montoEfectivo", v)}
-                                        className={inputClase}
-                                      />
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
-                                        Bc.
-                                      </span>
-                                      <MoneyInput
-                                        value={entrega.montoBanco}
-                                        onChange={(v) => actualizarEntrega(indice, "montoBanco", v)}
-                                        className={inputClase}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1">
-                                    <MoneyInput
-                                      value={entrega.monto}
-                                      onChange={(v) => actualizarEntrega(indice, "monto", v)}
-                                      className={inputClase}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <label className="mb-0.5 block text-[11px] font-medium">Motivo (opcional)</label>
-                                <input
-                                  value={entrega.motivo}
-                                  onChange={(e) => actualizarEntrega(indice, "motivo", e.target.value)}
-                                  placeholder="Ej. turno completo"
-                                  className={inputClase}
-                                />
-                              </div>
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => usarRestante(indice)}
-                                  title="Llenar con lo que falte de este día/método"
-                                  className="rounded-md border border-brand-green-600 px-2 py-1.5 text-xs text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-                                >
-                                  =Resto
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => quitarEntrega(indice)}
-                                  title="Quitar"
-                                  className="rounded-md border border-red-400 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {cuadre.entregasDia.length === 0 && (
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {todosLosParticipantes.length === 0 && (
                           <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-                            Todavía no agregaste a nadie este día.
+                            Todavía no hay participantes — agrega uno abajo.
                           </p>
                         )}
+                        {todosLosParticipantes.map((nombre) => {
+                          const marcado = marcados.has(nombre);
+                          return (
+                            <label
+                              key={nombre}
+                              className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
+                                marcado
+                                  ? "border-brand-green-600 bg-brand-green-50 dark:bg-brand-green-700/30"
+                                  : "border-brand-vanilla-dark dark:border-brand-green-700"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={marcado}
+                                onChange={() => alternarPresencia(dia.fecha, nombre)}
+                              />
+                              {nombre}
+                            </label>
+                          );
+                        })}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => agregarEntrega(dia.fecha)}
-                        className="mt-2 rounded-md border border-brand-green-600 px-3 py-1.5 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-                      >
-                        + Agregar persona
-                      </button>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={nuevoParticipante[dia.fecha] ?? ""}
+                          onChange={(e) =>
+                            setNuevoParticipante((prev) => ({ ...prev, [dia.fecha]: e.target.value }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              agregarParticipante(dia.fecha);
+                            }
+                          }}
+                          placeholder="Agregar participante..."
+                          className={`${inputClase} flex-1`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => agregarParticipante(dia.fecha)}
+                          className="rounded-md border border-brand-green-600 px-3 py-1.5 text-xs font-medium text-brand-green-700 hover:bg-brand-green-50 dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                        >
+                          + Agregar
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
-
-            <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:gap-3">
-              <div
-                className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
-                  Math.abs(restanteEfectivo) < 1
-                    ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                }`}
-              >
-                Total efectivo:{" "}
-                {Math.abs(restanteEfectivo) < 1
-                  ? "cuadrado"
-                  : restanteEfectivo > 0
-                    ? `falta ${formatMoney(restanteEfectivo)}`
-                    : `te pasaste por ${formatMoney(-restanteEfectivo)}`}
-              </div>
-              <div
-                className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
-                  Math.abs(restanteBanco) < 1
-                    ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                }`}
-              >
-                Total banco:{" "}
-                {Math.abs(restanteBanco) < 1
-                  ? "cuadrado"
-                  : restanteBanco > 0
-                    ? `falta ${formatMoney(restanteBanco)}`
-                    : `te pasaste por ${formatMoney(-restanteBanco)}`}
-              </div>
-            </div>
           </div>
 
-          {/* Paso 3: cuánto le toca a cada quien en total, sumando todos los
-              días elegidos — lo que de verdad hay que entregarle a cada uno. */}
-          {resumenPorPersona.length > 0 && (
+          {/* Paso 3: cuánto y en qué método recibe cada quien — arranca con
+              un reparto sugerido (partes iguales por día marcado), pero todo
+              es editable: si alguien debe recibir más o menos, se ajusta
+              acá. La suma tiene que cuadrar exacto con el pendiente antes de
+              poder repartir. */}
+          {listaAsignaciones.length > 0 && (
             <div className="rounded-lg border border-brand-green-600 bg-brand-green-50 p-3 dark:border-brand-vanilla dark:bg-brand-green-700/20">
               <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                3. Total a recibir por persona
+                3. ¿Cuánto y en qué método recibe cada persona?
               </h3>
-              <div className="flex flex-col gap-1">
-                {resumenPorPersona.map((r) => (
-                  <div key={r.nombre} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-brand-ink dark:text-brand-vanilla">{r.nombre}</span>
-                    <span className="font-semibold text-brand-ink dark:text-brand-vanilla">{formatMoney(r.total)}</span>
+              <div className="flex flex-col gap-2">
+                {listaAsignaciones.map((a) => (
+                  <div
+                    key={a.nombre}
+                    className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla p-2 dark:border-brand-green-700 dark:bg-brand-green-900 sm:grid-cols-[1.2fr_0.9fr_1fr_1.2fr] sm:items-center"
+                  >
+                    <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">{a.nombre}</span>
+                    <div>
+                      <label className="mb-0.5 block text-[11px] font-medium">Método</label>
+                      <select
+                        value={a.metodoPago}
+                        onChange={(e) => actualizarAsignacion(a.nombre, "metodoPago", e.target.value)}
+                        className={inputClase}
+                      >
+                        <option value="efectivo">Efectivo</option>
+                        <option value="banco">Banco</option>
+                        <option value="mixto">Mixto</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
+                      {a.metodoPago === "mixto" ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                              Ef.
+                            </span>
+                            <MoneyInput
+                              value={a.montoEfectivo}
+                              onChange={(v) => actualizarAsignacion(a.nombre, "montoEfectivo", v)}
+                              className={inputClase}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                              Bc.
+                            </span>
+                            <MoneyInput
+                              value={a.montoBanco}
+                              onChange={(v) => actualizarAsignacion(a.nombre, "montoBanco", v)}
+                              className={inputClase}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <MoneyInput
+                          value={a.monto}
+                          onChange={(v) => actualizarAsignacion(a.nombre, "monto", v)}
+                          className={inputClase}
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-0.5 block text-[11px] font-medium">Motivo (opcional)</label>
+                      <input
+                        value={a.motivo}
+                        onChange={(e) => actualizarAsignacion(a.nombre, "motivo", e.target.value)}
+                        placeholder="Ej. turno completo"
+                        className={inputClase}
+                      />
+                    </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:gap-3">
+                <div
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
+                    Math.abs(restanteEfectivo) < 1
+                      ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                  }`}
+                >
+                  Total efectivo:{" "}
+                  {Math.abs(restanteEfectivo) < 1
+                    ? "cuadrado"
+                    : restanteEfectivo > 0
+                      ? `falta ${formatMoney(restanteEfectivo)}`
+                      : `te pasaste por ${formatMoney(-restanteEfectivo)}`}
+                </div>
+                <div
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${
+                    Math.abs(restanteBanco) < 1
+                      ? "bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                  }`}
+                >
+                  Total banco:{" "}
+                  {Math.abs(restanteBanco) < 1
+                    ? "cuadrado"
+                    : restanteBanco > 0
+                      ? `falta ${formatMoney(restanteBanco)}`
+                      : `te pasaste por ${formatMoney(-restanteBanco)}`}
+                </div>
               </div>
             </div>
           )}

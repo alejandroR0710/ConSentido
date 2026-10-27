@@ -5,12 +5,16 @@ import { crearUploaderImagen } from "../../shared/middlewares/upload.middleware"
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   crearCategoriaController,
+  crearEmplatadoController,
   crearRecetaController,
+  editarEmplatadoController,
   editarRecetaController,
   eliminarCategoriaController,
+  eliminarEmplatadoController,
   eliminarRecetaController,
   listarCategoriasController,
   listarRecetasController,
+  listarTodosEmplatadosController,
   obtenerRecetaController,
   subirImagenEmplatadoController,
   subirImagenPrincipalController,
@@ -52,8 +56,25 @@ recetarioRouter.post(
   subirImagenRecetario.single("imagen"),
   asyncHandler(subirImagenPrincipalController),
 );
+
+recetarioRouter.get("/emplatados", asyncHandler(listarTodosEmplatadosController));
 recetarioRouter.post(
-  "/recetas/:id/imagen-emplatado",
+  "/recetas/:id/emplatados",
+  requirePermission("recetario.administrar"),
+  asyncHandler(crearEmplatadoController),
+);
+recetarioRouter.patch(
+  "/emplatados/:emplatadoId",
+  requirePermission("recetario.administrar"),
+  asyncHandler(editarEmplatadoController),
+);
+recetarioRouter.delete(
+  "/emplatados/:emplatadoId",
+  requirePermission("recetario.administrar"),
+  asyncHandler(eliminarEmplatadoController),
+);
+recetarioRouter.post(
+  "/emplatados/:emplatadoId/imagen",
   requirePermission("recetario.administrar"),
   subirImagenRecetario.single("imagen"),
   asyncHandler(subirImagenEmplatadoController),

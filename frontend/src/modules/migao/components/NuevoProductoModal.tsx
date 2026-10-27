@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { migaoApi, type CategoriaProducto, type InventarioProducto } from "../api";
+import { SelectorEmplatado } from "./SelectorEmplatado";
 import { SelectorIngredientes, type FilaIngrediente } from "./SelectorIngredientes";
 
 interface NuevoProductoModalProps {
@@ -22,6 +23,7 @@ export function NuevoProductoModal({
   const [precio, setPrecio] = useState(0);
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [descripcion, setDescripcion] = useState("");
+  const [emplatadoId, setEmplatadoId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +65,7 @@ export function NuevoProductoModal({
         precio,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
+        emplatadoId,
       });
       const ingredientesCompletos = ingredientes.filter((i) => i.inventarioProductoId);
       if (ingredientesCompletos.length > 0) {
@@ -134,6 +137,8 @@ export function NuevoProductoModal({
         placeholder="Ej. Jarra personal de chocolate caliente, queso, almojábana..."
         className="mb-4 w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <SelectorEmplatado value={emplatadoId} onChange={setEmplatadoId} />
 
       <SelectorIngredientes inventario={inventario} value={ingredientes} onChange={setIngredientes} />
 

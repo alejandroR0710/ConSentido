@@ -4,6 +4,7 @@ import { Modal } from "../../../shared/components/Modal";
 import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { SubidaImagen } from "../../../shared/components/SubidaImagen";
 import { migaoApi, type CategoriaProducto, type InventarioProducto, type ProductoAdmin } from "../api";
+import { SelectorEmplatado } from "./SelectorEmplatado";
 import { SelectorIngredientes, type FilaIngrediente } from "./SelectorIngredientes";
 
 interface EditarProductoModalProps {
@@ -30,6 +31,7 @@ export function EditarProductoModal({
   const [categoriaId, setCategoriaId] = useState<number | "">(producto.categoria_id ?? "");
   const [descripcion, setDescripcion] = useState(producto.descripcion ?? "");
   const [imagenUrl, setImagenUrl] = useState(producto.imagen_url);
+  const [emplatadoId, setEmplatadoId] = useState(producto.emplatado_id);
   const [guardando, setGuardando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export function EditarProductoModal({
         precio,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         descripcion: descripcion.trim() || undefined,
+        emplatadoId,
       });
       await migaoApi.guardarIngredientesProducto(
         producto.id,
@@ -175,6 +178,8 @@ export function EditarProductoModal({
         placeholder="Ej. Jarra personal de chocolate caliente, queso, almojábana..."
         className="mb-4 w-full resize-none rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <SelectorEmplatado value={emplatadoId} onChange={setEmplatadoId} />
 
       <SelectorIngredientes inventario={inventario} value={ingredientes} onChange={setIngredientes} />
 

@@ -452,11 +452,12 @@ export async function crearProductoMigao(params: {
   categoriaId?: number;
   descripcion?: string;
   esParaLlevar: boolean;
+  emplatadoId?: string | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO productos (nombre, modulo_id, precio, costo, unidad_medida, categoria_id, descripcion, es_para_llevar)
-     VALUES ($1, (SELECT id FROM modulos WHERE slug = 'migao'), $2, $3, $4, $5, $6, $7)
-     RETURNING id, nombre, precio, costo, unidad_medida, categoria_id, descripcion, activo, es_para_llevar`,
+    `INSERT INTO productos (nombre, modulo_id, precio, costo, unidad_medida, categoria_id, descripcion, es_para_llevar, emplatado_id)
+     VALUES ($1, (SELECT id FROM modulos WHERE slug = 'migao'), $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, nombre, precio, costo, unidad_medida, categoria_id, descripcion, activo, es_para_llevar, emplatado_id`,
     [
       params.nombre,
       params.precio,
@@ -465,6 +466,7 @@ export async function crearProductoMigao(params: {
       params.categoriaId ?? null,
       params.descripcion ?? null,
       params.esParaLlevar,
+      params.emplatadoId ?? null,
     ],
   );
   return result.rows[0];
@@ -478,6 +480,7 @@ export async function listProductosMigaoAdmin() {
   const result = await pool.query(
     `SELECT p.id, p.nombre, p.precio, p.costo, p.unidad_medida, p.imagen_url, p.categoria_id,
             p.descripcion, cp.nombre AS categoria_nombre, p.activo, p.es_para_llevar,
+            p.emplatado_id, e.nombre AS emplatado_nombre, e.receta_id, r.titulo AS receta_titulo,
             -- GROUP_CONCAT ignora los NULL (producto sin receta → NULL → []).
             COALESCE(
               CAST(CONCAT('[', GROUP_CONCAT(
@@ -494,8 +497,10 @@ export async function listProductosMigaoAdmin() {
        LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
        LEFT JOIN migao_producto_ingredientes mpi ON mpi.producto_id = p.id
        LEFT JOIN migao_inventario_productos ip ON ip.id = mpi.inventario_producto_id
+       LEFT JOIN recetario_emplatados e ON e.id = p.emplatado_id
+       LEFT JOIN recetario_recetas r ON r.id = e.receta_id
       WHERE m.slug = 'migao'
-      GROUP BY p.id, cp.nombre
+      GROUP BY p.id, cp.nombre, e.nombre, e.receta_id, r.titulo
       ORDER BY cp.nombre IS NULL, cp.nombre ASC, p.nombre ASC`,
   );
   return result.rows;
@@ -534,6 +539,7 @@ export async function actualizarProductoMigao(
     descripcion?: string;
     activo?: boolean;
     esParaLlevar?: boolean;
+    emplatadoId?: string | null;
   },
 ) {
   const result = await pool.query(
@@ -560,7 +566,20 @@ export async function actualizarProductoMigao(
       data.esParaLlevar ?? null,
     ],
   );
-  return result.rowCount ? result.rows[0] : null;
+  if (!result.rowCount) return null;
+  // Aparte del UPDATE de arriba: a diferencia de los demás campos, "quitar
+  // la presentación asignada" (emplatadoId: null) es una operación válida y
+  // distinta de "no tocar este campo" (emplatadoId: undefined) — COALESCE no
+  // alcanza a distinguir esos dos casos.
+  if (data.emplatadoId !== undefined) {
+    await pool.query(`UPDATE productos SET emplatado_id = $2 WHERE id = $1`, [id, data.emplatadoId]);
+  }
+  const actualizado = await pool.query(
+    `SELECT id, nombre, precio, costo, unidad_medida, imagen_url, categoria_id, descripcion, activo, es_para_llevar, emplatado_id
+       FROM productos WHERE id = $1`,
+    [id],
+  );
+  return actualizado.rows[0];
 }
 
 /** Cola de cocina: ítems de órdenes activas que aún no han sido servidos. */
@@ -568,6 +587,7 @@ export async function listItemsCocina() {
   const result = await pool.query(
     `SELECT oi.id, oi.orden_id, oi.cantidad, oi.estado, oi.listo_cocina, oi.created_at, oi.observaciones,
             p.nombre AS producto_nombre, p.descripcion AS producto_descripcion,
+            e.receta_id, p.emplatado_id,
             m.numero AS mesa_numero, m.piso AS mesa_piso,
             u.nombre AS mesero_nombre
        FROM orden_items oi
@@ -575,6 +595,7 @@ export async function listItemsCocina() {
        JOIN ordenes o ON o.id = oi.orden_id
        LEFT JOIN mesas m ON m.id = o.mesa_id
        LEFT JOIN usuarios u ON u.id = o.mesero_id
+       LEFT JOIN recetario_emplatados e ON e.id = p.emplatado_id
       WHERE oi.estado IN ('pendiente', 'preparando')
         AND o.estado NOT IN ('cerrada', 'cancelada')
         -- Los cargos "para llevar" (envases) los agrega el Cajero al cobrar,

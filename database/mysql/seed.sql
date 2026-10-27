@@ -193,7 +193,10 @@ WHERE p.codigo IN (
   'pedidos.crear',
   'pedidos.cambiar_estado',
   'con_sentido.clientes.ver',
-  'con_sentido.productos.ver'
+  'con_sentido.productos.ver',
+  -- Para poder amarrar un producto a una presentación de emplatado del
+  -- recetario al crearlo/editarlo (ver recetario_emplatados).
+  'recetario.ver'
 );
 
 -- Usuario Super Root

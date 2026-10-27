@@ -428,6 +428,13 @@ CREATE TABLE productos (
   descripcion    TEXT,
   activo         BOOLEAN NOT NULL DEFAULT true,
   es_para_llevar BOOLEAN NOT NULL DEFAULT false,
+  -- Qué presentación de emplatado de qué receta corresponde a este producto
+  -- (ver recetario_emplatados más abajo) — un producto es como se pide en el
+  -- menú, una presentación es cómo se sirve; el mismo plato puede tener
+  -- varios productos que son la misma receta pero con distinto emplatado. Su
+  -- FK se agrega con ALTER TABLE después de crear recetario_emplatados (más
+  -- abajo en este archivo), porque esa tabla todavía no existe aquí.
+  emplatado_id   CHAR(36) NULL,
   created_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   FOREIGN KEY (categoria_id) REFERENCES categorias_producto(id),
@@ -1166,8 +1173,6 @@ CREATE TABLE recetario_recetas (
   categoria_id          INT NULL,
   video_url             VARCHAR(500) NULL,
   imagen_principal_url  VARCHAR(500) NULL,
-  imagen_emplatado_url  VARCHAR(500) NULL,
-  descripcion_emplatado VARCHAR(500) NULL,
   creado_por_id         CHAR(36) NOT NULL,
   created_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
@@ -1176,6 +1181,24 @@ CREATE TABLE recetario_recetas (
   CHECK (video_url IS NULL OR imagen_principal_url IS NULL)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 CREATE INDEX idx_recetario_recetas_categoria ON recetario_recetas(categoria_id);
+
+-- Presentaciones de emplatado de una receta: la misma preparación se puede
+-- servir de varias formas (distinto ingrediente visible, distinta foto),
+-- cada una con su propio nombre y guía — ver productos.emplatado_id arriba.
+CREATE TABLE recetario_emplatados (
+  id         CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  receta_id  CHAR(36) NOT NULL,
+  nombre     VARCHAR(150) NOT NULL,
+  imagen_url VARCHAR(500) NULL,
+  guia       TEXT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  FOREIGN KEY (receta_id) REFERENCES recetario_recetas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE INDEX idx_recetario_emplatados_receta ON recetario_emplatados(receta_id);
+
+ALTER TABLE productos
+  ADD CONSTRAINT fk_productos_emplatado FOREIGN KEY (emplatado_id) REFERENCES recetario_emplatados(id) ON DELETE SET NULL;
 
 -- ============================================================================
 -- 8. SEED MINIMO DE MODULOS

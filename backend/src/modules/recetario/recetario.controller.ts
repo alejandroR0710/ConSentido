@@ -3,7 +3,13 @@ import { Errors } from "../../shared/utils/app-error";
 import { ok, created } from "../../shared/utils/response";
 import { rutaPublicaImagen } from "../../shared/middlewares/upload.middleware";
 import * as service from "./recetario.service";
-import { crearCategoriaSchema, crearRecetaSchema, editarRecetaSchema } from "./recetario.schema";
+import {
+  crearCategoriaSchema,
+  crearEmplatadoSchema,
+  crearRecetaSchema,
+  editarEmplatadoSchema,
+  editarRecetaSchema,
+} from "./recetario.schema";
 
 export async function listarCategoriasController(req: Request, res: Response) {
   return ok(res, await service.listarCategorias());
@@ -48,8 +54,27 @@ export async function subirImagenPrincipalController(req: Request, res: Response
   return ok(res, await service.actualizarImagenPrincipal(req.params.id, imagenUrl));
 }
 
+export async function listarTodosEmplatadosController(req: Request, res: Response) {
+  return ok(res, await service.listarTodosEmplatados());
+}
+
+export async function crearEmplatadoController(req: Request, res: Response) {
+  const data = crearEmplatadoSchema.parse(req.body);
+  return created(res, await service.crearEmplatado(req.params.id, data));
+}
+
+export async function editarEmplatadoController(req: Request, res: Response) {
+  const data = editarEmplatadoSchema.parse(req.body);
+  return ok(res, await service.editarEmplatado(req.params.emplatadoId, data));
+}
+
+export async function eliminarEmplatadoController(req: Request, res: Response) {
+  await service.eliminarEmplatado(req.params.emplatadoId);
+  return ok(res, { eliminada: true });
+}
+
 export async function subirImagenEmplatadoController(req: Request, res: Response) {
   if (!req.file) throw Errors.badRequest("Falta el archivo de imagen");
   const imagenUrl = rutaPublicaImagen("recetario", req.file.filename);
-  return ok(res, await service.actualizarImagenEmplatado(req.params.id, imagenUrl));
+  return ok(res, await service.actualizarImagenEmplatado(req.params.emplatadoId, imagenUrl));
 }

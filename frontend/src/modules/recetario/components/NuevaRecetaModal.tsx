@@ -5,6 +5,12 @@ import { recetarioApi, type Receta, type RecetarioCategoria } from "../api";
 import { SelectorArchivoImagen } from "./SelectorArchivoImagen";
 import { SelectorMedioPrincipal } from "./SelectorMedioPrincipal";
 
+interface PresentacionBorrador {
+  nombre: string;
+  guia: string;
+  file: File | null;
+}
+
 interface NuevaRecetaModalProps {
   categorias: RecetarioCategoria[];
   onCerrar: () => void;
@@ -30,8 +36,7 @@ export function NuevaRecetaModal({
   const [medioPrincipal, setMedioPrincipal] = useState<"imagen" | "video">("imagen");
   const [videoUrl, setVideoUrl] = useState("");
   const [imagenPrincipalFile, setImagenPrincipalFile] = useState<File | null>(null);
-  const [imagenEmplatadoFile, setImagenEmplatadoFile] = useState<File | null>(null);
-  const [descripcionEmplatado, setDescripcionEmplatado] = useState("");
+  const [presentaciones, setPresentaciones] = useState<PresentacionBorrador[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +78,18 @@ export function NuevaRecetaModal({
 
   const nombreCategoriaElegida = categorias.find((c) => c.id === categoriaId)?.nombre ?? "";
 
+  function agregarPresentacion() {
+    setPresentaciones((actual) => [...actual, { nombre: "", guia: "", file: null }]);
+  }
+
+  function actualizarPresentacion(indice: number, cambios: Partial<PresentacionBorrador>) {
+    setPresentaciones((actual) => actual.map((p, i) => (i === indice ? { ...p, ...cambios } : p)));
+  }
+
+  function quitarPresentacion(indice: number) {
+    setPresentaciones((actual) => actual.filter((_, i) => i !== indice));
+  }
+
   async function crear() {
     if (!titulo.trim() || !instrucciones.trim()) return;
     setSubmitting(true);
@@ -85,7 +102,6 @@ export function NuevaRecetaModal({
         instrucciones: instrucciones.trim(),
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         videoUrl: medioPrincipal === "video" && videoUrl.trim() ? videoUrl.trim() : undefined,
-        descripcionEmplatado: descripcionEmplatado.trim() || undefined,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo crear la receta");
@@ -93,24 +109,29 @@ export function NuevaRecetaModal({
       return;
     }
 
-    // La receta ya existe en este punto — si falla subir una imagen de acá en
-    // adelante, nunca debe parecer que la creación entera falló (eso
-    // invitaría a reintentar con el mismo botón y crear una receta
-    // duplicada). Se avisa aparte, se refresca la lista, y se cierra — para
-    // agregar la imagen que faltó hay que entrar a "Editar".
+    // La receta ya existe en este punto — si falla subir una imagen o crear
+    // una presentación de acá en adelante, nunca debe parecer que la
+    // creación entera falló (eso invitaría a reintentar con el mismo botón y
+    // crear una receta duplicada). Se avisa aparte, se refresca la lista, y
+    // se cierra — lo que falte se agrega desde "Editar".
     try {
       if (medioPrincipal === "imagen" && imagenPrincipalFile) {
         await recetarioApi.subirImagenPrincipal(receta.id, imagenPrincipalFile);
       }
-      if (imagenEmplatadoFile) {
-        await recetarioApi.subirImagenEmplatado(receta.id, imagenEmplatadoFile);
+      for (const p of presentaciones) {
+        if (!p.nombre.trim()) continue;
+        const emplatado = await recetarioApi.crearEmplatado(receta.id, {
+          nombre: p.nombre.trim(),
+          guia: p.guia.trim() || undefined,
+        });
+        if (p.file) await recetarioApi.subirImagenEmplatado(emplatado.id, p.file);
       }
     } catch (err) {
       await onCreado();
       alert(
-        `La receta "${receta.titulo}" se creó, pero no se pudo subir una de las imágenes (${
+        `La receta "${receta.titulo}" se creó, pero no se pudo terminar de guardar el emplatado (${
           err instanceof ApiError ? err.message : "error desconocido"
-        }). Agrégala desde "Editar".`,
+        }). Agrégalo desde "Editar".`,
       );
       setSubmitting(false);
       return;
@@ -198,25 +219,57 @@ export function NuevaRecetaModal({
         )}
       </SelectorMedioPrincipal>
 
-      <div className="mb-4 flex flex-col gap-2 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
         <span className="text-xs font-semibold uppercase tracking-wide text-brand-ink/70 dark:text-brand-vanilla/70">
-          Ejemplo de emplatado (opcional)
+          Presentaciones de emplatado (opcional)
         </span>
-        <SelectorArchivoImagen
-          file={imagenEmplatadoFile}
-          onElegir={setImagenEmplatadoFile}
-          etiqueta="Elegir imagen de emplatado"
-        />
-        <textarea
-          value={descripcionEmplatado}
-          onChange={(e) => setDescripcionEmplatado(e.target.value)}
-          rows={2}
-          placeholder="Detalles de cómo servirlo..."
-          className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        />
-        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-          ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+        <p className="-mt-1 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+          La misma receta se puede servir de varias formas — cada una con su propio nombre, imagen y guía.
         </p>
+
+        {presentaciones.map((p, indice) => (
+          <div
+            key={indice}
+            className="flex flex-col gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla/40 p-3 dark:border-brand-green-700 dark:bg-brand-green-900/40"
+          >
+            <input
+              value={p.nombre}
+              onChange={(e) => actualizarPresentacion(indice, { nombre: e.target.value })}
+              placeholder="Nombre de la presentación (ej. Con fresas)"
+              className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <SelectorArchivoImagen
+              file={p.file}
+              onElegir={(file) => actualizarPresentacion(indice, { file })}
+              etiqueta="Elegir imagen de esta presentación"
+            />
+            <textarea
+              value={p.guia}
+              onChange={(e) => actualizarPresentacion(indice, { guia: e.target.value })}
+              rows={2}
+              placeholder="Guía de emplatado..."
+              className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <button
+              type="button"
+              onClick={() => quitarPresentacion(indice)}
+              className="self-end text-xs font-medium text-red-600 hover:underline"
+            >
+              Eliminar esta presentación
+            </button>
+          </div>
+        ))}
+
+        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+          ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas (en la guía).
+        </p>
+        <button
+          type="button"
+          onClick={agregarPresentacion}
+          className="w-full rounded-md border-2 border-dashed border-brand-green-600 px-3 py-2 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+        >
+          + Agregar otra presentación
+        </button>
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}

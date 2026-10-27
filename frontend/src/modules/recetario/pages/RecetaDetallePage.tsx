@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
 import { ImagenConZoom } from "../../../shared/components/ImagenConZoom";
 import { formatearTextoBasico } from "../../../shared/format/texto";
@@ -8,6 +8,8 @@ import { urlEmbedVideo } from "../video";
 
 export function RecetaDetallePage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const emplatadoResaltado = searchParams.get("emplatado");
   const [receta, setReceta] = useState<Receta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +22,13 @@ export function RecetaDetallePage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar la receta"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Llegar desde Cocina con ?emplatado=<id> lleva directo a esa presentación
+  // en vez de dejar que el cocinero la busque entre varias.
+  useEffect(() => {
+    if (!receta || !emplatadoResaltado) return;
+    document.getElementById(`emplatado-${emplatadoResaltado}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [receta, emplatadoResaltado]);
 
   if (loading) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
@@ -72,22 +81,35 @@ export function RecetaDetallePage() {
         dangerouslySetInnerHTML={{ __html: formatearTextoBasico(receta.instrucciones) }}
       />
 
-      {(receta.imagen_emplatado_url || receta.descripcion_emplatado) && (
-        <div className="flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
-          <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">Ejemplo de emplatado</h2>
-          {receta.imagen_emplatado_url && (
-            <ImagenConZoom
-              src={resolveImageUrl(receta.imagen_emplatado_url)!}
-              alt="Ejemplo de emplatado"
-              className="w-full rounded-lg object-cover"
-            />
-          )}
-          {receta.descripcion_emplatado && (
-            <p
-              className="whitespace-pre-wrap text-base text-brand-ink/80 dark:text-brand-vanilla/80"
-              dangerouslySetInnerHTML={{ __html: formatearTextoBasico(receta.descripcion_emplatado) }}
-            />
-          )}
+      {receta.emplatados.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            {receta.emplatados.length > 1 ? "Presentaciones de emplatado" : "Ejemplo de emplatado"}
+          </h2>
+          {receta.emplatados.map((e) => (
+            <div
+              key={e.id}
+              id={`emplatado-${e.id}`}
+              className={`flex flex-col gap-3 rounded-xl border p-4 transition-colors ${
+                emplatadoResaltado === e.id
+                  ? "border-brand-green-600 bg-brand-green-50 dark:bg-brand-green-700/30"
+                  : "border-brand-vanilla-dark dark:border-brand-green-700"
+              }`}
+            >
+              {receta.emplatados.length > 1 && (
+                <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">{e.nombre}</span>
+              )}
+              {e.imagen_url && (
+                <ImagenConZoom src={resolveImageUrl(e.imagen_url)!} alt={e.nombre} className="w-full rounded-lg object-cover" />
+              )}
+              {e.guia && (
+                <p
+                  className="whitespace-pre-wrap text-base text-brand-ink/80 dark:text-brand-vanilla/80"
+                  dangerouslySetInnerHTML={{ __html: formatearTextoBasico(e.guia) }}
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

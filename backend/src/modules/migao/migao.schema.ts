@@ -11,6 +11,10 @@ export const crearProductoSchema = z.object({
   // Cargo de "para llevar" (ej. envases): habilita que el Cajero pueda
   // agregarlo a una orden desde cobro (ver migao.ordenes.agregar_para_llevar).
   esParaLlevar: z.boolean().default(false),
+  // Qué presentación de emplatado del recetario corresponde a este producto
+  // (ver recetario_emplatados) — opcional, la mayoría de productos no la
+  // necesitan.
+  emplatadoId: z.string().uuid().nullable().optional(),
 });
 export type CrearProductoInput = z.infer<typeof crearProductoSchema>;
 
@@ -27,6 +31,7 @@ export const editarProductoSchema = z.object({
   descripcion: z.string().trim().max(2000).optional(),
   activo: z.boolean().optional(),
   esParaLlevar: z.boolean().optional(),
+  emplatadoId: z.string().uuid().nullable().optional(),
 });
 export type EditarProductoInput = z.infer<typeof editarProductoSchema>;
 

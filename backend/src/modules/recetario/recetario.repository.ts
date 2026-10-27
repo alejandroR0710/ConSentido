@@ -50,23 +50,15 @@ export async function crearReceta(
     instrucciones: string;
     categoriaId: number | null;
     videoUrl: string | null;
-    descripcionEmplatado: string | null;
     creadoPorId: string;
   },
   executor: Executor = pool,
 ) {
   const result = await executor.query(
-    `INSERT INTO recetario_recetas (titulo, instrucciones, categoria_id, video_url, descripcion_emplatado, creado_por_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO recetario_recetas (titulo, instrucciones, categoria_id, video_url, creado_por_id)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
-    [
-      params.titulo,
-      params.instrucciones,
-      params.categoriaId,
-      params.videoUrl,
-      params.descripcionEmplatado,
-      params.creadoPorId,
-    ],
+    [params.titulo, params.instrucciones, params.categoriaId, params.videoUrl, params.creadoPorId],
   );
   return result.rows[0].id as string;
 }
@@ -78,7 +70,6 @@ export async function editarReceta(
     instrucciones?: string;
     categoriaId?: number | null;
     videoUrl?: string | null;
-    descripcionEmplatado?: string | null;
   },
   executor: Executor = pool,
 ) {
@@ -101,7 +92,6 @@ export async function editarReceta(
     // ya existía por accidente.
     if (campos.videoUrl) agregar("imagen_principal_url", null);
   }
-  if (campos.descripcionEmplatado !== undefined) agregar("descripcion_emplatado", campos.descripcionEmplatado);
   if (sets.length === 0) return;
   params.push(id);
   await executor.query(`UPDATE recetario_recetas SET ${sets.join(", ")} WHERE id = $${params.length}`, params);
@@ -115,11 +105,76 @@ export async function actualizarImagenPrincipal(id: string, imagenUrl: string, e
   ]);
 }
 
-export async function actualizarImagenEmplatado(id: string, imagenUrl: string, executor: Executor = pool) {
-  await executor.query(`UPDATE recetario_recetas SET imagen_emplatado_url = $2 WHERE id = $1`, [id, imagenUrl]);
-}
-
 export async function eliminarReceta(id: string, executor: Executor = pool): Promise<boolean> {
   const result = await executor.query(`DELETE FROM recetario_recetas WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function listarEmplatadosDeReceta(recetaId: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT id, receta_id, nombre, imagen_url, guia, created_at
+       FROM recetario_emplatados
+      WHERE receta_id = $1
+      ORDER BY created_at ASC`,
+    [recetaId],
+  );
+  return result.rows;
+}
+
+export async function getEmplatadoById(id: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT id, receta_id, nombre, imagen_url, guia, created_at FROM recetario_emplatados WHERE id = $1`,
+    [id],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+/** Todas las presentaciones de todas las recetas, con el título de su receta
+ *  — para el selector plano que usa Migao al amarrar un producto a una. */
+export async function listarTodosEmplatados(executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT e.id, e.receta_id, e.nombre, r.titulo AS receta_titulo
+       FROM recetario_emplatados e
+       JOIN recetario_recetas r ON r.id = e.receta_id
+      ORDER BY r.titulo ASC, e.created_at ASC`,
+  );
+  return result.rows;
+}
+
+export async function crearEmplatado(
+  params: { recetaId: string; nombre: string; guia: string | null },
+  executor: Executor = pool,
+) {
+  const result = await executor.query(
+    `INSERT INTO recetario_emplatados (receta_id, nombre, guia) VALUES ($1, $2, $3) RETURNING id`,
+    [params.recetaId, params.nombre, params.guia],
+  );
+  return result.rows[0].id as string;
+}
+
+export async function editarEmplatado(
+  id: string,
+  campos: { nombre?: string; guia?: string | null },
+  executor: Executor = pool,
+) {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  function agregar(columna: string, valor: unknown) {
+    params.push(valor);
+    sets.push(`${columna} = $${params.length}`);
+  }
+  if (campos.nombre !== undefined) agregar("nombre", campos.nombre);
+  if (campos.guia !== undefined) agregar("guia", campos.guia);
+  if (sets.length === 0) return;
+  params.push(id);
+  await executor.query(`UPDATE recetario_emplatados SET ${sets.join(", ")} WHERE id = $${params.length}`, params);
+}
+
+export async function actualizarImagenEmplatado(id: string, imagenUrl: string, executor: Executor = pool) {
+  await executor.query(`UPDATE recetario_emplatados SET imagen_url = $2 WHERE id = $1`, [id, imagenUrl]);
+}
+
+export async function eliminarEmplatado(id: string, executor: Executor = pool): Promise<boolean> {
+  const result = await executor.query(`DELETE FROM recetario_emplatados WHERE id = $1`, [id]);
   return (result.rowCount ?? 0) > 0;
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { Modal } from "../../../shared/components/Modal";
 import { SubidaImagen } from "../../../shared/components/SubidaImagen";
-import { recetarioApi, type Receta, type RecetarioCategoria } from "../api";
+import { recetarioApi, type Emplatado, type Receta, type RecetarioCategoria } from "../api";
 import { SelectorMedioPrincipal } from "./SelectorMedioPrincipal";
 
 interface EditarRecetaModalProps {
@@ -34,8 +34,11 @@ export function EditarRecetaModal({
   const [medioPrincipal, setMedioPrincipal] = useState<"imagen" | "video">(receta.video_url ? "video" : "imagen");
   const [videoUrl, setVideoUrl] = useState(receta.video_url ?? "");
   const [imagenPrincipalUrl, setImagenPrincipalUrl] = useState(receta.imagen_principal_url);
-  const [imagenEmplatadoUrl, setImagenEmplatadoUrl] = useState(receta.imagen_emplatado_url);
-  const [descripcionEmplatado, setDescripcionEmplatado] = useState(receta.descripcion_emplatado ?? "");
+  const [emplatados, setEmplatados] = useState<Emplatado[]>(receta.emplatados);
+  const [guardandoEmplatadoId, setGuardandoEmplatadoId] = useState<string | null>(null);
+  const [eliminandoEmplatadoId, setEliminandoEmplatadoId] = useState<string | null>(null);
+  const [confirmandoEliminarEmplatadoId, setConfirmandoEliminarEmplatadoId] = useState<string | null>(null);
+  const [agregandoEmplatado, setAgregandoEmplatado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +90,6 @@ export function EditarRecetaModal({
     await onMediaActualizada();
   }
 
-  async function subirImagenEmplatado(file: File) {
-    const actualizada = await recetarioApi.subirImagenEmplatado(receta.id, file);
-    setImagenEmplatadoUrl(actualizada.imagen_emplatado_url);
-    await onMediaActualizada();
-  }
-
   async function guardar() {
     if (!titulo.trim() || !instrucciones.trim()) return;
     setGuardando(true);
@@ -103,7 +100,6 @@ export function EditarRecetaModal({
         instrucciones: instrucciones.trim(),
         categoriaId: categoriaId ? Number(categoriaId) : null,
         videoUrl: medioPrincipal === "video" ? videoUrl.trim() || null : undefined,
-        descripcionEmplatado: descripcionEmplatado.trim() || null,
       });
       await onGuardado();
       onCerrar();
@@ -111,6 +107,60 @@ export function EditarRecetaModal({
       setError(err instanceof ApiError ? err.message : "No se pudo guardar la receta");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  function actualizarEmplatadoLocal(id: string, cambios: Partial<Emplatado>) {
+    setEmplatados((actual) => actual.map((e) => (e.id === id ? { ...e, ...cambios } : e)));
+  }
+
+  async function agregarEmplatado() {
+    setAgregandoEmplatado(true);
+    setError(null);
+    try {
+      const nuevo = await recetarioApi.crearEmplatado(receta.id, { nombre: "Nueva presentación" });
+      setEmplatados((actual) => [...actual, nuevo]);
+      await onMediaActualizada();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo agregar la presentación");
+    } finally {
+      setAgregandoEmplatado(false);
+    }
+  }
+
+  async function guardarEmplatado(emplatado: Emplatado) {
+    setGuardandoEmplatadoId(emplatado.id);
+    setError(null);
+    try {
+      await recetarioApi.editarEmplatado(emplatado.id, {
+        nombre: emplatado.nombre.trim() || "Presentación",
+        guia: emplatado.guia?.trim() || null,
+      });
+      await onMediaActualizada();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar la presentación");
+    } finally {
+      setGuardandoEmplatadoId(null);
+    }
+  }
+
+  async function subirImagenEmplatado(emplatado: Emplatado, file: File) {
+    const actualizado = await recetarioApi.subirImagenEmplatado(emplatado.id, file);
+    actualizarEmplatadoLocal(emplatado.id, { imagen_url: actualizado.imagen_url });
+    await onMediaActualizada();
+  }
+
+  async function eliminarEmplatado(id: string) {
+    setEliminandoEmplatadoId(id);
+    setError(null);
+    try {
+      await recetarioApi.eliminarEmplatado(id);
+      setEmplatados((actual) => actual.filter((e) => e.id !== id));
+      await onMediaActualizada();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la presentación");
+    } finally {
+      setEliminandoEmplatadoId(null);
     }
   }
 
@@ -208,21 +258,66 @@ export function EditarRecetaModal({
         )}
       </SelectorMedioPrincipal>
 
-      <div className="mb-4 flex flex-col gap-2 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-brand-vanilla-dark p-3 dark:border-brand-green-700">
         <span className="text-xs font-semibold uppercase tracking-wide text-brand-ink/70 dark:text-brand-vanilla/70">
-          Ejemplo de emplatado (opcional)
+          Presentaciones de emplatado (opcional)
         </span>
-        <SubidaImagen imagenUrl={imagenEmplatadoUrl} onSubir={subirImagenEmplatado} />
-        <textarea
-          value={descripcionEmplatado}
-          onChange={(e) => setDescripcionEmplatado(e.target.value)}
-          rows={2}
-          placeholder="Detalles de cómo servirlo..."
-          className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        />
-        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
-          ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas.
+        <p className="-mt-1 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+          La misma receta se puede servir de varias formas — cada una con su propio nombre, imagen y guía. Los
+          cambios de cada presentación se guardan con su propio botón.
         </p>
+
+        {emplatados.map((e) => (
+          <div
+            key={e.id}
+            className="flex flex-col gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla/40 p-3 dark:border-brand-green-700 dark:bg-brand-green-900/40"
+          >
+            <input
+              value={e.nombre}
+              onChange={(ev) => actualizarEmplatadoLocal(e.id, { nombre: ev.target.value })}
+              placeholder="Nombre de la presentación (ej. Con fresas)"
+              className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <SubidaImagen imagenUrl={e.imagen_url} onSubir={(file) => subirImagenEmplatado(e, file)} />
+            <textarea
+              value={e.guia ?? ""}
+              onChange={(ev) => actualizarEmplatadoLocal(e.id, { guia: ev.target.value })}
+              rows={2}
+              placeholder="Guía de emplatado..."
+              className="w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setConfirmandoEliminarEmplatadoId(e.id)}
+                disabled={eliminandoEmplatadoId === e.id}
+                className="text-xs font-medium text-red-600 hover:underline disabled:opacity-60"
+              >
+                Eliminar esta presentación
+              </button>
+              <button
+                type="button"
+                onClick={() => guardarEmplatado(e)}
+                disabled={guardandoEmplatadoId === e.id || !e.nombre.trim()}
+                className="rounded-md border border-brand-green-700 px-3 py-1.5 text-xs font-semibold text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+              >
+                {guardandoEmplatadoId === e.id ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <p className="text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+          ### Título, **negrilla**, *cursiva* y líneas que empiecen con "- " para viñetas (en la guía).
+        </p>
+        <button
+          type="button"
+          onClick={agregarEmplatado}
+          disabled={agregandoEmplatado}
+          className="w-full rounded-md border-2 border-dashed border-brand-green-600 px-3 py-2 text-sm font-semibold text-brand-green-700 hover:bg-brand-green-50 disabled:opacity-60 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+        >
+          {agregandoEmplatado ? "Agregando..." : "+ Agregar otra presentación"}
+        </button>
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -265,6 +360,38 @@ export function EditarRecetaModal({
               onClick={() => {
                 setConfirmandoEliminarCategoria(false);
                 eliminarCategoria();
+              }}
+              className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+            >
+              Sí, eliminar
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmandoEliminarEmplatadoId && (
+        <Modal
+          titulo="Eliminar presentación"
+          onCerrar={() => setConfirmandoEliminarEmplatadoId(null)}
+          maxWidth="sm:max-w-sm"
+          tono="advertencia"
+        >
+          <p className="mb-4 text-sm text-brand-ink dark:text-brand-vanilla">
+            ¿Eliminar esta presentación de emplatado? Si algún producto del menú está amarrado a ella, quedará sin
+            esa presentación asignada.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmandoEliminarEmplatadoId(null)}
+              className="flex-1 rounded-md border border-brand-vanilla-dark px-4 py-3 font-medium dark:border-brand-green-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                const id = confirmandoEliminarEmplatadoId;
+                setConfirmandoEliminarEmplatadoId(null);
+                eliminarEmplatado(id);
               }}
               className="flex-1 rounded-md bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
             >

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
@@ -19,6 +19,7 @@ function formatearHora(fechaIso: string) {
 }
 
 export function CocinaPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ItemCocina[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -306,10 +307,10 @@ export function CocinaPage() {
                 {preparando.length > 0 && (
                   <ul className="flex flex-col gap-2">
                     {preparando.map((item) => (
-                      <li key={item.id}>
+                      <li key={item.id} className="flex gap-2">
                         <button
                           onClick={() => toggleCheck(item)}
-                          className={`flex min-h-16 w-full items-center gap-3 rounded-md border-2 px-3 py-3 text-left ${
+                          className={`flex min-h-16 flex-1 items-center gap-3 rounded-md border-2 px-3 py-3 text-left ${
                             item.listo_cocina
                               ? "border-brand-green-600 bg-brand-green-50 dark:bg-brand-green-700/30"
                               : "border-brand-vanilla-dark dark:border-brand-green-700"
@@ -335,6 +336,18 @@ export function CocinaPage() {
                             )}
                           </span>
                         </button>
+                        {item.receta_id && (
+                          <button
+                            onClick={() => navigate(`/recetario/ver/${item.receta_id}?emplatado=${item.emplatado_id}`)}
+                            title="Ver cómo se emplata este producto"
+                            className="flex min-w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 py-1 text-[11px] font-semibold leading-tight text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
+                          >
+                            <span className="text-lg" aria-hidden>
+                              📖
+                            </span>
+                            Ver emplatado
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

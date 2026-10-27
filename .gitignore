@@ -34,3 +34,9 @@ npm-debug.log*
 database/mysql/datos.sql
 hosting/
 backend/public/
+
+# Mockups temporales del asistente (superpowers:brainstorming)
+.superpowers/
+
+# Cache incremental de `tsc -b`
+*.tsbuildinfo

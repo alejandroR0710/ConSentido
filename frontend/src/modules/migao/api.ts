@@ -208,6 +208,11 @@ export interface ItemCocina {
   // despachados no los necesita, así que quedan opcionales.
   observaciones?: string | null;
   producto_descripcion?: string | null;
+  // Si el producto tiene una presentación de emplatado asignada (ver
+  // recetario_emplatados), acá llega la receta y la presentación exactas —
+  // el botón "Ver emplatado" de Cocina navega directo con ambos.
+  receta_id?: string | null;
+  emplatado_id?: string | null;
 }
 
 export interface ItemActivo extends ItemCocina {
@@ -251,6 +256,12 @@ export interface ProductoAdmin extends Producto {
   activo: boolean;
   // Receta de inventario que consume — [] si no tiene ninguna asociada.
   ingredientes: { nombre: string; cantidadPorUnidad: string; unidadMedida: string }[];
+  // Presentación de emplatado del recetario amarrada a este producto (ver
+  // recetario_emplatados) — null si no tiene ninguna.
+  emplatado_id: string | null;
+  emplatado_nombre: string | null;
+  receta_id: string | null;
+  receta_titulo: string | null;
 }
 
 export interface CategoriaProducto {
@@ -805,6 +816,7 @@ export const migaoApi = {
     categoriaId?: number;
     descripcion?: string;
     esParaLlevar?: boolean;
+    emplatadoId?: string | null;
   }) => apiFetch<Producto>("/migao/productos", { method: "POST", body: input }),
   listarProductosAdmin: () => apiFetch<ProductoAdmin[]>("/migao/productos/admin"),
   editarProducto: (
@@ -818,6 +830,7 @@ export const migaoApi = {
       descripcion?: string;
       activo?: boolean;
       esParaLlevar?: boolean;
+      emplatadoId?: string | null;
     },
   ) => apiFetch<ProductoAdmin>(`/migao/productos/${id}`, { method: "PATCH", body: input }),
   // Vía acotada del Cajero para agregar un cargo "para llevar" al cobrar (ver

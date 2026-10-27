@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ApiError, resolveImageUrl } from "../../../shared/api/client";
 import { ImagenConZoom } from "../../../shared/components/ImagenConZoom";
 import { formatearTextoBasico } from "../../../shared/format/texto";
@@ -8,8 +8,6 @@ import { urlEmbedVideo } from "../video";
 
 export function RecetaDetallePage() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
-  const emplatadoResaltado = searchParams.get("emplatado");
   const [receta, setReceta] = useState<Receta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +20,6 @@ export function RecetaDetallePage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar la receta"))
       .finally(() => setLoading(false));
   }, [id]);
-
-  // Llegar desde Cocina con ?emplatado=<id> lleva directo a esa presentación
-  // en vez de dejar que el cocinero la busque entre varias.
-  useEffect(() => {
-    if (!receta || !emplatadoResaltado) return;
-    document.getElementById(`emplatado-${emplatadoResaltado}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [receta, emplatadoResaltado]);
 
   if (loading) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
@@ -87,15 +78,7 @@ export function RecetaDetallePage() {
             {receta.emplatados.length > 1 ? "Presentaciones de emplatado" : "Ejemplo de emplatado"}
           </h2>
           {receta.emplatados.map((e) => (
-            <div
-              key={e.id}
-              id={`emplatado-${e.id}`}
-              className={`flex flex-col gap-3 rounded-xl border p-4 transition-colors ${
-                emplatadoResaltado === e.id
-                  ? "border-brand-green-600 bg-brand-green-50 dark:bg-brand-green-700/30"
-                  : "border-brand-vanilla-dark dark:border-brand-green-700"
-              }`}
-            >
+            <div key={e.id} className="flex flex-col gap-3 rounded-xl border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
               {receta.emplatados.length > 1 && (
                 <span className="text-sm font-semibold text-brand-ink dark:text-brand-vanilla">{e.nombre}</span>
               )}

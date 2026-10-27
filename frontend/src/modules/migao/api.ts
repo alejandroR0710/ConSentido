@@ -209,10 +209,13 @@ export interface ItemCocina {
   observaciones?: string | null;
   producto_descripcion?: string | null;
   // Si el producto tiene una presentación de emplatado asignada (ver
-  // recetario_emplatados), acá llega la receta y la presentación exactas —
-  // el botón "Ver emplatado" de Cocina navega directo con ambos.
+  // recetario_emplatados), acá llega todo lo necesario para que el botón
+  // "Ver emplatado" de Cocina abra el preview ahí mismo, sin navegar.
   receta_id?: string | null;
   emplatado_id?: string | null;
+  emplatado_nombre?: string | null;
+  emplatado_imagen_url?: string | null;
+  emplatado_guia?: string | null;
 }
 
 export interface ItemActivo extends ItemCocina {

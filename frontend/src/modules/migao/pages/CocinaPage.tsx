@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ApiError } from "../../../shared/api/client";
+import { Link } from "react-router-dom";
+import { ApiError, resolveImageUrl } from "../../../shared/api/client";
+import { Modal } from "../../../shared/components/Modal";
+import { VisorImagenZoom } from "../../../shared/components/VisorImagenZoom";
+import { formatearTextoBasico } from "../../../shared/format/texto";
 import { agruparPorOrden } from "../agruparTickets";
 import { migaoApi, type ItemCocina } from "../api";
 import { labelArea } from "../areas";
@@ -19,8 +22,10 @@ function formatearHora(fechaIso: string) {
 }
 
 export function CocinaPage() {
-  const navigate = useNavigate();
   const [items, setItems] = useState<ItemCocina[]>([]);
+  // Producto cuyo "Ver emplatado" está abierto — el preview se arma con lo
+  // que ya trajo la cola de Cocina (sin navegar ni pedir nada aparte).
+  const [itemEmplatadoAbierto, setItemEmplatadoAbierto] = useState<ItemCocina | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
@@ -338,7 +343,7 @@ export function CocinaPage() {
                         </button>
                         {item.receta_id && (
                           <button
-                            onClick={() => navigate(`/recetario/ver/${item.receta_id}?emplatado=${item.emplatado_id}`)}
+                            onClick={() => setItemEmplatadoAbierto(item)}
                             title="Ver cómo se emplata este producto"
                             className="flex min-w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 py-1 text-[11px] font-semibold leading-tight text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
                           >
@@ -367,6 +372,42 @@ export function CocinaPage() {
           })}
         </div>
       )}
+
+      {itemEmplatadoAbierto &&
+        (itemEmplatadoAbierto.emplatado_imagen_url ? (
+          <VisorImagenZoom
+            src={resolveImageUrl(itemEmplatadoAbierto.emplatado_imagen_url)!}
+            alt={itemEmplatadoAbierto.emplatado_nombre ?? itemEmplatadoAbierto.producto_nombre}
+            onCerrar={() => setItemEmplatadoAbierto(null)}
+            encabezado={
+              <>
+                <p className="font-semibold">{itemEmplatadoAbierto.producto_nombre}</p>
+                {itemEmplatadoAbierto.emplatado_guia && (
+                  <p
+                    className="mt-1 max-h-24 overflow-y-auto text-xs opacity-90"
+                    dangerouslySetInnerHTML={{ __html: formatearTextoBasico(itemEmplatadoAbierto.emplatado_guia) }}
+                  />
+                )}
+              </>
+            }
+          />
+        ) : (
+          <Modal
+            titulo={itemEmplatadoAbierto.emplatado_nombre ?? "Emplatado"}
+            onCerrar={() => setItemEmplatadoAbierto(null)}
+          >
+            {itemEmplatadoAbierto.emplatado_guia ? (
+              <p
+                className="whitespace-pre-wrap text-sm text-brand-ink dark:text-brand-vanilla"
+                dangerouslySetInnerHTML={{ __html: formatearTextoBasico(itemEmplatadoAbierto.emplatado_guia) }}
+              />
+            ) : (
+              <p className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                Esta presentación todavía no tiene foto ni guía.
+              </p>
+            )}
+          </Modal>
+        ))}
     </div>
   );
 }

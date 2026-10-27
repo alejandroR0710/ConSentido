@@ -278,7 +278,7 @@ export function EditarRecetaModal({
               placeholder="Nombre de la presentación (ej. Con fresas)"
               className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
             />
-            <SubidaImagen imagenUrl={e.imagen_url} onSubir={(file) => subirImagenEmplatado(e, file)} />
+            <SubidaImagen imagenUrl={e.imagen_url} onSubir={(file) => subirImagenEmplatado(e, file)} permitirZoom />
             <textarea
               value={e.guia ?? ""}
               onChange={(ev) => actualizarEmplatadoLocal(e.id, { guia: ev.target.value })}

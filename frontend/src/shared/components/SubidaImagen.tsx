@@ -1,13 +1,19 @@
 import { useState, type ChangeEvent } from "react";
 import { ApiError, resolveImageUrl } from "../api/client";
+import { ImagenConZoom } from "./ImagenConZoom";
 
 interface SubidaImagenProps {
   imagenUrl: string | null;
   onSubir: (file: File) => Promise<void>;
+  // Opcional porque la mayoría de usos (foto de insumo/producto) no lo
+  // necesitan — al activarlo, la miniatura se puede tocar para verla en
+  // grande (útil donde hay varias fotos para distinguir, como las
+  // presentaciones de emplatado de una receta).
+  permitirZoom?: boolean;
 }
 
 /** Miniatura + botón para subir/reemplazar la foto de un insumo o producto. */
-export function SubidaImagen({ imagenUrl, onSubir }: SubidaImagenProps) {
+export function SubidaImagen({ imagenUrl, onSubir, permitirZoom = false }: SubidaImagenProps) {
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +39,19 @@ export function SubidaImagen({ imagenUrl, onSubir }: SubidaImagenProps) {
       <label className="mb-1 block text-xs font-medium">Foto</label>
       <div className="flex items-center gap-3">
         {url ? (
-          <img
-            src={url}
-            alt=""
-            className="h-16 w-16 rounded-md border border-brand-vanilla-dark object-cover dark:border-brand-green-700"
-          />
+          permitirZoom ? (
+            <ImagenConZoom
+              src={url}
+              alt=""
+              className="h-16 w-16 rounded-md border border-brand-vanilla-dark object-cover dark:border-brand-green-700"
+            />
+          ) : (
+            <img
+              src={url}
+              alt=""
+              className="h-16 w-16 rounded-md border border-brand-vanilla-dark object-cover dark:border-brand-green-700"
+            />
+          )
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-brand-vanilla-dark text-center text-[10px] text-brand-ink/40 dark:border-brand-green-700 dark:text-brand-vanilla/40">
             Sin foto

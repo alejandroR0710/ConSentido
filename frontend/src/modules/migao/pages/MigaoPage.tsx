@@ -1541,14 +1541,12 @@ export function MigaoPage() {
                                 valoresIniciales={
                                   parte.tienda
                                     ? {
-                                        items: parte.tienda.items
-                                          .filter((i) => i.productoId)
-                                          .map((i) => ({
-                                            nombre: i.nombre,
-                                            cantidad: i.cantidad,
-                                            precioUnitario: i.precioUnitario,
-                                            productoId: i.productoId!,
-                                          })),
+                                        items: parte.tienda.items.map((i) => ({
+                                          nombre: i.nombre,
+                                          cantidad: i.cantidad,
+                                          precioUnitario: i.precioUnitario,
+                                          productoId: i.productoId ?? undefined,
+                                        })),
                                       }
                                     : undefined
                                 }

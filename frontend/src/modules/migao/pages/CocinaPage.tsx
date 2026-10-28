@@ -301,23 +301,15 @@ export function CocinaPage() {
                       <button
                         type="button"
                         onClick={() => toggleCheckTodos(preparando)}
+                        aria-label="Marcar (o desmarcar) de una vez todos los productos de esta mesa"
                         title="Marcar (o desmarcar) de una vez todos los productos de esta mesa"
-                        className={`flex items-center gap-1 rounded-md border-2 px-2 py-0.5 text-xs font-semibold ${
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded border-2 text-sm ${
                           todosListos
-                            ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
-                            : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                            ? "border-brand-green-600 bg-brand-green-600 text-brand-vanilla"
+                            : "border-brand-ink/40 dark:border-brand-vanilla/40"
                         }`}
                       >
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 text-[10px] ${
-                            todosListos
-                              ? "border-brand-green-600 bg-brand-green-600 text-brand-vanilla"
-                              : "border-brand-ink/40 dark:border-brand-vanilla/40"
-                          }`}
-                        >
-                          {todosListos ? "✓" : ""}
-                        </span>
-                        Marcar todo
+                        {todosListos ? "✓" : ""}
                       </button>
                     )}
                   </div>

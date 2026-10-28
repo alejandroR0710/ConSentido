@@ -13,7 +13,9 @@ interface RepartirPropinasModalProps {
 
 interface Asignacion {
   nombre: string;
-  metodoPago: "efectivo" | "banco" | "mixto";
+  // null = todavía no se eligió — a propósito no se preselecciona ninguno,
+  // queda a conveniencia de quien reparte (efectivo/banco/mixto).
+  metodoPago: "efectivo" | "banco" | "mixto" | null;
   // Solo se usa si metodoPago es "efectivo" o "banco".
   monto: number;
   // Solo se usan si metodoPago es "mixto" — al confirmar, esta asignación se
@@ -121,6 +123,13 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const [presenciaPorDia, setPresenciaPorDia] = useState<Record<string, Set<string>>>({});
   const [nuevoParticipante, setNuevoParticipante] = useState<Record<string, string>>({});
   const [asignaciones, setAsignaciones] = useState<Record<string, Asignacion>>({});
+  // Valor al que hay que llegar con cada persona, SOLO en función de los días
+  // que se le marcaron — a diferencia de `asignaciones` (lo que de verdad se
+  // va a entregar, editable), esto nunca lo toca el método de pago ni un
+  // ajuste manual del monto. Es la referencia fija junto al nombre.
+  const [objetivoPorPersona, setObjetivoPorPersona] = useState<Record<string, { efectivo: number; banco: number }>>(
+    {},
+  );
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -230,12 +239,15 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     setNuevoParticipante((prev) => ({ ...prev, [fecha]: "" }));
   }
 
-  // Sincroniza el resumen con quién quedó marcado en cada día: reparte el
-  // pendiente de cada día en partes iguales entre sus marcados y lo suma por
-  // persona (puede trabajar varios días). Una persona que el cajero ya ajustó
-  // a mano (editadoManual) conserva su valor tal cual, aunque se siga
-  // marcando/desmarcando gente en otros días — nunca le pisa un ajuste manual
-  // sin avisar.
+  // Recalcula el objetivo (valor fijo de referencia) con quién quedó marcado
+  // en cada día: reparte el pendiente de cada día en partes iguales entre sus
+  // marcados y lo suma por persona (puede trabajar varios días). Esto SOLO
+  // depende de los días/presencia — nunca de cómo se termine repartiendo
+  // (método, monto manual). Para `asignaciones` (lo editable), una persona
+  // que el cajero ya ajustó a mano (editadoManual) conserva su valor tal
+  // cual, aunque se siga marcando/desmarcando gente en otros días — nunca le
+  // pisa un ajuste manual sin avisar; una persona nueva arranca sin método
+  // elegido (ver elegirMetodo).
   useEffect(() => {
     const sugerido = new Map<string, { efectivo: number; banco: number }>();
     for (const dia of diasElegidos) {
@@ -251,24 +263,23 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
       });
     }
 
+    setObjetivoPorPersona(Object.fromEntries(sugerido));
+
     setAsignaciones((prev) => {
       const siguiente: Record<string, Asignacion> = {};
-      for (const [nombre, montos] of sugerido) {
+      for (const [nombre] of sugerido) {
         const existente = prev[nombre];
-        if (existente?.editadoManual) {
-          siguiente[nombre] = existente;
-          continue;
-        }
-        const esMixto = montos.efectivo > 0 && montos.banco > 0;
-        siguiente[nombre] = {
-          nombre,
-          metodoPago: esMixto ? "mixto" : montos.banco > 0 ? "banco" : "efectivo",
-          monto: esMixto ? 0 : montos.efectivo > 0 ? montos.efectivo : montos.banco,
-          montoEfectivo: montos.efectivo,
-          montoBanco: montos.banco,
-          motivo: existente?.motivo ?? "",
-          editadoManual: false,
-        };
+        siguiente[nombre] =
+          existente ??
+          ({
+            nombre,
+            metodoPago: null,
+            monto: 0,
+            montoEfectivo: 0,
+            montoBanco: 0,
+            motivo: "",
+            editadoManual: false,
+          } satisfies Asignacion);
       }
       return siguiente;
     });
@@ -282,13 +293,44 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
     }));
   }
 
+  /** Elegir el método de pago de una persona — a diferencia de los demás
+   *  campos (que el cajero escribe a mano), acá conviene prellenar el monto
+   *  con el objetivo de esa persona (partes iguales según sus días), para no
+   *  arrancar en $0 — sigue siendo editable después. */
+  function elegirMetodo(nombre: string, metodo: Exclude<Asignacion["metodoPago"], null>) {
+    const objetivo = objetivoPorPersona[nombre] ?? { efectivo: 0, banco: 0 };
+    const esMixto = metodo === "mixto";
+    setAsignaciones((prev) => ({
+      ...prev,
+      [nombre]: {
+        ...prev[nombre],
+        metodoPago: metodo,
+        monto: esMixto ? 0 : objetivo.efectivo + objetivo.banco,
+        montoEfectivo: esMixto ? objetivo.efectivo : 0,
+        montoBanco: esMixto ? objetivo.banco : 0,
+        editadoManual: true,
+      },
+    }));
+  }
+
+  /** El objetivo (efectivo+banco) de una persona — 0 si por algún motivo no
+   *  quedó en el mapa (no debería pasar, ver el useEffect de arriba). */
+  function objetivoTotalDe(nombre: string) {
+    const o = objetivoPorPersona[nombre];
+    return o ? o.efectivo + o.banco : 0;
+  }
+
+  /** true si lo que de verdad se le va a entregar a esta persona difiere del
+   *  objetivo calculado por sus días — ahí es obligatorio explicar el motivo. */
+  function huboDesviacion(a: Asignacion) {
+    const actual = montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a);
+    return Math.abs(actual - objetivoTotalDe(a.nombre)) >= 1;
+  }
+
   const listaAsignaciones = useMemo(
-    () =>
-      Object.values(asignaciones).sort(
-        (a, b) =>
-          montoEfectivoDeAsignacion(b) + montoBancoDeAsignacion(b) - (montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a)),
-      ),
-    [asignaciones],
+    () => Object.values(asignaciones).sort((a, b) => objetivoTotalDe(b.nombre) - objetivoTotalDe(a.nombre)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [asignaciones, objetivoPorPersona],
   );
 
   const sumaAsigEfectivo = listaAsignaciones.reduce((acc, a) => acc + montoEfectivoDeAsignacion(a), 0);
@@ -297,8 +339,11 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
   const restanteBanco = totalBancoSeleccionado - sumaAsigBanco;
 
   const asignacionesValidas = listaAsignaciones.every((a) => {
-    if (a.metodoPago === "mixto") return (a.montoEfectivo || 0) + (a.montoBanco || 0) > 0;
-    return a.monto > 0;
+    if (a.metodoPago === null) return false; // falta elegir método
+    const tieneMonto = a.metodoPago === "mixto" ? (a.montoEfectivo || 0) + (a.montoBanco || 0) > 0 : a.monto > 0;
+    if (!tieneMonto) return false;
+    if (huboDesviacion(a) && !a.motivo.trim()) return false; // cambió el valor: falta el motivo
+    return true;
   });
   const puedeRepartir =
     !cargando &&
@@ -318,6 +363,7 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
       // cualquier otro cobro de la app) — cada persona mixta se descompone
       // acá en 1-2 entregas ya puras antes de mandarlas.
       const entregasParaEnviar = listaAsignaciones.flatMap((a) => {
+        if (a.metodoPago === null) return []; // puedeRepartir ya lo descarta, esto es solo para el tipo
         const base = { nombrePersona: a.nombre, motivo: a.motivo.trim() || undefined };
         if (a.metodoPago === "mixto") {
           const lineas: (typeof base & { metodoPago: "efectivo" | "banco"; monto: number })[] = [];
@@ -504,76 +550,103 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
                 3. ¿Cuánto y en qué método recibe cada persona?
               </h3>
               <div className="flex flex-col gap-2">
-                {listaAsignaciones.map((a) => (
-                  <div
-                    key={a.nombre}
-                    className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla p-2 dark:border-brand-green-700 dark:bg-brand-green-900 sm:grid-cols-[1.2fr_0.9fr_1fr_1.2fr] sm:items-center"
-                  >
-                    <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
-                      {a.nombre}{" "}
-                      <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
-                        · total{" "}
-                        <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                          {formatMoney(montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a))}
+                {listaAsignaciones.map((a) => {
+                  const objetivo = objetivoTotalDe(a.nombre);
+                  const porcentaje = totalSeleccionado > 0 ? Math.round((objetivo / totalSeleccionado) * 100) : 0;
+                  // Sin método elegido todavía no hay nada que comparar —
+                  // mostrar "desviación" ahí solo confundiría (y el "Elige
+                  // un método primero" ya cubre ese estado).
+                  const desviado = a.metodoPago !== null && huboDesviacion(a);
+                  const motivoFalta = desviado && !a.motivo.trim();
+                  return (
+                    <div
+                      key={a.nombre}
+                      className="grid grid-cols-1 gap-2 rounded-md border border-brand-vanilla-dark bg-brand-vanilla p-2 dark:border-brand-green-700 dark:bg-brand-green-900 sm:grid-cols-[1.2fr_0.9fr_1fr_1.2fr] sm:items-center"
+                    >
+                      <span className="text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                        {a.nombre}{" "}
+                        <span className="text-xs font-normal text-brand-ink/60 dark:text-brand-vanilla/60">
+                          · le corresponde{" "}
+                          <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
+                            {porcentaje}% · {formatMoney(objetivo)}
+                          </span>
                         </span>
+                        {desviado && (
+                          <span className="ml-1 block text-xs font-normal text-amber-600 dark:text-amber-400 sm:inline">
+                            (le vas a dar {formatMoney(montoEfectivoDeAsignacion(a) + montoBancoDeAsignacion(a))})
+                          </span>
+                        )}
                       </span>
-                    </span>
-                    <div>
-                      <label className="mb-0.5 block text-[11px] font-medium">Método</label>
-                      <select
-                        value={a.metodoPago}
-                        onChange={(e) => actualizarAsignacion(a.nombre, "metodoPago", e.target.value)}
-                        className={inputClase}
-                      >
-                        <option value="efectivo">Efectivo</option>
-                        <option value="banco">Banco</option>
-                        <option value="mixto">Mixto</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
-                      {a.metodoPago === "mixto" ? (
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1">
-                            <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
-                              Ef.
-                            </span>
-                            <MoneyInput
-                              value={a.montoEfectivo}
-                              onChange={(v) => actualizarAsignacion(a.nombre, "montoEfectivo", v)}
-                              className={inputClase}
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
-                              Bc.
-                            </span>
-                            <MoneyInput
-                              value={a.montoBanco}
-                              onChange={(v) => actualizarAsignacion(a.nombre, "montoBanco", v)}
-                              className={inputClase}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <MoneyInput
-                          value={a.monto}
-                          onChange={(v) => actualizarAsignacion(a.nombre, "monto", v)}
+                      <div>
+                        <label className="mb-0.5 block text-[11px] font-medium">Método</label>
+                        <select
+                          value={a.metodoPago ?? ""}
+                          onChange={(e) =>
+                            elegirMetodo(a.nombre, e.target.value as Exclude<Asignacion["metodoPago"], null>)
+                          }
                           className={inputClase}
+                        >
+                          <option value="" disabled>
+                            Elegir...
+                          </option>
+                          <option value="efectivo">Efectivo</option>
+                          <option value="banco">Banco</option>
+                          <option value="mixto">Mixto</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-0.5 block text-[11px] font-medium">Monto</label>
+                        {a.metodoPago === null ? (
+                          <p className="pt-1.5 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
+                            Elige un método primero
+                          </p>
+                        ) : a.metodoPago === "mixto" ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                                Ef.
+                              </span>
+                              <MoneyInput
+                                value={a.montoEfectivo}
+                                onChange={(v) => actualizarAsignacion(a.nombre, "montoEfectivo", v)}
+                                className={inputClase}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="w-5 shrink-0 text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">
+                                Bc.
+                              </span>
+                              <MoneyInput
+                                value={a.montoBanco}
+                                onChange={(v) => actualizarAsignacion(a.nombre, "montoBanco", v)}
+                                className={inputClase}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <MoneyInput
+                            value={a.monto}
+                            onChange={(v) => actualizarAsignacion(a.nombre, "monto", v)}
+                            className={inputClase}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label
+                          className={`mb-0.5 block text-[11px] font-medium ${motivoFalta ? "text-red-600" : ""}`}
+                        >
+                          Motivo {desviado ? "(obligatorio: cambiaste el valor)" : "(opcional)"}
+                        </label>
+                        <input
+                          value={a.motivo}
+                          onChange={(e) => actualizarAsignacion(a.nombre, "motivo", e.target.value)}
+                          placeholder="Ej. turno completo"
+                          className={`${inputClase} ${motivoFalta ? "border-red-500" : ""}`}
                         />
-                      )}
+                      </div>
                     </div>
-                    <div>
-                      <label className="mb-0.5 block text-[11px] font-medium">Motivo (opcional)</label>
-                      <input
-                        value={a.motivo}
-                        onChange={(e) => actualizarAsignacion(a.nombre, "motivo", e.target.value)}
-                        placeholder="Ej. turno completo"
-                        className={inputClase}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:gap-3">

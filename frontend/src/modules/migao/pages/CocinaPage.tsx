@@ -165,6 +165,30 @@ export function CocinaPage() {
     }
   }
 
+  /** Chuleado masivo: marca (o desmarca) de una vez todos los productos ya en
+   *  preparación de un ticket, para no tener que tocar uno por uno cuando ya
+   *  está todo listo. Si alguno queda sin marcar, el próximo toque marca
+   *  todos; si ya están todos marcados, el próximo toque los desmarca todos. */
+  async function toggleCheckTodos(itemsPreparando: ItemCocina[]) {
+    if (itemsPreparando.length === 0) return;
+    mutacionesEnCursoRef.current++;
+    versionMutacionRef.current++;
+    const nuevoValor = !itemsPreparando.every((i) => i.listo_cocina);
+    const originales = itemsPreparando.map((i) => ({ ...i }));
+    aplicarActualizacion(itemsPreparando.map((i) => ({ ...i, listo_cocina: nuevoValor })));
+    try {
+      const actualizados = await Promise.all(
+        itemsPreparando.map((i) => migaoApi.marcarCheckItem(i.id, nuevoValor)),
+      );
+      aplicarActualizacion(actualizados);
+    } catch (err) {
+      aplicarActualizacion(originales);
+      setError(err instanceof ApiError ? err.message : "No se pudieron marcar los productos");
+    } finally {
+      mutacionesEnCursoRef.current--;
+    }
+  }
+
   async function marcarOrdenLista(ordenId: string) {
     mutacionesEnCursoRef.current++;
     versionMutacionRef.current++;
@@ -243,6 +267,7 @@ export function CocinaPage() {
             const preparando = ticket.items.filter((i) => i.estado === "preparando");
             const puedeMarcarListo =
               preparando.length > 0 && pendientes.length === 0 && preparando.every((i) => i.listo_cocina);
+            const todosListos = preparando.length > 0 && preparando.every((i) => i.listo_cocina);
             const procesando = procesandoId === ticket.ordenId;
             const inicioEspera =
               pendientes.length > 0 ? Math.min(...pendientes.map((i) => new Date(i.created_at).getTime())) : null;
@@ -268,9 +293,34 @@ export function CocinaPage() {
                       </span>
                     )}
                   </span>
-                  <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
-                    {formatearHora(ticket.items[0].created_at)}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-sm text-brand-ink/60 dark:text-brand-vanilla/60">
+                      {formatearHora(ticket.items[0].created_at)}
+                    </span>
+                    {preparando.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleCheckTodos(preparando)}
+                        title="Marcar (o desmarcar) de una vez todos los productos de esta mesa"
+                        className={`flex items-center gap-1 rounded-md border-2 px-2 py-0.5 text-xs font-semibold ${
+                          todosListos
+                            ? "border-brand-green-600 bg-brand-green-50 text-brand-green-700 dark:bg-brand-green-700/30 dark:text-brand-vanilla"
+                            : "border-brand-vanilla-dark text-brand-ink/70 dark:border-brand-green-700 dark:text-brand-vanilla/70"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 text-[10px] ${
+                            todosListos
+                              ? "border-brand-green-600 bg-brand-green-600 text-brand-vanilla"
+                              : "border-brand-ink/40 dark:border-brand-vanilla/40"
+                          }`}
+                        >
+                          {todosListos ? "✓" : ""}
+                        </span>
+                        Marcar todo
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {ticket.meseroNombre && (
                   <div className="-mt-2 text-xs text-brand-ink/50 dark:text-brand-vanilla/50">
@@ -345,7 +395,7 @@ export function CocinaPage() {
                           <button
                             onClick={() => setItemEmplatadoAbierto(item)}
                             title="Ver cómo se emplata este producto"
-                            className="flex shrink-0 items-center gap-1 self-center rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 py-1 text-[11px] font-semibold text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
+                            className="flex shrink-0 items-center gap-1 self-stretch rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 text-[11px] font-semibold text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
                           >
                             <span aria-hidden>📖</span>
                             Ver

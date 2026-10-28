@@ -345,12 +345,10 @@ export function CocinaPage() {
                           <button
                             onClick={() => setItemEmplatadoAbierto(item)}
                             title="Ver cómo se emplata este producto"
-                            className="flex min-w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 py-1 text-[11px] font-semibold leading-tight text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
+                            className="flex shrink-0 items-center gap-1 self-center rounded-md border-2 border-brand-green-600 bg-brand-green-50 px-2 py-1 text-[11px] font-semibold text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
                           >
-                            <span className="text-lg" aria-hidden>
-                              📖
-                            </span>
-                            Ver emplatado
+                            <span aria-hidden>📖</span>
+                            Ver
                           </button>
                         )}
                       </li>

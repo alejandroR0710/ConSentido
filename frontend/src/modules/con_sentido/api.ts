@@ -22,6 +22,10 @@ export interface ProductoConSentido {
   categoria: string | null;
   stock: number;
   activo: boolean;
+  // Área económica a la que pertenece por defecto, según el módulo
+  // (Insumos u otro) de su categoría — ver categorias_producto.modulo_id.
+  // Sirve para precargar el selector de área al vender/registrar un ingreso.
+  areaDefecto: "insumos" | "con_sentido";
 }
 
 export interface ClienteConSentido {

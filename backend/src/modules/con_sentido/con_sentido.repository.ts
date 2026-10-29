@@ -12,12 +12,17 @@ type Executor = Pool | PoolClient;
 // sola vez, para que el frontend y el validador de ventas (z.number()) reciban
 // números de verdad.
 function normalizarProducto<T extends Record<string, unknown>>(fila: T) {
+  // `area_defecto` (alias de la columna calculada en SELECT_PRODUCTO) se
+  // expone en camelCase: a diferencia del resto de campos acá, no es una
+  // columna real de `productos` sino un valor derivado para el frontend.
+  const { area_defecto, ...resto } = fila as T & { area_defecto?: "insumos" | "con_sentido" };
   return {
-    ...fila,
+    ...resto,
     precio: Number(fila.precio),
     stock: Number(fila.stock),
     precio_mayorista: fila.precio_mayorista == null ? null : Number(fila.precio_mayorista),
     mayorista_desde: fila.mayorista_desde == null ? null : Number(fila.mayorista_desde),
+    areaDefecto: area_defecto ?? "con_sentido",
   };
 }
 
@@ -28,9 +33,14 @@ const SELECT_PRODUCTO = `
          p.precio_mayorista, p.mayorista_desde, p.nota_mayorista,
          COALESCE(p.ecommerce_product_id, p.id) AS grupo,
          p.ecommerce_publicado, (p.ecommerce_item_key IS NOT NULL) AS sincronizado,
-         cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock
+         cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock,
+         -- Área por defecto (binaria para este catálogo): "insumos" si la
+         -- categoría del producto está amarrada al módulo Insumos, si no
+         -- "con_sentido" (sin categoría, o categoría sin módulo asignado).
+         CASE WHEN m2.slug = 'insumos' THEN 'insumos' ELSE 'con_sentido' END AS area_defecto
     FROM productos p
     LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
+    LEFT JOIN modulos m2 ON m2.id = cp.modulo_id
     LEFT JOIN inventario_productos ip ON ip.producto_id = p.id
 `;
 

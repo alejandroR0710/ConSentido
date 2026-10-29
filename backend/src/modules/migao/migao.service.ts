@@ -2,6 +2,7 @@ import { PoolClient, pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import { tienePermiso } from "../../shared/middlewares/rbac.middleware";
 import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../shared/utils/pago-mixto";
+import { distribuirIgual } from "../../shared/utils/distribuir";
 import * as cajaService from "../general/caja/caja.service";
 import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
 import { programarEnvio as programarEnvioEcommerce } from "../integracion_ecommerce/salida";
@@ -1380,17 +1381,6 @@ export async function pagarItems(ordenId: string, input: PagarItemsInput, usuari
  * el cliente). Usada solo por iniciarCobro — una cuenta sin dividir es, acá,
  * una división de 1 sola parte (modo 'igual', numPartes 1).
  */
-/** Reparte `total` en `n` montos iguales — la última parte absorbe el
- *  residuo del redondeo, así la suma de todas siempre da EXACTO el total
- *  (nunca queda 1 centavo suelto). Usada al crear las partes (calcularPartes)
- *  y al recalcularlas en vivo (recalcularVentaDesdeOrden). */
-function distribuirIgual(total: number, n: number): number[] {
-  const base = Math.floor((total / n) * 100) / 100;
-  const montos = Array.from({ length: n }, () => base);
-  montos[n - 1] = Math.round((total - base * (n - 1)) * 100) / 100;
-  return montos;
-}
-
 function calcularPartes<T extends { id: unknown; cantidad: string; precio_unitario: string }>(
   division: IniciarCobroInput["division"],
   items: (T & { subtotal: number })[],

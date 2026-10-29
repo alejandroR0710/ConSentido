@@ -29,6 +29,13 @@ const itemIngresoSchema = z.object({
   nombre: z.string().trim().min(1).max(150),
   cantidad: z.number().positive(),
   precioUnitario: z.number().nonnegative(),
+  // De qué área es ESTE ítem puntual — ver caja.service.ts::registrarIngresoManual,
+  // que reparte el pago entre áreas según lo que traiga cada línea (vía
+  // descomponerPorAreaYMetodo). Obligatorio en la práctica cuando `items` no
+  // viene vacío (ver el .refine de registrarIngresoSchema más abajo);
+  // opcional acá a nivel de tipo porque este mismo schema de ítem también lo
+  // usan flujos que no reparten por área.
+  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
   // Si el ítem se eligió del autocompletar de productos (catálogo de Con
   // Sentido), acá queda cuál — el service descuenta su stock y, si está
   // sincronizado, le avisa al e-commerce (mismo criterio que
@@ -40,7 +47,13 @@ const itemIngresoSchema = z.object({
 });
 
 const camposIngreso = {
-  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
+  // Opcional: los llamados internos sin `items` (Migao/propinas/vales/etc,
+  // ver insertarMovimientosIngreso) siguen mandándolo y lo siguen usando tal
+  // cual para TODO el movimiento. El ingreso manual de Caja General (botón
+  // "Registrar ingreso", ver registrarIngresoManual) en cambio YA NO lo usa
+  // para repartir — a partir de este cambio siempre manda `items`, cada uno
+  // con su propio moduloOrigenSlug (ver itemIngresoSchema e IngresoModal.tsx).
+  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
   // Sin límite de caracteres a propósito (ver movimientos_caja.motivo / pagos.referencia, ambas TEXT).
   motivo: z.string().optional(),
   referenciaEntidad: z.string().max(80).optional(),
@@ -62,17 +75,27 @@ const camposIngreso = {
   // Obligatorio cuando el ingreso lleva algo por banco (ver exigirReferenciaBanco).
   ...referenciaBancoSchema,
 };
-export const registrarIngresoSchema = z.union([
-  z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
-  z
-    .object({
-      ...camposIngreso,
-      metodoPago: z.literal("mixto"),
-      montoEfectivo: z.number().nonnegative(),
-      montoBanco: z.number().nonnegative(),
-    })
-    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
-]);
+export const registrarIngresoSchema = z
+  .union([
+    z.object({ ...camposIngreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+    z
+      .object({
+        ...camposIngreso,
+        metodoPago: z.literal("mixto"),
+        montoEfectivo: z.number().nonnegative(),
+        montoBanco: z.number().nonnegative(),
+      })
+      .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+  ])
+  // Si vienen ítems (modo "Agregar productos" de IngresoModal, o el "monto
+  // único" ya convertido en un item de 1 elemento), CADA uno debe traer su
+  // propia área — es lo que registrarIngresoManual usa para repartir el
+  // pago entre áreas (ver descomponerPorAreaYMetodo). Sin items (llamados
+  // internos vía referenciaEntidad), no aplica.
+  .refine((d) => !d.items || d.items.every((item) => !!item.moduloOrigenSlug), {
+    message: "Cada ítem del ingreso debe indicar su área (moduloOrigenSlug)",
+    path: ["items"],
+  });
 export type RegistrarIngresoInput = z.infer<typeof registrarIngresoSchema>;
 
 const camposEgreso = {

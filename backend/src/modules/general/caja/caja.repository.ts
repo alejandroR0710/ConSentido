@@ -380,6 +380,9 @@ export interface IngresoItemFila {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  // De qué área es este ítem — ver caja.service.ts::registrarIngresoManual,
+  // que la usa para repartir el pago entre áreas (descomponerPorAreaYMetodo).
+  moduloOrigenSlug: string;
   // Producto del catálogo elegido en el autocompletar (null = texto libre):
   // si se anula el ingreso, se devuelve su stock (ver anularVenta).
   productoId: string | null;
@@ -390,9 +393,18 @@ export interface IngresoItemFila {
 export async function crearIngresoItems(client: PoolClient, ventaId: string, items: IngresoItemFila[]) {
   for (const item of items) {
     await client.query(
-      `INSERT INTO caja_ingreso_items (venta_id, producto_id, nombre, cantidad, precio_unitario, observacion_inventario)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [ventaId, item.productoId, item.nombre, item.cantidad, item.precioUnitario, item.observacionInventario],
+      `INSERT INTO caja_ingreso_items
+         (venta_id, producto_id, nombre, cantidad, precio_unitario, observacion_inventario, modulo_origen_id)
+       VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM modulos WHERE slug = $7))`,
+      [
+        ventaId,
+        item.productoId,
+        item.nombre,
+        item.cantidad,
+        item.precioUnitario,
+        item.observacionInventario,
+        item.moduloOrigenSlug,
+      ],
     );
   }
 }

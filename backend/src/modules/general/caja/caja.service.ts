@@ -5,6 +5,7 @@ import { descontarParaVenta, motivoVenta } from "../../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../../integracion_ecommerce/salida";
 import { listOrdenesAbiertas } from "../../migao/migao.repository";
 import { descomponerPago, exigirMontoRecibidoEfectivo, exigirReferenciaBanco } from "../../../shared/utils/pago-mixto";
+import { descomponerPorAreaYMetodo } from "../../../shared/utils/area-pago";
 import * as repo from "./caja.repository";
 import {
   AbrirTurnoInput,
@@ -17,6 +18,8 @@ import {
   RegistrarEgresoInput,
   RegistrarIngresoInput,
 } from "./caja.schema";
+
+const centavos = (n: number) => Math.round(n * 100) / 100;
 
 export async function obtenerTurnoAbierto() {
   return repo.findTurnoAbierto();
@@ -124,6 +127,14 @@ export async function registrarIngreso(
  *  descomponerPago) — nunca se guarda "mixto" como tal en la base. */
 async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioId: string, executor: Pool | PoolClient) {
   const turno = await turnoAbiertoOrThrow(executor);
+  // moduloOrigenSlug es opcional a nivel de schema (lo exige la venta manual
+  // vía `items`, ver registrarIngresoManual) pero esta rama —referenciaEntidad,
+  // Migao/propinas/vales/etc., que nunca mandan `items`— sigue necesitándolo
+  // top-level tal cual siempre lo hizo.
+  if (!input.moduloOrigenSlug) {
+    throw Errors.badRequest("moduloOrigenSlug es obligatorio para este tipo de ingreso");
+  }
+  const moduloOrigenSlug = input.moduloOrigenSlug;
   const partes = descomponerPago(input);
   const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
   // Autodetectado (2 líneas = de verdad fue mixto, no un "mixto" con un lado
@@ -147,7 +158,7 @@ async function insertarMovimientosIngreso(input: RegistrarIngresoInput, usuarioI
     movimientos.push(
       await repo.insertIngreso(executor, {
         turnoId: turno.id,
-        moduloOrigenSlug: input.moduloOrigenSlug,
+        moduloOrigenSlug,
         monto: parte.monto,
         metodoPago: parte.metodoPago,
         motivo: input.motivo,
@@ -180,16 +191,45 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
     await client.query("BEGIN");
     const turno = await turnoAbiertoOrThrow(client);
 
+    // Este flujo (sin referenciaEntidad, ver registrarIngreso) ya no acepta
+    // el ítem sintético de antes: a partir de este cambio quien venda desde
+    // IngresoModal SIEMPRE manda `items` no vacío (el "monto único" se
+    // convierte en un item de 1 elemento — ver Task 7), cada uno con su
+    // propia área, que es justo lo que hace falta para repartir el pago.
+    if (!input.items || input.items.length === 0) {
+      throw Errors.badRequest("Debes agregar al menos un ítem para registrar el ingreso");
+    }
+    const items = input.items;
+
     const descuentoPorcentaje = input.descuentoPorcentaje ?? 0;
     const partes = descomponerPago(input);
     const totalNeto = partes.reduce((acc, p) => acc + p.monto, 0);
     const totalBruto = descuentoPorcentaje > 0 ? totalNeto / (1 - descuentoPorcentaje / 100) : totalNeto;
     const descuentoMonto = totalBruto - totalNeto;
 
-    const items =
-      input.items && input.items.length > 0
-        ? input.items
-        : [{ nombre: input.motivo?.trim() || "Ingreso registrado", cantidad: 1, precioUnitario: totalBruto }];
+    // Cada ítem puede ser de una área distinta — se reparte el NETO del pago
+    // (lo que de verdad se cobró, post-descuento) proporcional al bruto
+    // (cantidad * precioUnitario) de cada ítem, con la misma cascada de
+    // residuo exacto que usa descomponerPorAreaYMetodo (ver area-pago.ts):
+    // todos los ítems salvo el último llevan su parte proporcional
+    // redondeada a centavos, el último absorbe lo que falte para cuadrar
+    // EXACTO con totalNeto — así no importa si el bruto de los ítems (lo
+    // que llega en `items`, también usado para la factura y el stock) no
+    // coincide centavo a centavo con cómo redondeó el frontend su propio
+    // neto. Con 1 solo ítem (modo "monto único" ya convertido en items, ver
+    // Task 7) esto da exactamente su totalNeto, igual que antes.
+    const totalItemsBruto = items.reduce((acc, i) => acc + i.cantidad * i.precioUnitario, 0);
+    let netoRestante = totalNeto;
+    const lineasPorArea = items.map((item, idx) => {
+      const esUltimo = idx === items.length - 1;
+      const bruto = item.cantidad * item.precioUnitario;
+      const neto =
+        esUltimo || totalItemsBruto <= 0 ? centavos(netoRestante) : centavos((bruto * totalNeto) / totalItemsBruto);
+      netoRestante = centavos(netoRestante - neto);
+      return { moduloOrigenSlug: item.moduloOrigenSlug!, monto: neto };
+    });
+    const grupos = descomponerPorAreaYMetodo(lineasPorArea, input);
+
     // Autodetectado igual que en insertarMovimientosIngreso: 2 líneas = de
     // verdad fue mixto (no un "mixto" con un lado en $0, ya reducido a 1 sola).
     const esPagoMixto = partes.length > 1;
@@ -203,8 +243,13 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       input.referenciaBanco,
     );
 
+    // La venta en sí (tabla `ventas`) sigue llevando UN solo módulo — el que
+    // venga top-level si lo mandan (hoy IngresoModal siempre lo manda) o, si
+    // no, el del primer ítem como representante; el reparto real por área
+    // vive en los movimientos de Caja (`grupos`, abajo) y en cada ítem
+    // guardado (ver crearIngresoItems).
     const venta = await repo.crearVentaManual(client, {
-      moduloOrigenSlug: input.moduloOrigenSlug,
+      moduloOrigenSlug: input.moduloOrigenSlug ?? items[0].moduloOrigenSlug!,
       usuarioId,
       subtotal: totalBruto,
       descuento: descuentoMonto,
@@ -232,6 +277,7 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
         nombre: item.nombre,
         cantidad: item.cantidad,
         precioUnitario: item.precioUnitario,
+        moduloOrigenSlug: item.moduloOrigenSlug!,
         productoId: null,
         observacionInventario: null,
       };
@@ -272,9 +318,11 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       });
     }
 
-    const movimientos = [];
+    // Los pagos (tabla `pagos`) reflejan CÓMO pagó el cliente — uno por
+    // método real, sin repartir por área (eso es independiente de qué
+    // producto compró). El reparto por área vive solo en movimientos_caja,
+    // abajo.
     for (const parte of partes) {
-      const montoSinDescuento = descuentoPorcentaje > 0 ? parte.monto / (1 - descuentoPorcentaje / 100) : undefined;
       await repo.crearPagoParaVenta(client, {
         ordenId: null,
         ventaId: venta.id,
@@ -284,12 +332,20 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
         usuarioId,
         montoRecibidoEfectivo: parte.metodoPago === "efectivo" ? montoRecibidoEfectivo : undefined,
       });
+    }
+
+    // Un movimiento de Caja por cada combinación área×método que de verdad
+    // tuvo plata (ver descomponerPorAreaYMetodo) — reemplaza el loop viejo
+    // de 1 fila por método puro, ahora son hasta 1 fila por área por método.
+    const movimientos = [];
+    for (const grupo of grupos) {
+      const montoSinDescuento = descuentoPorcentaje > 0 ? grupo.monto / (1 - descuentoPorcentaje / 100) : undefined;
       movimientos.push(
         await repo.insertIngreso(client, {
           turnoId: turno.id,
-          moduloOrigenSlug: input.moduloOrigenSlug,
-          monto: parte.monto,
-          metodoPago: parte.metodoPago,
+          moduloOrigenSlug: grupo.moduloOrigenSlug,
+          monto: grupo.monto,
+          metodoPago: grupo.metodoPago,
           motivo: input.motivo,
           referenciaEntidad: "caja_ventas",
           referenciaId: venta.id,

@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { conSentidoApi, type ProductoConSentido } from "../api";
+import { CategoriasAreaPanel } from "../components/CategoriasAreaPanel";
 
 export function InventarioConSentidoPage() {
+  const { usuario } = useAuth();
   const [productos, setProductos] = useState<ProductoConSentido[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +111,7 @@ export function InventarioConSentidoPage() {
         </div>
       )}
 
+      {tieneAccesoTotal(usuario?.rol) && <CategoriasAreaPanel />}
     </div>
   );
 }

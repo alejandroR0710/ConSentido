@@ -35,6 +35,15 @@ export interface ClienteConSentido {
   email: string | null;
 }
 
+// Categoría de producto de Con Sentido con su área (módulo) por defecto —
+// ver con_sentido.repository.ts::listarCategoriasConArea. A diferencia de
+// CategoriaGasto (caja), aquí solo existen dos áreas posibles.
+export interface CategoriaConSentido {
+  id: number;
+  nombre: string;
+  areaSlug: "insumos" | "con_sentido";
+}
+
 export interface ItemVenta {
   // Producto del inventario; sin él es un "Otro producto" (no descuenta stock).
   productoId?: string;
@@ -126,4 +135,13 @@ export const conSentidoApi = {
   listarClientes: () => apiFetch<ClienteConSentido[]>("/con-sentido/clientes"),
   crearCliente: (input: { nombre: string; telefono?: string; email?: string }) =>
     apiFetch<ClienteConSentido>("/con-sentido/clientes", { method: "POST", body: input }),
+
+  // Administración del área por defecto de las categorías de producto —
+  // ver con_sentido.routes.ts (gateado por con_sentido.categorias.administrar).
+  listarCategorias: () => apiFetch<CategoriaConSentido[]>("/con-sentido/categorias"),
+  actualizarAreaCategoria: (id: number, areaSlug: "insumos" | "con_sentido") =>
+    apiFetch<{ id: number; nombre: string }>(`/con-sentido/categorias/${id}`, {
+      method: "PATCH",
+      body: { areaSlug },
+    }),
 };

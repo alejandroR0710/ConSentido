@@ -403,6 +403,9 @@ CREATE TABLE categorias_producto (
   id     INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(80) UNIQUE NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+ALTER TABLE categorias_producto
+  ADD COLUMN modulo_id SMALLINT NULL,
+  ADD CONSTRAINT fk_categorias_producto_modulo FOREIGN KEY (modulo_id) REFERENCES modulos(id);
 
 CREATE TABLE productos (
   id             CHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -502,6 +505,9 @@ CREATE TABLE con_sentido_venta_items (
     FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_con_sentido_venta_items_venta (venta_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+ALTER TABLE con_sentido_venta_items
+  ADD COLUMN modulo_origen_id SMALLINT NULL,
+  ADD CONSTRAINT fk_con_sentido_venta_items_modulo FOREIGN KEY (modulo_origen_id) REFERENCES modulos(id);
 
 -- Avisos de stock por enviar al e-commerce / ya recibidos de él
 -- (ver backend/src/modules/integracion_ecommerce).
@@ -787,6 +793,9 @@ CREATE TABLE caja_ingreso_items (
     FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_caja_ingreso_items_venta (venta_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+ALTER TABLE caja_ingreso_items
+  ADD COLUMN modulo_origen_id SMALLINT NULL,
+  ADD CONSTRAINT fk_caja_ingreso_items_modulo FOREIGN KEY (modulo_origen_id) REFERENCES modulos(id);
 
 -- ============================================================================
 -- 6. MIGAO (POS / Cafetería)
@@ -1077,6 +1086,9 @@ CREATE TABLE pedido_items (
   FOREIGN KEY (producto_id) REFERENCES productos(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 CREATE INDEX idx_pedido_items_pedido ON pedido_items(pedido_id);
+ALTER TABLE pedido_items
+  ADD COLUMN modulo_origen_id SMALLINT NULL,
+  ADD CONSTRAINT fk_pedido_items_modulo FOREIGN KEY (modulo_origen_id) REFERENCES modulos(id);
 
 CREATE TABLE pedido_abonos (
   id          CHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -1088,6 +1100,16 @@ CREATE TABLE pedido_abonos (
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
   INDEX idx_pedido_abonos_pedido (pedido_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE pedido_areas (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  pedido_id  CHAR(36) NOT NULL,
+  modulo_id  SMALLINT NOT NULL,
+  porcentaje DECIMAL(5,2) NOT NULL CHECK (porcentaje > 0 AND porcentaje <= 100),
+  FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+  FOREIGN KEY (modulo_id) REFERENCES modulos(id),
+  UNIQUE INDEX uq_pedido_areas (pedido_id, modulo_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 CREATE TABLE pedido_historial (

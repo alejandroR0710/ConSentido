@@ -76,6 +76,7 @@ INSERT INTO permisos (modulo_id, accion, codigo) VALUES
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_velas', 'velas.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'ver_concreto',         'concreto.ver'),
   ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_concreto', 'concreto.administrar'),
+  ((SELECT id FROM modulos WHERE slug = 'con_sentido'), 'administrar_categorias', 'con_sentido.categorias.administrar'),
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'ver',                    'pedidos.ver'),
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'crear',                  'pedidos.crear'),
   ((SELECT id FROM modulos WHERE slug = 'pedidos'), 'cambiar_estado',         'pedidos.cambiar_estado'),

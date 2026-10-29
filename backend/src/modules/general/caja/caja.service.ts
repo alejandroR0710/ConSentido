@@ -19,8 +19,6 @@ import {
   RegistrarIngresoInput,
 } from "./caja.schema";
 
-const centavos = (n: number) => Math.round(n * 100) / 100;
-
 export async function obtenerTurnoAbierto() {
   return repo.findTurnoAbierto();
 }
@@ -209,25 +207,51 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
 
     // Cada ítem puede ser de una área distinta — se reparte el NETO del pago
     // (lo que de verdad se cobró, post-descuento) proporcional al bruto
-    // (cantidad * precioUnitario) de cada ítem, con la misma cascada de
-    // residuo exacto que usa descomponerPorAreaYMetodo (ver area-pago.ts):
-    // todos los ítems salvo el último llevan su parte proporcional
-    // redondeada a centavos, el último absorbe lo que falte para cuadrar
-    // EXACTO con totalNeto — así no importa si el bruto de los ítems (lo
-    // que llega en `items`, también usado para la factura y el stock) no
-    // coincide centavo a centavo con cómo redondeó el frontend su propio
-    // neto. Con 1 solo ítem (modo "monto único" ya convertido en items, ver
-    // Task 7) esto da exactamente su totalNeto, igual que antes.
-    const totalItemsBruto = items.reduce((acc, i) => acc + i.cantidad * i.precioUnitario, 0);
-    let netoRestante = totalNeto;
-    const lineasPorArea = items.map((item, idx) => {
-      const esUltimo = idx === items.length - 1;
-      const bruto = item.cantidad * item.precioUnitario;
-      const neto =
-        esUltimo || totalItemsBruto <= 0 ? centavos(netoRestante) : centavos((bruto * totalNeto) / totalItemsBruto);
-      netoRestante = centavos(netoRestante - neto);
-      return { moduloOrigenSlug: item.moduloOrigenSlug!, monto: neto };
-    });
+    // (cantidad * precioUnitario) de cada ítem, así no importa si el bruto
+    // de los ítems (lo que llega en `items`, también usado para la factura
+    // y el stock) no coincide centavo a centavo con cómo redondeó el
+    // frontend su propio neto.
+    //
+    // Primero se agrupa por ÁREA (sumando el bruto de sus ítems) y se
+    // descartan las áreas sin bruto real (ítems a $0, ej. un regalo) — y
+    // DESPUÉS se reparte en centavos ENTEROS con el método del remanente
+    // mayor (largest remainder / Hamilton): el piso de la parte
+    // proporcional de cada área (nunca negativo: piso de un número positivo
+    // nunca es negativo) y luego 1 centavo a la vez —a las áreas con mayor
+    // remanente fraccional— hasta agotar la diferencia con totalNeto. A
+    // diferencia de "el último ítem en orden de llegada absorbe el
+    // residuo" (lo que se intentó primero), este método nunca puede dejar
+    // un área en negativo sin importar cómo caigan los redondeos (prueba:
+    // cada centavo final es un piso de un número positivo, o ese piso más
+    // 1 — jamás una resta): hallazgo real de code review
+    // (2026-10-29) con items 10001/10001/0 y descuento 12.5%, donde el área
+    // del ítem de $0 (que resultaba ser el último) terminaba absorbiendo un
+    // residuo de -$0.01; descomponerPorAreaYMetodo la descartaba (su filtro
+    // es monto > 0), la suma quedaba 1 centavo corta del pago, y su propio
+    // chequeo de invariante lanzaba el throw sin capturar (500).
+    const brutoPorArea = new Map<string, number>();
+    for (const item of items) {
+      const area = item.moduloOrigenSlug!;
+      brutoPorArea.set(area, (brutoPorArea.get(area) ?? 0) + item.cantidad * item.precioUnitario);
+    }
+    const areasConBruto = [...brutoPorArea].filter(([, bruto]) => bruto > 0);
+    const sumaBruto = areasConBruto.reduce((acc, [, bruto]) => acc + bruto, 0);
+    const totalCentavos = Math.round(totalNeto * 100);
+    const exactos = areasConBruto.map(([, bruto]) => (sumaBruto > 0 ? (bruto * totalCentavos) / sumaBruto : 0));
+    const piso = exactos.map((e) => Math.floor(e));
+    let faltante = totalCentavos - piso.reduce((a, b) => a + b, 0);
+    const porRemanenteDesc = piso
+      .map((_, idx) => idx)
+      .sort((a, b) => exactos[b] - piso[b] - (exactos[a] - piso[a]));
+    const centavosPorArea = [...piso];
+    for (let i = 0; i < porRemanenteDesc.length && faltante > 0; i++) {
+      centavosPorArea[porRemanenteDesc[i]] += 1;
+      faltante--;
+    }
+    const lineasPorArea = areasConBruto.map(([moduloOrigenSlug], idx) => ({
+      moduloOrigenSlug,
+      monto: centavosPorArea[idx] / 100,
+    }));
     const grupos = descomponerPorAreaYMetodo(lineasPorArea, input);
 
     // Autodetectado igual que en insertarMovimientosIngreso: 2 líneas = de

@@ -3,9 +3,11 @@ import { authMiddleware } from "../../shared/middlewares/auth.middleware";
 import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
+  actualizarAreaCategoriaController,
   crearClienteController,
   crearProductoController,
   editarProductoController,
+  listarCategoriasConAreaController,
   listarClientesController,
   listarProductosController,
   listarVentasController,
@@ -45,4 +47,17 @@ conSentidoRouter.post(
   "/vincular-mesa",
   requirePermission("con_sentido.ventas.vincular_mesa"),
   asyncHandler(vincularMesaController),
+);
+
+// Administración del área (módulo) por defecto de cada categoría de producto
+// — ver con_sentido.repository.ts::listarCategoriasConArea.
+conSentidoRouter.get(
+  "/categorias",
+  requirePermission("con_sentido.categorias.administrar"),
+  asyncHandler(listarCategoriasConAreaController),
+);
+conSentidoRouter.patch(
+  "/categorias/:id",
+  requirePermission("con_sentido.categorias.administrar"),
+  asyncHandler(actualizarAreaCategoriaController),
 );

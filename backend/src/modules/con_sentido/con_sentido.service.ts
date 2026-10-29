@@ -7,6 +7,7 @@ import * as migaoService from "../migao/migao.service";
 import * as repo from "./con_sentido.repository";
 import { descontarParaVenta, motivoVenta } from "./stock-venta";
 import {
+  ActualizarAreaCategoriaInput,
   CrearClienteConSentidoInput,
   CrearProductoConSentidoInput,
   EditarProductoConSentidoInput,
@@ -553,4 +554,12 @@ export async function vincularMesa(input: VincularMesaInput, usuarioId: string) 
     }
     throw err;
   }
+}
+
+export async function listarCategoriasConArea() {
+  return repo.listarCategoriasConArea();
+}
+
+export async function actualizarAreaCategoria(id: string, input: ActualizarAreaCategoriaInput) {
+  return repo.actualizarAreaCategoria(Number(id), input.areaSlug);
 }

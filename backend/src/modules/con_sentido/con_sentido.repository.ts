@@ -619,3 +619,38 @@ export async function existenPagosTiendaPorOrden(ordenId: string) {
   );
   return result.rowCount! > 0;
 }
+
+// --------------------------------------------------------------------------
+// Administración del área por categoría — `categorias_producto` es una tabla
+// COMPARTIDA con Migao (categorías de menú como "Entradas"), distinguida solo
+// por qué producto (vía productos.modulo_id) la referencia. El listado se
+// filtra a categorías con al menos un producto de con_sentido para nunca
+// mostrarle a este módulo las categorías de menú de Migao.
+// --------------------------------------------------------------------------
+
+export async function listarCategoriasConArea() {
+  const result = await pool.query(
+    `SELECT DISTINCT cp.id, cp.nombre, COALESCE(m2.slug, 'con_sentido') AS area_slug
+       FROM categorias_producto cp
+       JOIN productos p ON p.categoria_id = cp.id
+       JOIN modulos m ON m.id = p.modulo_id
+       LEFT JOIN modulos m2 ON m2.id = cp.modulo_id
+      WHERE m.slug = 'con_sentido'
+      ORDER BY cp.nombre`,
+  );
+  // `area_slug` (alias de la columna calculada en el SELECT) se expone en
+  // camelCase para el frontend, igual que `area_defecto` → `areaDefecto` en
+  // normalizarProducto más arriba.
+  return result.rows.map(({ area_slug, ...resto }) => ({ ...resto, areaSlug: area_slug }));
+}
+
+export async function actualizarAreaCategoria(id: number, areaSlug: string) {
+  const result = await pool.query(
+    `UPDATE categorias_producto
+        SET modulo_id = (SELECT id FROM modulos WHERE slug = $2)
+      WHERE id = $1
+      RETURNING id, nombre`,
+    [id, areaSlug],
+  );
+  return result.rows[0];
+}

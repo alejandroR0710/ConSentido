@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { created, ok } from "../../shared/utils/response";
 import {
+  actualizarAreaCategoriaSchema,
   crearClienteConSentidoSchema,
   crearProductoConSentidoSchema,
   editarProductoConSentidoSchema,
@@ -65,4 +66,15 @@ export async function vincularMesaController(req: Request, res: Response) {
   const data = vincularMesaSchema.parse(req.body);
   const resultado = await service.vincularMesa(data, req.auth!.usuarioId);
   return created(res, resultado);
+}
+
+export async function listarCategoriasConAreaController(_req: Request, res: Response) {
+  const categorias = await service.listarCategoriasConArea();
+  return ok(res, categorias);
+}
+
+export async function actualizarAreaCategoriaController(req: Request, res: Response) {
+  const data = actualizarAreaCategoriaSchema.parse(req.body);
+  const categoria = await service.actualizarAreaCategoria(req.params.id, data);
+  return ok(res, categoria);
 }

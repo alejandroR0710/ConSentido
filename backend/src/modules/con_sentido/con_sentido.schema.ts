@@ -116,3 +116,10 @@ export const vincularMesaSchema = z.object({
   descuentoPorcentaje: z.number().min(0).max(100).optional(),
 });
 export type VincularMesaInput = z.infer<typeof vincularMesaSchema>;
+
+// Administración del área (módulo) por defecto de una categoría de producto
+// — ver con_sentido.repository.ts::listarCategoriasConArea/actualizarAreaCategoria.
+export const actualizarAreaCategoriaSchema = z.object({
+  areaSlug: z.enum(["insumos", "con_sentido"]),
+});
+export type ActualizarAreaCategoriaInput = z.infer<typeof actualizarAreaCategoriaSchema>;

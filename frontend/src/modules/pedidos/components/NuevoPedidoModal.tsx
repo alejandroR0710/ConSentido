@@ -20,6 +20,13 @@ interface LineaPedido {
   cantidad: number;
   precioUnitario: number;
   productoId?: string;
+  // De qué área es ESTA línea — igual que IngresoModal.tsx (Task 7) y
+  // NuevaVentaModal.tsx (Task 9): se precarga desde producto.areaDefecto al
+  // elegir un producto del catálogo, pero siempre se puede cambiar; una
+  // línea escrita a mano arranca sin valor y hay que elegirla a mano.
+  // Obligatoria en TODAS las líneas (ver itemPedidoSchema en el backend,
+  // Task 10: moduloOrigenSlug ya no es opcional).
+  moduloOrigenSlug?: "insumos" | "con_sentido";
 }
 
 let siguienteKeyLinea = 1;
@@ -65,8 +72,16 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   const lineasValidas = lineas.filter((l) => l.nombre.trim().length > 0 && l.cantidad > 0);
   const total = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0);
   const faltaReferenciaAbono = conAbono && metodoAbono === "banco" && !/^[A-Za-z0-9]{4}$/.test(referenciaBancoAbono);
+  // Cada línea reparte el pago (abono inicial y cualquier abono posterior) a
+  // SU área (ver pedidos.service.ts::calcularPorcentajesPorArea) — sin
+  // elegirla en TODAS las líneas no hay cómo crear el pedido. Mismo criterio
+  // que faltaAreaLineas en IngresoModal.tsx (Task 7) y faltaAreaCarrito en
+  // NuevaVentaModal.tsx (Task 9).
+  const faltaAreaLineas = lineasValidas.some((l) => !l.moduloOrigenSlug);
   const puedeGuardar =
-    lineasValidas.length > 0 && (!conAbono || (montoAbono > 0 && montoAbono <= total && !faltaReferenciaAbono));
+    lineasValidas.length > 0 &&
+    !faltaAreaLineas &&
+    (!conAbono || (montoAbono > 0 && montoAbono <= total && !faltaReferenciaAbono));
 
   function actualizarLinea(key: number, cambios: Partial<LineaPedido>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -95,6 +110,9 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
           cantidad: l.cantidad,
           precioUnitario: l.precioUnitario,
           productoId: l.productoId,
+          // puedeGuardar ya garantiza que todas las líneas la tienen (ver
+          // faltaAreaLineas) — el cast es seguro acá.
+          moduloOrigenSlug: l.moduloOrigenSlug as "insumos" | "con_sentido",
         })),
         abonoInicial: conAbono
           ? {
@@ -170,6 +188,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                           nombre: producto.nombre,
                           precioUnitario: producto.precio,
                           productoId: producto.id,
+                          moduloOrigenSlug: producto.areaDefecto,
                         });
                         setFilaEnfocada(null);
                       }}
@@ -187,6 +206,32 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                   placeholder="Precio"
                   className={`${INPUT_CLASE} w-28`}
                 />
+                {/* A qué área se reparte el pago de ESTA línea (ver
+                    pedidos.service.ts::calcularPorcentajesPorArea) — se
+                    precarga sola al elegir un producto del catálogo
+                    (producto.areaDefecto, ver onSeleccionar arriba) pero
+                    siempre se puede cambiar; una línea escrita a mano arranca
+                    sin valor. Mismo criterio que el selector por línea de
+                    IngresoModal.tsx (Task 7) y NuevaVentaModal.tsx (Task 9). */}
+                <select
+                  value={linea.moduloOrigenSlug ?? ""}
+                  onChange={(e) =>
+                    actualizarLinea(linea.key, {
+                      moduloOrigenSlug: e.target.value ? (e.target.value as "insumos" | "con_sentido") : undefined,
+                    })
+                  }
+                  className={`w-32 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
+                    linea.moduloOrigenSlug || !lineasValidas.includes(linea)
+                      ? "border-brand-vanilla-dark dark:border-brand-green-700"
+                      : "border-red-400 dark:border-red-500"
+                  }`}
+                >
+                  <option value="" disabled>
+                    Elegir área...
+                  </option>
+                  <option value="insumos">📦 Insumos</option>
+                  <option value="con_sentido">🎨 Con Sentido</option>
+                </select>
                 <span className="w-24 text-right text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
                   {formatMoney(linea.cantidad * linea.precioUnitario)}
                 </span>

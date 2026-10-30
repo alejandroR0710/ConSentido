@@ -5,7 +5,7 @@ import { MoneyInput } from "../../../shared/components/MoneyInput";
 import { NumeroInput } from "../../../shared/components/NumeroInput";
 import { formatMoney } from "../../../shared/format/money";
 import { usuariosApi, type Usuario } from "../../general/api";
-import { conSentidoApi, type ClienteConSentido, type ProductoConSentido } from "../../con_sentido/api";
+import { conSentidoApi, type ProductoConSentido } from "../../con_sentido/api";
 import { SugerenciasProducto } from "../../caja/components/SugerenciasProducto";
 import { pedidosApi } from "../api";
 
@@ -36,14 +36,20 @@ function lineaVacia(): LineaPedido {
 
 const INPUT_CLASE =
   "w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
+// Igual que INPUT_CLASE pero sin `w-full` — para campos de ancho fijo
+// (cantidad/precio/abono). Concatenar INPUT_CLASE + "w-NN" no funciona: en el
+// CSS compilado .w-full se emite después de .w-NN y gana el empate de
+// especificidad, dejando el campo en 100% de ancho pese al w-NN — eso
+// forzaba cantidad/precio a su propia línea bajo el nombre (flex-wrap) y
+// achicaba el wrapper que SugerenciasProducto mide para su dropdown.
+const INPUT_CLASE_ANCHO_FIJO =
+  "rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla";
 
 export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) {
-  const [clientes, setClientes] = useState<ClienteConSentido[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [productos, setProductos] = useState<ProductoConSentido[]>([]);
   const [filaEnfocada, setFilaEnfocada] = useState<number | null>(null);
 
-  const [clienteId, setClienteId] = useState("");
   const [responsableId, setResponsableId] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [lineas, setLineas] = useState<LineaPedido[]>([lineaVacia()]);
@@ -64,7 +70,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    conSentidoApi.listarClientes().then(setClientes).catch(() => {});
     usuariosApi.listar().then(setUsuarios).catch(() => {});
     conSentidoApi.listarProductos().then(setProductos).catch(() => {});
   }, []);
@@ -96,7 +101,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
     setError(null);
     try {
       await pedidosApi.crear({
-        clienteId: clienteId || undefined,
         responsableId: responsableId || undefined,
         descripcion: descripcion.trim() || undefined,
         destinatarioNombre: destinatarioNombre.trim() || undefined,
@@ -135,17 +139,6 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
       <div className="flex flex-col gap-5">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium">Cliente (opcional)</label>
-            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={INPUT_CLASE}>
-              <option value="">Sin cliente registrado</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="mb-1 block text-xs font-medium">Responsable (opcional)</label>
             <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)} className={INPUT_CLASE}>
               <option value="">Sin asignar</option>
@@ -169,7 +162,18 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
           <div className="flex flex-col gap-2">
             {lineas.map((linea) => (
               <div key={linea.key} className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-0 flex-1">
+                {/* min-w-36 (no min-w-0): con flex-wrap, el navegador decide qué
+                    entra en la línea usando el tamaño "hipotético" de cada
+                    ítem (su flex-basis, acá 0% por flex-1) — así que con
+                    min-w-0 cantidad+precio+área (ya con ancho fijo real tras
+                    el fix de abajo) "caben" los tres en la hipótesis y el
+                    nombre queda con las migajas (y SugerenciasProducto, que
+                    copia este ancho, igual de angosto). Un mínimo real le da
+                    un piso al cálculo de wrap y fuerza a los campos de ancho
+                    fijo que no quepan a bajar de línea en vez de aplastar el
+                    nombre — mismo problema, no cubierto por el fix de
+                    INPUT_CLASE/w-full de abajo. */}
+                <div className="relative min-w-36 flex-1">
                   <input
                     value={linea.nombre}
                     onChange={(e) => actualizarLinea(linea.key, { nombre: e.target.value, productoId: undefined })}
@@ -198,13 +202,13 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                 <NumeroInput
                   value={linea.cantidad}
                   onChange={(v) => actualizarLinea(linea.key, { cantidad: Math.max(0.001, v) })}
-                  className={`${INPUT_CLASE} w-20`}
+                  className={`${INPUT_CLASE_ANCHO_FIJO} w-20`}
                 />
                 <MoneyInput
                   value={linea.precioUnitario}
                   onChange={(v) => actualizarLinea(linea.key, { precioUnitario: v })}
                   placeholder="Precio"
-                  className={`${INPUT_CLASE} w-28`}
+                  className={`${INPUT_CLASE_ANCHO_FIJO} w-28`}
                 />
                 {/* A qué área se reparte el pago de ESTA línea (ver
                     pedidos.service.ts::calcularPorcentajesPorArea) — se
@@ -286,8 +290,8 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
           </label>
           {conAbono && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <MoneyInput value={montoAbono} onChange={setMontoAbono} placeholder="Monto del abono" className={`${INPUT_CLASE} w-40`} />
-              <select value={metodoAbono} onChange={(e) => setMetodoAbono(e.target.value as "efectivo" | "banco")} className={`${INPUT_CLASE} w-32`}>
+              <MoneyInput value={montoAbono} onChange={setMontoAbono} placeholder="Monto del abono" className={`${INPUT_CLASE_ANCHO_FIJO} w-40`} />
+              <select value={metodoAbono} onChange={(e) => setMetodoAbono(e.target.value as "efectivo" | "banco")} className={`${INPUT_CLASE_ANCHO_FIJO} w-32`}>
                 <option value="efectivo">Efectivo</option>
                 <option value="banco">Banco</option>
               </select>
@@ -297,7 +301,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                   onChange={(e) => setReferenciaBancoAbono(e.target.value)}
                   placeholder="Últimos 4 de la transferencia"
                   maxLength={4}
-                  className={`${INPUT_CLASE} w-48`}
+                  className={`${INPUT_CLASE_ANCHO_FIJO} w-48`}
                 />
               )}
             </div>

@@ -4,7 +4,16 @@
 -- categoría asignada MÁS sus ancestros, ya expandido allá — el POS no arma
 -- ningún árbol). Agrega la tabla producto_categorias (N:M entre productos y
 -- categorias_producto) y la llena con la categoría única que cada producto
--- ya tenía en `productos.categoria_id`, como punto de partida.
+-- sincronizado del e-commerce ya tenía en `productos.categoria_id`, como
+-- punto de partida.
+--
+-- El backfill SOLO toca productos sincronizados (ecommerce_item_key IS NOT
+-- NULL): los de alta manual (Con Sentido) nunca necesitan fila aquí —
+-- crearProducto/editarProducto jamás leen ni escriben producto_categorias,
+-- y area_defecto ya los resuelve directo por categoria_id. Meterlos en el
+-- backfill les dejaría una fila que se vuelve obsoleta en cuanto alguien les
+-- cambie la categoría a mano (editarProducto no la actualiza), pudiendo
+-- dejar el área pegada en "insumos" después de un cambio a otra categoría.
 --
 -- `productos.categoria_id` NO se quita: sigue existiendo para el alta manual
 -- de producto (una sola categoría, selector de categoria.repository.ts) y
@@ -25,4 +34,4 @@ CREATE TABLE producto_categorias (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 INSERT INTO producto_categorias (producto_id, categoria_id)
-SELECT id, categoria_id FROM productos WHERE categoria_id IS NOT NULL;
+SELECT id, categoria_id FROM productos WHERE categoria_id IS NOT NULL AND ecommerce_item_key IS NOT NULL;

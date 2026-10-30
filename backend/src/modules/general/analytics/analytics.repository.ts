@@ -94,12 +94,28 @@ export async function getIngresosPorMetodoPagoConSentido(desde: string, hasta: s
   return result.rows[0];
 }
 
+/** `total` ya NO es `SUM(con_sentido_ventas.monto)`: eso era el monto BRUTO de
+ *  la venta completa, sin filtrar por área — correcto cuando toda venta de
+ *  Con Sentido era 100% de esa área, pero ahora una venta puede repartirse
+ *  entre insumos/con_sentido (ver Task 6/8, descomponerPorAreaYMetodo), así
+ *  que sumar el monto crudo volvía a incluir la porción de insumos. Se lee de
+ *  movimientos_caja filtrado por área con_sentido, mismo criterio (y mismo
+ *  WHERE) que ya usa getIngresosPorMetodoPagoConSentido arriba, para que
+ *  ambos números sigan significando lo mismo entre sí.
+ *  `cantidad` SÍ sigue contando con_sentido_ventas directo: es "cuántas
+ *  ventas se registraron", no depende de cómo se repartió la plata entre
+ *  áreas (una venta con 2 líneas de área distinta sigue siendo 1 venta). */
 export async function getIngresosConSentido(desde: string, hasta: string) {
   const result = await pool.query(
-    `SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto), 0) AS total
-       FROM con_sentido_ventas
-      WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2
-        AND estado = 'completada'`,
+    `SELECT
+       (SELECT COUNT(*) FROM con_sentido_ventas cv
+          WHERE DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+            AND cv.estado = 'completada') AS cantidad,
+       COALESCE(SUM(mc.monto), 0) AS total
+     FROM movimientos_caja mc
+     JOIN modulos m ON m.id = mc.modulo_origen_id
+     WHERE m.slug = 'con_sentido' AND mc.tipo = 'ingreso'
+       AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
     [desde, hasta],
   );
   return result.rows[0];

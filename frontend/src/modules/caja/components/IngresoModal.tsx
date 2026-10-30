@@ -23,10 +23,9 @@ import { SelectorMesaVisual } from "../../con_sentido/components/SelectorMesaVis
 import { BotonFactura } from "../../migao/components/BotonFactura";
 import { migaoApi, type CuentaParte, type OrdenItem } from "../../migao/api";
 import { formatCantidad } from "../../migao/format";
-import { cajaApi, type ItemIngresoInput, type ModuloOrigenSlug, type RegistrarIngresoResultado } from "../api";
+import { cajaApi, type ItemIngresoInput, type RegistrarIngresoResultado } from "../api";
 import { SugerenciasProducto } from "./SugerenciasProducto";
 import { facturaCajaAReciboProps } from "../factura";
-import { MODULOS_ORIGEN } from "../moduloOrigen";
 import { preciosConMayorista } from "../../con_sentido/mayorista";
 
 interface IngresoModalProps {
@@ -43,7 +42,6 @@ interface IngresoModalProps {
   // Precarga el formulario — usado para "Pasar a factura" desde una
   // cotización: todo queda editable, esto solo evita volver a escribirlo.
   valoresIniciales?: {
-    moduloOrigenSlug?: ModuloOrigenSlug;
     motivo?: string;
     items?: ItemIngresoInput[];
   };
@@ -97,16 +95,17 @@ export function IngresoModal({
   );
   const f = snapshotRestaurado?.formulario;
   const tieneItemsIniciales = Boolean(valoresIniciales?.items && valoresIniciales.items.length > 0);
-  // Con Sentido por defecto: la mayoría de ingresos manuales acá son de ahí
-  // (Migao casi siempre cobra desde su propia pantalla, no desde acá) — antes
-  // arrancaba en "migao" y era fácil dejarlo así sin querer.
-  const [modulo, setModulo] = useState<ModuloOrigenSlug>(f?.modulo ?? valoresIniciales?.moduloOrigenSlug ?? "con_sentido");
   // "Agregar productos" abre primero (es el flujo más usado); "Monto único"
   // queda como segunda opción para un ingreso suelto sin desglose.
   const [modoMonto, setModoMonto] = useState<"unico" | "productos">(f?.modoMonto ?? "productos");
   // "Monto" siempre es el bruto (antes de descuento); lo que realmente se
   // registra/suma al turno es el neto ya descontado (montoNeto más abajo).
   const [monto, setMonto] = useState(f?.monto ?? 0);
+  // Área de modo "Monto único" — equivalente al moduloOrigenSlug por línea del
+  // modo "productos", pero para el único item sintético que se manda en este
+  // modo (ver registrar() más abajo). "" = todavía sin elegir, el cajero
+  // siempre elige (nunca hay default).
+  const [areaMontoUnico, setAreaMontoUnico] = useState<"insumos" | "con_sentido" | "">(f?.areaMontoUnico ?? "");
   const [lineas, setLineas] = useState<LineaIngreso[]>(
     f
       // Re-clavar las keys con el contador de ESTA sesión: las que traía el
@@ -222,7 +221,7 @@ export function IngresoModal({
       return;
     }
     tocadoRef.current = true;
-  }, [modulo, modoMonto, monto, lineas, descuentoPorcentaje, pago, montoRecibido, motivo]);
+  }, [modoMonto, monto, areaMontoUnico, lineas, descuentoPorcentaje, pago, montoRecibido, motivo]);
 
   // Catálogo de Con Sentido para el autocompletar de "Producto o servicio" —
   // se carga una vez al abrir el modal (mismo listado que usa el e-commerce,
@@ -259,6 +258,11 @@ export function IngresoModal({
     return resultante !== null && resultante < 0;
   };
   const faltaObservacion = lineasValidas.some((l) => faltaStock(l) && !l.observacionInventario?.trim());
+  // Cada línea reparte su pago a su propia área (ver
+  // caja.service.ts::registrarIngresoManual) — sin elegirla en TODAS las
+  // líneas válidas no hay cómo registrar el ingreso. No aplica vinculando a
+  // una mesa (fuera de alcance, ver el select oculto más abajo).
+  const faltaAreaLineas = lineasValidas.some((l) => !l.moduloOrigenSlug);
   // Precio mayorista (ver con_sentido/mayorista.ts): se recalcula con cada cambio de las líneas,
   // sumando las del mismo producto. `precioDe` es el precio que de verdad se cobra en cada línea.
   const productoDe = (linea: LineaIngreso) =>
@@ -326,7 +330,9 @@ export function IngresoModal({
       !mixtoInvalido &&
       !faltaMontoRecibido &&
       !faltaReferenciaBanco(pago) &&
-      (modoMonto === "unico" || (lineasValidas.length > 0 && !faltaObservacion));
+      (modoMonto === "unico"
+        ? areaMontoUnico !== ""
+        : lineasValidas.length > 0 && !faltaObservacion && !faltaAreaLineas);
 
   function actualizarLinea(key: number, cambios: Partial<LineaIngreso>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
@@ -356,9 +362,9 @@ export function IngresoModal({
   function guardarComoMinimizado() {
     if (embebido || resultado || yaRegistradoRef.current || !tocadoRef.current) return;
     const formulario: FormularioIngreso = {
-      modulo,
       modoMonto,
       monto,
+      areaMontoUnico,
       lineas,
       descuentoPorcentaje,
       pago,
@@ -483,6 +489,11 @@ export function IngresoModal({
     }
 
     try {
+      // Siempre se manda `items` no vacío (ya no hay un moduloOrigenSlug
+      // top-level para todo el ingreso, ver registrarIngresoSchema en el
+      // backend — Task 6): en modo "único" se sintetiza un solo item con el
+      // área elegida en areaMontoUnico (puedeRegistrar ya garantiza que no
+      // está vacía acá abajo).
       const items =
         modoMonto === "productos"
           ? lineasValidas.map((l) => ({
@@ -490,12 +501,19 @@ export function IngresoModal({
               cantidad: l.cantidad,
               precioUnitario: precioDe(l),
               productoId: l.productoId,
+              moduloOrigenSlug: l.moduloOrigenSlug,
               observacionInventario: faltaStock(l) ? l.observacionInventario?.trim() : undefined,
             }))
-          : undefined;
+          : [
+              {
+                nombre: motivo.trim() || "Ingreso registrado",
+                cantidad: 1,
+                precioUnitario: monto,
+                moduloOrigenSlug: areaMontoUnico as "insumos" | "con_sentido",
+              },
+            ];
       const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
       const creado = await cajaApi.registrarIngreso({
-        moduloOrigenSlug: modulo,
         motivo: motivo.trim() || undefined,
         descuentoPorcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : undefined,
         items,
@@ -746,26 +764,6 @@ export function IngresoModal({
     <>
       {!embebido && (
         <>
-          <label className="mb-2 block text-xs font-medium">Viene de</label>
-          <div className="mb-3 grid grid-cols-3 gap-2">
-            {MODULOS_ORIGEN.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setModulo(m.value)}
-                autoFocus={m.value === "con_sentido"}
-                className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-center transition-colors ${
-                  modulo === m.value
-                    ? "border-brand-green-600 bg-brand-green-50 dark:border-brand-green-400 dark:bg-brand-green-700/30"
-                    : "border-brand-vanilla-dark hover:border-brand-green-400 dark:border-brand-green-700 dark:hover:border-brand-green-600"
-                }`}
-              >
-                <span className="text-2xl">{m.icon}</span>
-                <span className="text-xs font-medium leading-tight text-brand-ink dark:text-brand-vanilla">{m.label}</span>
-              </button>
-            ))}
-          </div>
-
           <label className="mb-2 block text-xs font-medium">Monto</label>
           <div className="mb-3 flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
             {(
@@ -816,6 +814,7 @@ export function IngresoModal({
                           precioUnitario: producto.precio,
                           precioManual: false,
                           productoId: producto.id,
+                          moduloOrigenSlug: producto.areaDefecto,
                         });
                         setFilaEnfocada(null);
                       }}
@@ -835,6 +834,36 @@ export function IngresoModal({
                   placeholder="Precio"
                   className="w-28 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
                 />
+                {/* Cada línea reparte su pago a SU área (ver
+                    caja.service.ts::registrarIngresoManual) — se prellena sola
+                    al elegir un producto del catálogo (producto.areaDefecto)
+                    pero el cajero siempre puede cambiarla; en una línea manual
+                    queda sin elegir hasta que el cajero la elige. Oculto
+                    vinculando a una mesa (checkbox de abajo / modo embebido):
+                    esas líneas van a vincularMesa/vincularCarritoTienda, que
+                    no reparten por área (fuera de alcance, decisión 8 del
+                    diseño — siempre Con Sentido ahí). */}
+                {!vincularAMesa && (
+                  <select
+                    value={linea.moduloOrigenSlug ?? ""}
+                    onChange={(e) =>
+                      actualizarLinea(linea.key, {
+                        moduloOrigenSlug: e.target.value ? (e.target.value as "insumos" | "con_sentido") : undefined,
+                      })
+                    }
+                    className={`w-32 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
+                      linea.moduloOrigenSlug || !lineasValidas.includes(linea)
+                        ? "border-brand-vanilla-dark dark:border-brand-green-700"
+                        : "border-red-400 dark:border-red-500"
+                    }`}
+                  >
+                    <option value="" disabled>
+                      Elegir área...
+                    </option>
+                    <option value="insumos">📦 Insumos</option>
+                    <option value="con_sentido">🎨 Con Sentido</option>
+                  </select>
+                )}
                 <span className="w-24 text-right text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
                   {esMayorista(linea) && (
                     <span className="block text-[10px] font-semibold text-brand-green-700 dark:text-brand-vanilla">
@@ -890,8 +919,13 @@ export function IngresoModal({
               vincularMesaInicial) — nunca se elige acá. */}
 
           {/* Venta combinada mesa + Con Sentido — ver
-              docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md */}
-          {!embebido && modulo === "con_sentido" && (
+              docs/superpowers/specs/2026-10-19-venta-combinada-mesa-con-sentido-design.md.
+              Este flujo queda fuera del reparto por área (decisión 8 del
+              diseño 2026-10-29-area-por-producto): ya no hay un selector de
+              módulo para todo el ingreso, pero vincular a una mesa sigue
+              asumiendo siempre Con Sentido — sus items van a
+              vincularMesa/vincularCarritoTienda, que no reparten por área. */}
+          {!embebido && (
             <div className="mt-3 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
               <label className="flex items-center gap-2 text-xs font-medium">
                 <input
@@ -997,11 +1031,28 @@ export function IngresoModal({
           )}
         </div>
       ) : (
-        <MoneyInput
-          value={monto}
-          onChange={setMonto}
-          className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        />
+        <div className="mb-3 flex gap-2">
+          <MoneyInput
+            value={monto}
+            onChange={setMonto}
+            className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+          {/* Mismo criterio que el área por línea del modo "productos": el
+              cajero siempre elige, nunca hay default (ver LineaIngreso.moduloOrigenSlug). */}
+          <select
+            value={areaMontoUnico}
+            onChange={(e) => setAreaMontoUnico(e.target.value as "insumos" | "con_sentido" | "")}
+            className={`w-36 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
+              areaMontoUnico ? "border-brand-vanilla-dark dark:border-brand-green-700" : "border-red-400 dark:border-red-500"
+            }`}
+          >
+            <option value="" disabled>
+              Elegir área...
+            </option>
+            <option value="insumos">📦 Insumos</option>
+            <option value="con_sentido">🎨 Con Sentido</option>
+          </select>
+        </div>
       )}
 
       <div className="mb-3 flex items-center gap-2">

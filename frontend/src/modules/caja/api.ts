@@ -26,6 +26,14 @@ export interface ItemIngresoInput {
   productoId?: string;
   // Obligatoria si el producto queda en stock negativo.
   observacionInventario?: string;
+  // De qué área es ESTE ítem — IngresoModal.tsx manda uno por línea (ya no un
+  // solo moduloOrigenSlug para todo el ingreso); el backend rechaza el
+  // registro si `items` viene no vacío y a algún ítem le falta (ver
+  // registrarIngresoSchema en el backend). Acotado a las dos áreas que puede
+  // tener un producto (ver ProductoConSentido.areaDefecto) — mismo tipo que
+  // LineaIngreso.moduloOrigenSlug — aunque el backend acepta el enum completo
+  // para otros llamados internos sin desglose por línea.
+  moduloOrigenSlug?: "insumos" | "con_sentido";
 }
 
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente
@@ -247,10 +255,12 @@ export const cajaApi = {
   obtenerResumenTurno: (turnoId: string) => apiFetch<ResumenTurno>(`/caja/turnos/${turnoId}/resumen`),
   // Todo ingreso registrado desde acá (sin referenciaEntidad: eso es exclusivo
   // de otros módulos llamando internamente) genera su propia venta+factura —
-  // ver RegistrarIngresoResultado.
+  // ver RegistrarIngresoResultado. `moduloOrigenSlug` top-level es opcional y
+  // ya no lo manda IngresoModal.tsx (cada item en `items` trae el suyo) —
+  // solo lo siguen usando otros llamados internos sin desglose por línea.
   registrarIngreso: (
     input: {
-      moduloOrigenSlug: ModuloOrigenSlug;
+      moduloOrigenSlug?: ModuloOrigenSlug;
       motivo?: string;
       descuentoPorcentaje?: number;
       items?: ItemIngresoInput[];

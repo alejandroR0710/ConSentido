@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "../auth/useAuth";
 import type { MetodoPagoValor } from "../components/SelectorMetodoPago";
-import type { ModuloOrigenSlug } from "../../modules/caja/api";
 
 /** Una línea del "carrito" de Registrar ingreso — mismo shape que
  *  IngresoModal.tsx usaba de forma local; vive acá para que el snapshot
@@ -20,6 +19,13 @@ export interface LineaIngreso {
   productoId?: string;
   // Obligatoria si la línea deja el producto en stock negativo.
   observacionInventario?: string;
+  // De qué área es esta línea — se prellena sola al elegir un producto del
+  // catálogo (ver producto.areaDefecto) pero el cajero SIEMPRE puede
+  // cambiarla; en una línea manual (texto libre) queda undefined hasta que
+  // el cajero la elige a mano. Cada línea reparte su pago a SU propia área
+  // (ver caja.service.ts::registrarIngresoManual) — ya no hay un solo
+  // selector de "Viene de" para todo el ingreso.
+  moduloOrigenSlug?: "insumos" | "con_sentido";
 }
 
 /** De dónde sale este formulario — determina a qué pantalla navega restaurar
@@ -35,9 +41,11 @@ export type OrigenIngreso =
  *  persiste hasta el único submit final), así que esto es exactamente lo que
  *  hace falta para reabrirlo tal cual (ver spec 2026-10-11). */
 export interface FormularioIngreso {
-  modulo: ModuloOrigenSlug;
   modoMonto: "unico" | "productos";
   monto: number;
+  // Área elegida en modo "Monto único" (ver IngresoModal.tsx) — "" = todavía
+  // sin elegir. En modo "productos" cada línea lleva la suya (LineaIngreso).
+  areaMontoUnico: "insumos" | "con_sentido" | "";
   lineas: LineaIngreso[];
   descuentoPorcentaje: number;
   pago: MetodoPagoValor;

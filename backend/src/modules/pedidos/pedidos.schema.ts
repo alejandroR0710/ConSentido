@@ -8,6 +8,10 @@ const itemPedidoSchema = z.object({
   cantidad: z.number().positive("La cantidad debe ser mayor a 0"),
   precioUnitario: z.number().nonnegative(),
   productoId: z.string().uuid().optional(),
+  // Área económica de la línea (mismo criterio que con_sentido.schema.ts):
+  // con ella se fija, al crear el pedido, qué % de cada abono va a cada área
+  // (ver pedidos.service.ts::calcularPorcentajesPorArea).
+  moduloOrigenSlug: z.enum(["insumos", "con_sentido"]),
 });
 
 const ESTADOS_DESTINO = ["alistado", "enviado", "entregado", "cancelado"] as const;

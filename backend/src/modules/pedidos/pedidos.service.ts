@@ -1,6 +1,7 @@
-import { pool } from "../../shared/db/pool";
+import { PoolClient, pool } from "../../shared/db/pool";
 import { Errors } from "../../shared/utils/app-error";
 import * as cajaService from "../general/caja/caja.service";
+import { RegistrarIngresoInput } from "../general/caja/caja.schema";
 import { deltaEcommerce, getProductoParaVenta, reponerStock } from "../con_sentido/con_sentido.repository";
 import { descontarParaVenta, motivoVenta } from "../con_sentido/stock-venta";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
@@ -60,6 +61,180 @@ async function calcularProximaAlarma(): Promise<Date> {
   return new Date(Date.now() + Number(intervalo_alarma_minutos) * 60_000);
 }
 
+const aCentavos = (n: number) => Math.round(n * 100);
+
+/** 100.00% expresado en centésimas de punto — `pedido_areas.porcentaje` es
+ *  DECIMAL(5,2), así que todo el reparto trabaja en enteros sobre esta base. */
+const PUNTOS_BASE = 10_000;
+
+/**
+ * Reparte el entero `total` entre `pesos` (enteros >= 0, suma > 0) por el
+ * método del remanente mayor (Hamilton) — mismo criterio que
+ * caja.service.ts::registrarIngresoManual: a cada uno el piso de su parte
+ * proporcional, y luego 1 unidad a la vez a los de mayor remanente hasta
+ * agotar la diferencia (desempate: el de menor índice). Todo en aritmética
+ * entera (pesos * total cabe holgado en 2^53 para los rangos de acá), la
+ * suma da EXACTO `total` y ningún resultado puede ser negativo (cada uno es
+ * un piso de un número >= 0, o ese piso + 1 — nunca una resta).
+ */
+function repartirPorRemanenteMayor(total: number, pesos: number[]): number[] {
+  const sumaPesos = pesos.reduce((a, b) => a + b, 0);
+  if (sumaPesos <= 0) throw new Error("repartirPorRemanenteMayor: los pesos deben sumar más de 0");
+  const piso = pesos.map((p) => Math.floor((p * total) / sumaPesos));
+  const remanente = pesos.map((p, i) => p * total - piso[i] * sumaPesos);
+  let faltante = total - piso.reduce((a, b) => a + b, 0);
+  const orden = pesos.map((_, i) => i).sort((a, b) => remanente[b] - remanente[a] || a - b);
+  const resultado = [...piso];
+  for (let i = 0; faltante > 0; i = (i + 1) % orden.length) {
+    resultado[orden[i]] += 1;
+    faltante--;
+  }
+  return resultado;
+}
+
+/**
+ * Proporción FIJA del pedido por área, calculada UNA vez al crearlo: el peso
+ * de cada área es la suma (cantidad * precioUnitario) de sus líneas, y su %
+ * es su proporción sobre el total de las líneas (hoy precio_acordado ES esa
+ * suma, ver crearPedido — si algún día difieren, la proporción se sigue
+ * tomando de las líneas y se aplica sobre precio_acordado en cada abono).
+ * Se descartan las áreas sin valor (líneas a $0) ANTES de repartir, y
+ * también las que, por ser ínfimas, redondean a 0.00% (la columna exige
+ * porcentaje > 0). Los % devueltos suman exactamente 100.00. Si ninguna
+ * línea vale nada (pedido de $0) devuelve [] — ese pedido nunca puede
+ * recibir un abono (todo abono > 0 supera su saldo de $0).
+ */
+function calcularPorcentajesPorArea(items: { moduloOrigenSlug: string; cantidad: number; precioUnitario: number }[]) {
+  const centavosPorArea = new Map<string, number>();
+  for (const item of items) {
+    const area = item.moduloOrigenSlug;
+    centavosPorArea.set(area, (centavosPorArea.get(area) ?? 0) + aCentavos(item.cantidad * item.precioUnitario));
+  }
+  const conValor = [...centavosPorArea].filter(([, c]) => c > 0);
+  if (conValor.length === 0) return [];
+  const puntos = repartirPorRemanenteMayor(
+    PUNTOS_BASE,
+    conValor.map(([, c]) => c),
+  );
+  return conValor
+    .map(([moduloOrigenSlug], i) => ({ moduloOrigenSlug, puntos: puntos[i] }))
+    .filter((a) => a.puntos > 0)
+    .map((a) => ({ moduloOrigenSlug: a.moduloOrigenSlug, porcentaje: a.puntos / 100 }));
+}
+
+/**
+ * Cuánto de ESTE abono va a cada área del pedido, en centavos.
+ *
+ * En vez de repartir solo el monto de este abono (lo que deja que el
+ * redondeo de cada abono se acumule y un área pueda pasarse de su parte
+ * antes del cierre), se reparte el ACUMULADO: con el total abonado después
+ * de este abono, se calcula cuánto debería llevar cada área en total según
+ * su % fijo (`repartirPorRemanenteMayor` sobre ese acumulado), y a cada área
+ * le toca la diferencia con lo que ya recibió de verdad en Caja. Así:
+ *  - un abono intermedio reparte su monto según el % fijo (a lo sumo 1
+ *    centavo de diferencia con aplicar el % solo sobre su monto, y ese
+ *    centavo justo es el que compensa el redondeo de abonos anteriores);
+ *  - el abono que deja el pedido en $0 tiene acumulado = precio_acordado, así
+ *    que a cada área le da EXACTAMENTE lo que le falta para su parte del
+ *    precio_acordado — el "cierre exacto" sale solo, sin rama aparte, y no
+ *    depende de cuántos abonos hubo antes ni de cómo redondearon.
+ *
+ * Salvaguarda: si la diferencia no sirve tal cual — alguna saldría
+ * negativa, no sumaría el monto del abono (lo ya recibido en Caja no cuadra,
+ * ej. un movimiento editado a mano), o llevaría a un área por encima de su
+ * parte FINAL del precio_acordado (posible solo con 3+ áreas, por la
+ * "paradoja de Alabama" del remanente mayor; con 2 áreas nunca pasa) — se
+ * reparte el monto del abono proporcional a lo que le falta a cada área para
+ * su parte final (o al % fijo si a ninguna le falta nada). Eso nunca da
+ * negativos, siempre suma exacto, y nunca pasa a un área de su parte final
+ * (cada una recibe a lo sumo el techo de m·falta/Σfalta ≤ falta, porque
+ * Σfalta = saldo pendiente ≥ m), así que el cierre sigue siendo exacto.
+ */
+function repartirAbonoPorArea(params: {
+  areas: { slug: string; porcentaje: number }[];
+  precioCentavos: number;
+  abonadoAntesCentavos: number;
+  montoCentavos: number;
+  recibidoPorArea: Map<string, number>;
+}): { moduloOrigenSlug: string; montoCentavos: number }[] {
+  const { areas, precioCentavos, abonadoAntesCentavos, montoCentavos, recibidoPorArea } = params;
+  const puntos = areas.map((a) => Math.round(a.porcentaje * 100));
+  const recibido = areas.map((a) => aCentavos(recibidoPorArea.get(a.slug) ?? 0));
+  const parteFinal = repartirPorRemanenteMayor(precioCentavos, puntos);
+  const falta = parteFinal.map((p, i) => p - recibido[i]);
+  const objetivo = repartirPorRemanenteMayor(abonadoAntesCentavos + montoCentavos, puntos);
+  const deseado = objetivo.map((o, i) => o - recibido[i]);
+
+  let montos = deseado;
+  const cuadra =
+    deseado.every((d, i) => d >= 0 && d <= falta[i]) && deseado.reduce((x, y) => x + y, 0) === montoCentavos;
+  if (!cuadra) {
+    console.warn("[pedidos] el reparto acumulado por área no cuadra; se reparte por lo que le falta a cada área", {
+      deseado,
+      falta,
+      montoCentavos,
+    });
+    const pesos = falta.map((f) => Math.max(0, f));
+    montos = repartirPorRemanenteMayor(montoCentavos, pesos.some((p) => p > 0) ? pesos : puntos);
+  }
+  return areas
+    .map((a, i) => ({ moduloOrigenSlug: a.slug, montoCentavos: montos[i] }))
+    .filter((r) => r.montoCentavos > 0);
+}
+
+/**
+ * Registra en Caja General el ingreso de un abono ya creado (pedido_abonos),
+ * repartido entre las áreas del pedido según su proporción fija — un
+ * movimiento por área con monto > 0, todos con referencia_entidad
+ * "pedido_abonos" y referencia_id = el abono. Mismo camino para el abono
+ * inicial (crearPedido) y para cualquier abono posterior (registrarAbono).
+ *
+ * Pedidos creados antes de que existiera pedido_areas no tienen proporción
+ * guardada: esos siguen yendo completos al área "pedidos", como siempre.
+ */
+async function registrarAbonoEnCaja(
+  client: PoolClient,
+  params: {
+    pedidoId: string;
+    abonoId: string;
+    descripcion: string;
+    precioAcordado: number;
+    abonadoAntes: number;
+    monto: number;
+    metodoPago: "efectivo" | "banco";
+    referenciaBanco: string | undefined;
+  },
+  usuarioId: string,
+) {
+  const areas = await repo.getPedidoAreas(params.pedidoId, client);
+  const filas =
+    areas.length === 0
+      ? [{ moduloOrigenSlug: "pedidos", montoCentavos: aCentavos(params.monto) }]
+      : repartirAbonoPorArea({
+          areas,
+          precioCentavos: aCentavos(params.precioAcordado),
+          abonadoAntesCentavos: aCentavos(params.abonadoAntes),
+          montoCentavos: aCentavos(params.monto),
+          recibidoPorArea: await repo.sumIngresosPorAreaDePedido(params.pedidoId, client),
+        });
+  for (const fila of filas) {
+    await cajaService.registrarIngreso(
+      {
+        // Viene de pedido_areas (solo slugs reales de `modulos`) o es "pedidos".
+        moduloOrigenSlug: fila.moduloOrigenSlug as RegistrarIngresoInput["moduloOrigenSlug"],
+        motivo: `Abono pedido — ${params.descripcion}`,
+        referenciaEntidad: "pedido_abonos",
+        referenciaId: params.abonoId,
+        metodoPago: params.metodoPago,
+        monto: fila.montoCentavos / 100,
+        referenciaBanco: params.referenciaBanco,
+      },
+      usuarioId,
+      client,
+    );
+  }
+}
+
 async function construirDetallePedido(pedidoId: string) {
   const [pedido, items, abonos, historial] = await Promise.all([
     repo.getPedidoById(pedidoId),
@@ -115,7 +290,14 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
         costoEstimado += Number(producto.costo ?? 0) * item.cantidad;
       }
       precioAcordado += item.precioUnitario * item.cantidad;
-      itemsResueltos.push({ productoId, sku, nombre: item.nombre, cantidad: item.cantidad, precioUnitario: item.precioUnitario });
+      itemsResueltos.push({
+        productoId,
+        sku,
+        nombre: item.nombre,
+        cantidad: item.cantidad,
+        precioUnitario: item.precioUnitario,
+        moduloOrigenSlug: item.moduloOrigenSlug,
+      });
     }
 
     const descripcion = input.descripcion?.trim() || input.items.map((i) => i.nombre).join(", ");
@@ -138,10 +320,13 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
     });
 
     await repo.crearPedidoItems(client, pedido.id, itemsResueltos);
+    // Proporción fija por área: se calcula y se guarda UNA vez, acá — todo
+    // abono (incluido el inicial, abajo) se reparte según ella.
+    await repo.crearPedidoAreas(client, pedido.id, calcularPorcentajesPorArea(itemsResueltos));
     await repo.insertHistorial(client, { pedidoId: pedido.id, accion: "creado", usuarioId });
 
     if (input.abonoInicial) {
-      if (input.abonoInicial.monto > precioAcordado) {
+      if (aCentavos(input.abonoInicial.monto) > aCentavos(precioAcordado)) {
         throw Errors.badRequest("El abono inicial no puede ser mayor al total del pedido");
       }
       const referenciaBanco = exigirReferenciaBanco(
@@ -154,18 +339,19 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
         metodoPago: input.abonoInicial.metodoPago,
         usuarioId,
       });
-      await cajaService.registrarIngreso(
+      await registrarAbonoEnCaja(
+        client,
         {
-          moduloOrigenSlug: "pedidos",
-          motivo: `Abono pedido — ${descripcion}`,
-          referenciaEntidad: "pedido_abonos",
-          referenciaId: abono.id,
-          metodoPago: input.abonoInicial.metodoPago,
+          pedidoId: pedido.id,
+          abonoId: abono.id,
+          descripcion,
+          precioAcordado,
+          abonadoAntes: 0,
           monto: input.abonoInicial.monto,
+          metodoPago: input.abonoInicial.metodoPago,
           referenciaBanco,
         },
         usuarioId,
-        client,
       );
       await repo.insertHistorial(client, {
         pedidoId: pedido.id,
@@ -397,7 +583,10 @@ export async function registrarAbono(id: string, input: RegistrarAbonoPedidoInpu
 
     const totalAbonado = await repo.sumAbonosPorPedido(id, client);
     const saldoPendiente = Number(pedido.precio_acordado) - totalAbonado;
-    if (input.monto > saldoPendiente) {
+    // En centavos: comparar flotantes podría dejar pasar un abono que supera
+    // el saldo por una fracción de centavo, y el reparto por área (que
+    // trabaja en centavos) se pasaría del precio_acordado.
+    if (aCentavos(input.monto) > aCentavos(saldoPendiente)) {
       throw Errors.badRequest(`El abono (${input.monto}) es mayor al saldo pendiente (${saldoPendiente})`);
     }
 
@@ -411,18 +600,19 @@ export async function registrarAbono(id: string, input: RegistrarAbonoPedidoInpu
       metodoPago: input.metodoPago,
       usuarioId,
     });
-    await cajaService.registrarIngreso(
+    await registrarAbonoEnCaja(
+      client,
       {
-        moduloOrigenSlug: "pedidos",
-        motivo: `Abono pedido — ${pedido.descripcion}`,
-        referenciaEntidad: "pedido_abonos",
-        referenciaId: abono.id,
-        metodoPago: input.metodoPago,
+        pedidoId: id,
+        abonoId: abono.id,
+        descripcion: pedido.descripcion,
+        precioAcordado: Number(pedido.precio_acordado),
+        abonadoAntes: totalAbonado,
         monto: input.monto,
+        metodoPago: input.metodoPago,
         referenciaBanco,
       },
       usuarioId,
-      client,
     );
     await repo.insertHistorial(client, {
       pedidoId: id,

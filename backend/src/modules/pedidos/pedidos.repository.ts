@@ -147,15 +147,78 @@ export async function crearPedido(
 export async function crearPedidoItems(
   client: PoolClient,
   pedidoId: string,
-  items: { productoId: string | null; sku: string | null; nombre: string; cantidad: number; precioUnitario: number }[],
+  items: {
+    productoId: string | null;
+    sku: string | null;
+    nombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    moduloOrigenSlug: string;
+  }[],
 ) {
   for (const item of items) {
     await client.query(
-      `INSERT INTO pedido_items (pedido_id, producto_id, sku, nombre, cantidad, precio_unitario)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [pedidoId, item.productoId, item.sku, item.nombre, item.cantidad, item.precioUnitario],
+      `INSERT INTO pedido_items (pedido_id, producto_id, sku, nombre, cantidad, precio_unitario, modulo_origen_id)
+       VALUES ($1,$2,$3,$4,$5,$6,(SELECT id FROM modulos WHERE slug = $7))`,
+      [pedidoId, item.productoId, item.sku, item.nombre, item.cantidad, item.precioUnitario, item.moduloOrigenSlug],
     );
   }
+}
+
+/** Proporción FIJA del pedido por área (ver pedidos.service.ts::calcularPorcentajesPorArea)
+ *  — se guarda una sola vez, al crear el pedido, y nunca se recalcula. */
+export async function crearPedidoAreas(
+  client: PoolClient,
+  pedidoId: string,
+  areas: { moduloOrigenSlug: string; porcentaje: number }[],
+) {
+  for (const area of areas) {
+    await client.query(
+      `INSERT INTO pedido_areas (pedido_id, modulo_id, porcentaje)
+       VALUES ($1, (SELECT id FROM modulos WHERE slug = $2), $3)`,
+      [pedidoId, area.moduloOrigenSlug, area.porcentaje],
+    );
+  }
+}
+
+/** Ordenadas por id (= orden de inserción): el reparto por remanente mayor
+ *  desempata por este orden, así que tiene que ser estable entre llamadas. */
+export async function getPedidoAreas(pedidoId: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT pa.modulo_id, m.slug, pa.porcentaje
+       FROM pedido_areas pa
+       JOIN modulos m ON m.id = pa.modulo_id
+      WHERE pa.pedido_id = $1
+      ORDER BY pa.id`,
+    [pedidoId],
+  );
+  return result.rows.map((r) => ({
+    moduloId: Number(r.modulo_id),
+    slug: r.slug as string,
+    porcentaje: Number(r.porcentaje),
+  }));
+}
+
+/** Cuánto lleva cobrado cada área de este pedido, sumando los ingresos de
+ *  Caja que salieron de sus abonos (referencia_entidad = 'pedido_abonos',
+ *  referencia_id = id del abono). Anular un abono borra sus movimientos (ver
+ *  caja.service.ts::anularMovimientosPorReferencia), así que lo que queda acá
+ *  es siempre lo vigente. */
+export async function sumIngresosPorAreaDePedido(pedidoId: string, executor: Executor = pool) {
+  const result = await executor.query(
+    `SELECT m.slug, COALESCE(SUM(mc.monto), 0) AS total
+       FROM movimientos_caja mc
+       JOIN pedido_abonos a ON a.id = mc.referencia_id
+       JOIN modulos m ON m.id = mc.modulo_origen_id
+      WHERE mc.referencia_entidad = 'pedido_abonos'
+        AND mc.tipo = 'ingreso'
+        AND a.pedido_id = $1
+      GROUP BY m.slug`,
+    [pedidoId],
+  );
+  const porArea = new Map<string, number>();
+  for (const r of result.rows) porArea.set(r.slug as string, Number(r.total));
+  return porArea;
 }
 
 export async function actualizarPedido(id: string, input: EditarPedidoInput) {

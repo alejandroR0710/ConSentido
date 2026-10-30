@@ -151,15 +151,34 @@ export async function getProductosTopConSentido(desde: string, hasta: string, li
   return result.rows;
 }
 
+/** `total` ya NO es `SUM(ventas.total) WHERE ventas.modulo_id = $1`: ese
+ *  campo de `ventas` es UN solo módulo por venta (el del primer ítem como
+ *  representante — ver caja.service.ts::registrarIngresoManual), así que una
+ *  venta/ingreso con líneas de varias áreas (Caja General, Con Sentido,
+ *  Pedidos — todas reparten por línea desde Task 6/7/8) contaba completa para
+ *  la que fuera su primera línea y $0 para las demás, sin importar cuánto
+ *  de esa plata fuera realmente de este módulo. Mismo defecto, mismo arreglo
+ *  que `getIngresosConSentido` arriba: se lee de `movimientos_caja`, que SÍ
+ *  reparte bien por área (una fila por combinación área×método con plata de
+ *  verdad — ver descomponerPorAreaYMetodo), filtrado por el módulo que se
+ *  pida. Genérico a propósito (moduloId parametrizado, no un caso especial
+ *  de Insumos): hoy solo lo llama `obtenerAnalyticsInsumos` con el id de
+ *  Insumos, pero cualquier módulo que use este patrón de reparto por área
+ *  queda bien atendido igual.
+ *  `cantidad` pasa de contar filas de `ventas` (mismo problema: solo veía
+ *  ingresos manuales de Caja General que hubieran caído en este módulo por
+ *  el fallback) a contar los propios movimientos ya filtrados — "cuántos
+ *  movimientos de ingreso de esta área hubo en el rango", consistente con
+ *  `total` y ya no sesgado por el orden de los ítems. */
 export async function getIngresosModulo(moduloId: number, desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
-       COUNT(DISTINCT v.id) as cantidad,
-       COALESCE(SUM(v.total), 0) as total
-     FROM ventas v
-     WHERE v.modulo_id = $1
-       AND DATE_FORMAT(v.created_at, '%Y-%m-%d') BETWEEN $2 AND $3
-       AND v.estado = 'completada'`,
+       COUNT(*) as cantidad,
+       COALESCE(SUM(mc.monto), 0) as total
+     FROM movimientos_caja mc
+     WHERE mc.modulo_origen_id = $1
+       AND mc.tipo = 'ingreso'
+       AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $2 AND $3`,
     [moduloId, desde, hasta],
   );
   return result.rows[0];

@@ -279,11 +279,20 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
       input.referenciaBanco,
     );
 
-    // La venta en sí (tabla `ventas`) sigue llevando UN solo módulo — el que
-    // venga top-level si lo mandan (hoy IngresoModal siempre lo manda) o, si
-    // no, el del primer ítem como representante; el reparto real por área
-    // vive en los movimientos de Caja (`grupos`, abajo) y en cada ítem
-    // guardado (ver crearIngresoItems).
+    // La venta en sí (tabla `ventas`) sigue llevando UN solo módulo — el del
+    // primer ítem como representante. Desde Task 7 (2026-10-29) IngresoModal
+    // ya NO manda `moduloOrigenSlug` top-level (el área vive por línea, no
+    // una sola vez para todo el ingreso): ese `input.moduloOrigenSlug` de
+    // acá casi siempre llega undefined, así que este fallback a
+    // `items[0]` es hoy el camino SIEMPRE tomado para todo ingreso de Caja
+    // General y todo "Pasar a factura" de una cotización — ya no el caso
+    // raro/inalcanzable que era cuando se escribió. El reparto real por
+    // área vive en los movimientos de Caja (`grupos`, abajo) y en cada ítem
+    // guardado (ver crearIngresoItems) — por eso ningún reporte de dinero
+    // por área puede leer `ventas.modulo_id` para un ingreso mixto (ver
+    // analytics.repository.ts::getIngresosModulo, que por esto mismo lee
+    // `movimientos_caja` en vez de `ventas`); `ventas.modulo_id` acá solo
+    // sirve de representante simbólico (ej. a qué factura "parece" pertenecer).
     const venta = await repo.crearVentaManual(client, {
       moduloOrigenSlug: input.moduloOrigenSlug ?? items[0].moduloOrigenSlug!,
       usuarioId,

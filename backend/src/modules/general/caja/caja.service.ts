@@ -236,6 +236,18 @@ async function registrarIngresoManual(input: RegistrarIngresoInput, usuarioId: s
     }
     const areasConBruto = [...brutoPorArea].filter(([, bruto]) => bruto > 0);
     const sumaBruto = areasConBruto.reduce((acc, [, bruto]) => acc + bruto, 0);
+    // Degenerado: se está cobrando plata real (totalNeto > 0, ya garantizado
+    // por el schema) pero NINGÚN ítem vale algo — no hay cómo repartir esa
+    // plata entre áreas. Sin este chequeo, `areasConBruto` queda vacío,
+    // `lineasPorArea` también, y descomponerPorAreaYMetodo recibe un total
+    // de líneas en 0 contra un pago > 0 — su invariante lanza un throw sin
+    // capturar (500). Hallazgo real de code review (2026-10-29): items
+    // todos a $0 con un monto > 0. Se rechaza limpio en vez de crashear.
+    if (sumaBruto <= 0) {
+      throw Errors.badRequest(
+        "Los ítems deben tener un precio mayor a 0 para poder repartir el ingreso entre áreas",
+      );
+    }
     const totalCentavos = Math.round(totalNeto * 100);
     const exactos = areasConBruto.map(([, bruto]) => (sumaBruto > 0 ? (bruto * totalCentavos) / sumaBruto : 0));
     const piso = exactos.map((e) => Math.floor(e));

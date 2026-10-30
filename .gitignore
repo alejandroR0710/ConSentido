@@ -40,3 +40,6 @@ backend/public/
 
 # Cache incremental de `tsc -b`
 *.tsbuildinfo
+
+# Reportes internos de implementación de subagentes (no son parte del proyecto)
+.area-insumos-multicategoria-report.md

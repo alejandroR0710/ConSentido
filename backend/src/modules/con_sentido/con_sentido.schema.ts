@@ -14,6 +14,14 @@ const itemVentaSchema = z
     // Obligatoria (lo valida el service, que conoce el stock) si la venta deja
     // el producto en negativo: por qué no cuadró el inventario.
     observacionInventario: z.string().trim().max(500).optional(),
+    // De qué área es ESTE ítem — a diferencia de Caja General (donde el
+    // "monto único" sin productos puede no traerlo, ver IngresoModal.tsx),
+    // "Nueva venta" de Con Sentido siempre trabaja con productos del
+    // catálogo o líneas manuales explícitas, así que SIEMPRE hay un área que
+    // declarar: nunca opcional acá. Usado para repartir el ingreso de Caja
+    // entre áreas (ver con_sentido.service.ts::registrarVenta y
+    // descomponerPorAreaYMetodo).
+    moduloOrigenSlug: z.enum(["insumos", "con_sentido"]),
   })
   // El stock es por unidades enteras (el del e-commerce también).
   .refine((item) => !item.productoId || Number.isInteger(item.cantidad), {

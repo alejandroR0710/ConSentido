@@ -281,11 +281,17 @@ export async function crearVentaItem(
     // Obligatoria si la venta dejó el producto en stock negativo.
     observacionInventario?: string | null;
     precioUnitario: number;
+    // De qué área es este ítem — ver con_sentido.service.ts::registrarVenta,
+    // que reparte el ingreso de Caja entre áreas según esto (vía
+    // descomponerPorAreaYMetodo). Opcional a nivel de tipo porque
+    // reemplazarItemsCarrito (carrito de tienda vinculado a una mesa, sin
+    // concepto de área propia) también llama esta función sin mandarlo.
+    moduloOrigenSlug?: string;
   },
 ) {
   await executor.query(
-    `INSERT INTO con_sentido_venta_items (venta_id, producto_id, sku, producto, descripcion, categoria, cantidad, precio_unitario, observacion_inventario)
-     VALUES ($1, $7, $8, $2, $3, $4, $5, $6, $9)`,
+    `INSERT INTO con_sentido_venta_items (venta_id, producto_id, sku, producto, descripcion, categoria, cantidad, precio_unitario, observacion_inventario, modulo_origen_id)
+     VALUES ($1, $7, $8, $2, $3, $4, $5, $6, $9, (SELECT id FROM modulos WHERE slug = $10))`,
     [
       params.ventaId,
       params.producto,
@@ -296,6 +302,7 @@ export async function crearVentaItem(
       params.productoId ?? null,
       params.sku ?? null,
       params.observacionInventario ?? null,
+      params.moduloOrigenSlug ?? null,
     ],
   );
 }

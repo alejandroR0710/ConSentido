@@ -1,5 +1,7 @@
 import { pool } from "../../shared/db/pool";
 import { AppError, Errors } from "../../shared/utils/app-error";
+import { descomponerPorAreaYMetodo } from "../../shared/utils/area-pago";
+import { descomponerPago, PagoInput } from "../../shared/utils/pago-mixto";
 import * as cajaService from "../general/caja/caja.service";
 import { encolarDeltaStock, programarEnvio } from "../integracion_ecommerce/salida";
 import * as migaoRepo from "../migao/migao.repository";
@@ -133,6 +135,7 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
         cantidad: item.cantidad,
         observacionInventario,
         precioUnitario: item.precioUnitario,
+        moduloOrigenSlug: item.moduloOrigenSlug,
       });
     }
 
@@ -155,32 +158,64 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
       });
     }
 
-    const motivo = `Venta Con Sentido - ${input.items.length} producto(s)`;
-    if (input.metodoPago === "mixto") {
-      await cajaService.registrarIngreso(
-        {
-          moduloOrigenSlug: "con_sentido",
-          motivo,
-          referenciaEntidad: "con_sentido_ventas",
-          referenciaId: venta.id,
-          metodoPago: "mixto",
-          montoEfectivo: input.montoEfectivo,
-          montoBanco: input.montoBanco,
-          referenciaBanco: input.referenciaBanco,
-        },
-        usuarioId,
-        client,
+    // Cada ítem puede ser de una área distinta (insumos/con_sentido) — se
+    // reparte el pago entre esas áreas, proporcional al bruto (cantidad *
+    // precioUnitario) de los ítems de cada una. A diferencia del ingreso
+    // manual de Caja General (ver caja.service.ts::registrarIngresoManual,
+    // Task 6), esta venta NO tiene concepto de descuento: `input.monto` ya
+    // ES la suma de los ítems (así lo calcula el carrito del frontend), así
+    // que no hace falta ninguna escala bruto→neto — se le pasan los montos
+    // de los ítems tal cual a descomponerPorAreaYMetodo, que agrupa por área
+    // y reparte entre métodos (ver shared/utils/area-pago.ts).
+    const pagoInput: PagoInput =
+      input.metodoPago === "mixto"
+        ? { metodoPago: "mixto", montoEfectivo: input.montoEfectivo, montoBanco: input.montoBanco }
+        : { metodoPago: input.metodoPago, monto: input.monto };
+
+    // No hace falta agrupar por área antes de esta suma (a diferencia de
+    // Task 6): acá solo se necesita el total para el chequeo de abajo —
+    // agrupar por área ya lo hace descomponerPorAreaYMetodo internamente.
+    const sumaBruto = input.items.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0);
+    // Degenerado: se cobra plata real (input.monto > 0, exigido por el
+    // schema) pero NINGÚN ítem vale algo (ej. todo a $0) — no hay cómo
+    // repartir esa plata entre áreas. Sin este chequeo, descomponerPorAreaYMetodo
+    // recibiría solo líneas en $0 (las descarta su propio filtro de
+    // `monto > 0`) contra un pago > 0, y su invariante lanzaría un throw sin
+    // capturar (500) — mismo hallazgo de code review que en
+    // caja.service.ts::registrarIngresoManual (Task 6, 2026-10-29).
+    if (sumaBruto <= 0) {
+      throw Errors.badRequest(
+        "Los productos deben tener un precio mayor a 0 para poder repartir la venta entre áreas",
       );
-    } else {
+    }
+
+    const lineasPorArea = input.items.map((item) => ({
+      moduloOrigenSlug: item.moduloOrigenSlug,
+      monto: item.cantidad * item.precioUnitario,
+    }));
+    const grupos = descomponerPorAreaYMetodo(lineasPorArea, pagoInput);
+
+    // "mixto" es solo una comodidad de UI (ver pago-mixto.ts): si de verdad
+    // tuvo las 2 partes (no un lado en $0, ya reducido a pago simple), cada
+    // movimiento que resulte de repartir por área debe seguir marcado como
+    // parte de un pago mixto — igual que antes de repartir por área.
+    const esPagoMixto = descomponerPago(pagoInput).length > 1;
+
+    const motivo = `Venta Con Sentido - ${input.items.length} producto(s)`;
+    for (const grupo of grupos) {
       await cajaService.registrarIngreso(
         {
-          moduloOrigenSlug: "con_sentido",
+          // `descomponerPorAreaYMetodo` trabaja sobre `string` genérico (lo
+          // comparte con Caja General, que admite más áreas) — acá se sabe
+          // que solo puede ser una de las dos que mandó itemVentaSchema.
+          moduloOrigenSlug: grupo.moduloOrigenSlug as "insumos" | "con_sentido",
           motivo,
           referenciaEntidad: "con_sentido_ventas",
           referenciaId: venta.id,
-          metodoPago: input.metodoPago,
-          monto: input.monto,
+          metodoPago: grupo.metodoPago,
+          monto: grupo.monto,
           referenciaBanco: input.referenciaBanco,
+          esPagoMixto,
         },
         usuarioId,
         client,

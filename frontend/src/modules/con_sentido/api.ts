@@ -55,6 +55,11 @@ export interface ItemVenta {
   subtotal: number;
   // Obligatoria si la venta deja el producto en stock negativo.
   observacionInventario?: string;
+  // De qué área es este ítem — obligatorio (no opcional): a diferencia de
+  // Caja General, "Nueva venta" de Con Sentido no tiene modo "monto único"
+  // sin productos, así que SIEMPRE hay un área que declarar (ver
+  // itemVentaSchema en el backend, Task 8).
+  moduloOrigenSlug: "insumos" | "con_sentido";
 }
 
 export interface Venta {

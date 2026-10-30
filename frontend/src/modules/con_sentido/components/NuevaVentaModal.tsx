@@ -25,6 +25,9 @@ interface Producto {
   grupo?: string;
   precio_mayorista?: number | null;
   mayorista_desde?: number | null;
+  // Área económica por defecto del producto (Task 3) — precarga el selector
+  // de área de la línea al agregarlo al carrito (ver agregarProducto).
+  areaDefecto?: "insumos" | "con_sentido";
 }
 
 // Normaliza para buscar sin importar mayúsculas ni tildes ("fragancia" encuentra "Fragáncia").
@@ -42,6 +45,14 @@ interface ItemCarrito {
   precioManual: boolean;
   // Obligatoria si la venta deja el producto en stock negativo (ver faltaStock).
   observacionInventario: string;
+  // De qué área es ESTE ítem — igual que IngresoModal.tsx (Task 7): se
+  // precarga desde producto.areaDefecto al elegir un producto del catálogo,
+  // pero un ítem "Otro producto" escrito a mano arranca sin valor y el
+  // cajero siempre tiene que elegirlo (nunca hay default ahí). Obligatoria
+  // en TODAS las líneas — a diferencia de Caja General, "Nueva venta" de Con
+  // Sentido no tiene modo "monto único" (ver itemVentaSchema en el backend,
+  // Task 8: moduloOrigenSlug ya no es opcional).
+  moduloOrigenSlug?: "insumos" | "con_sentido";
 }
 
 interface NuevaVentaModalProps {
@@ -107,9 +118,16 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
     }
   });
 
+  // Cada línea reparte su pago a su propia área (ver
+  // con_sentido.service.ts::registrarVentaService) — sin elegirla en TODAS
+  // las líneas no hay cómo registrar la venta. Mismo criterio que
+  // faltaAreaLineas en IngresoModal.tsx (Task 7).
+  const faltaAreaCarrito = carrito.some((item) => !item.moduloOrigenSlug);
+
   const puedeRegistrar =
     carrito.length > 0 &&
     itemsValidos &&
+    !faltaAreaCarrito &&
     total > 0 &&
     (pago.metodoPago === "mixto" ? pago.montoEfectivo + pago.montoBanco > 0 : true) &&
     !mixtoInvalido &&
@@ -126,6 +144,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         precioUnitario: Number(p.precio),
         precioManual: false,
         observacionInventario: "",
+        moduloOrigenSlug: p.areaDefecto,
       },
     ]);
     setBusqueda("");
@@ -167,13 +186,22 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
         items: carrito.map((item) => ({
           productoId: item.producto?.id,
           producto: item.producto?.nombre || item.descripcionOtro.trim(),
-          descripcion: item.producto?.descripcion,
+          // El catálogo trae estos dos como `string | null` (ver
+          // ProductoConSentido) — el backend solo acepta `string | undefined`
+          // (z.string().optional() no admite null); sin el `?? undefined`
+          // un producto sin descripción/categoría tumbaba TODA la venta con
+          // un 400 "Invalid input" (error pre-existente, no introducido acá
+          // — mismo patrón que ya usaba `imagen` dos líneas abajo).
+          descripcion: item.producto?.descripcion ?? undefined,
           imagen: item.producto?.imagen ?? item.producto?.imagen_url ?? undefined,
-          categoria: item.producto?.categoria,
+          categoria: item.producto?.categoria ?? undefined,
           cantidad: item.cantidad,
           precioUnitario: precioDe(item),
           subtotal: precioDe(item) * item.cantidad,
           observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
+          // puedeRegistrar ya garantiza que todas las líneas la tienen (ver
+          // faltaAreaCarrito) — el cast es seguro acá.
+          moduloOrigenSlug: item.moduloOrigenSlug as "insumos" | "con_sentido",
         })),
         monto: total,
         metodoPago: pago.metodoPago,
@@ -413,6 +441,38 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                     >
                       ✕
                     </button>
+                  </div>
+
+                  {/* A qué área se reparte el pago de ESTA línea (ver
+                      con_sentido.service.ts::registrarVentaService) — se
+                      precarga sola al elegir un producto del catálogo
+                      (producto.areaDefecto, ver agregarProducto) pero el
+                      cajero siempre puede cambiarla; un ítem "Otro producto"
+                      escrito a mano arranca sin valor. Mismo criterio que el
+                      selector por línea de IngresoModal.tsx (Task 7). */}
+                  <div>
+                    <label className="text-[10px] text-brand-ink/60 dark:text-brand-vanilla/60">Área</label>
+                    <select
+                      value={item.moduloOrigenSlug ?? ""}
+                      onChange={(e) =>
+                        actualizarItem(item.id, {
+                          moduloOrigenSlug: e.target.value
+                            ? (e.target.value as "insumos" | "con_sentido")
+                            : undefined,
+                        })
+                      }
+                      className={`w-full rounded text-xs border bg-brand-vanilla px-2 py-1 text-brand-ink dark:bg-brand-green-900 dark:text-brand-vanilla ${
+                        item.moduloOrigenSlug
+                          ? "border-brand-vanilla-dark dark:border-brand-green-700"
+                          : "border-red-400 dark:border-red-500"
+                      }`}
+                    >
+                      <option value="" disabled>
+                        Elegir área...
+                      </option>
+                      <option value="insumos">📦 Insumos</option>
+                      <option value="con_sentido">🎨 Con Sentido</option>
+                    </select>
                   </div>
                 </div>
               ))

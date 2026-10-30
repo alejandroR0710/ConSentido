@@ -560,6 +560,9 @@ export interface FacturaOrden {
   // Exclusivo de Pedidos: fecha en que se marcó "alistado", mostrada como
   // "Despacho" en el recibo — el resto de los módulos nunca la mandan.
   fechaDespacho?: string | null;
+  // Exclusivo de Pedidos: la descripción del pedido (la misma que ya se
+  // imprime en el rótulo) — el resto de los módulos nunca la mandan.
+  descripcion?: string | null;
   items: FacturaItem[];
   subtotal: number;
   descuentoPorcentaje: number;

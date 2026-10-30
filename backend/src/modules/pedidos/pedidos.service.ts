@@ -670,6 +670,9 @@ export async function obtenerFacturaPedido(id: string) {
     // "Despacho", no "Entrega": ya no se le pide esa fecha al crear el
     // pedido — lo relevante para la factura/rótulo es cuándo se alistó.
     fechaDespacho: pedido.alistado_en as string | null,
+    // La misma descripción que ya se imprime en el rótulo (ver
+    // DetallePedidoPage.tsx::ModalImprimirRotulo) — faltaba en la factura.
+    descripcion: pedido.descripcion as string | null,
     items: items.map((i) => ({
       productoNombre: i.nombre as string,
       sku: i.sku as string | null,

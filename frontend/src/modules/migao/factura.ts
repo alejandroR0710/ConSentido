@@ -22,6 +22,9 @@ export function facturaAReciboProps(factura: FacturaOrden): Omit<ReciboImprimibl
       valor: new Date(factura.fechaDespacho).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" }),
     });
   }
+  if (factura.descripcion) {
+    camposEncabezado.push({ etiqueta: "Descripción", valor: factura.descripcion });
+  }
 
   // Si queda saldo por cobrar, esto no es una factura de venta real todavía
   // — se imprime como prefactura con el aviso y el saldo, mismo patrón ya

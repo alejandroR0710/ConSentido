@@ -159,29 +159,61 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
     }
 
     // Cada ítem puede ser de una área distinta (insumos/con_sentido) — se
-    // reparte el pago entre esas áreas, proporcional al bruto (cantidad *
-    // precioUnitario) de los ítems de cada una. A diferencia del ingreso
-    // manual de Caja General (ver caja.service.ts::registrarIngresoManual,
-    // Task 6), esta venta NO tiene concepto de descuento: `input.monto` ya
-    // ES la suma de los ítems (así lo calcula el carrito del frontend), así
-    // que no hace falta ninguna escala bruto→neto — se le pasan los montos
-    // de los ítems tal cual a descomponerPorAreaYMetodo, que agrupa por área
-    // y reparte entre métodos (ver shared/utils/area-pago.ts).
+    // reparte el PAGO REAL (lo que de verdad entra a Caja: `input.monto`, o
+    // `montoEfectivo + montoBanco` si es mixto) proporcional al bruto
+    // (cantidad * precioUnitario) de los ítems de cada área.
+    //
+    // A propósito NO se le pasa el bruto crudo de los ítems a
+    // descomponerPorAreaYMetodo (como se hizo en un primer intento): nada en
+    // el schema obliga a que Σ ítems cuadre con el pago — el frontend solo
+    // lo AVISA (SelectorMetodoPago.tsx, el mensaje "Faltan/Sobran") pero NO
+    // bloquea el submit si no cuadra (NuevaVentaModal.tsx::puedeRegistrar no
+    // valida eso), así que un cajero puede enviar items por $50.000 con un
+    // mixto de solo $40.000 real. Y aunque cuadraran, una `cantidad`
+    // fraccionaria (los ítems de catálogo exigen entero, pero un ítem de
+    // texto libre no) puede desviar por 1 centavo la suma redondeada POR
+    // ÁREA (que es lo que ve el invariante) de la suma redondeada UNA SOLA
+    // VEZ al final (que es como se calculó `monto`). En cualquiera de los
+    // dos casos, pasar el bruto crudo hace que el invariante de
+    // descomponerPorAreaYMetodo compare esa suma contra el pago real y, si
+    // no cuadran, lance un throw sin capturar (500) — hallazgo real de code
+    // review (2026-10-29).
+    //
+    // La solución, igual que caja.service.ts::registrarIngresoManual (Task
+    // 6) pero sin su escala por descuento (que acá no existe): se reparte el
+    // TOTAL REALMENTE PAGADO en centavos ENTEROS con el método del remanente
+    // mayor (Hamilton) — el piso de la parte proporcional de cada área y
+    // luego 1 centavo a la vez (a las de mayor remanente fraccional) hasta
+    // agotar la diferencia. Así el reparto SIEMPRE suma EXACTO al pago real
+    // (nunca al bruto de los ítems), sin importar si los ítems cuadran con
+    // él o no, y sin poder quedar negativo (cada centavo final es un piso de
+    // un número positivo, o ese piso más 1 — jamás una resta; misma prueba
+    // que en Task 6).
     const pagoInput: PagoInput =
       input.metodoPago === "mixto"
         ? { metodoPago: "mixto", montoEfectivo: input.montoEfectivo, montoBanco: input.montoBanco }
         : { metodoPago: input.metodoPago, monto: input.monto };
+    const partesPago = descomponerPago(pagoInput);
+    const totalNeto = partesPago.reduce((acc, p) => acc + p.monto, 0);
+    // "mixto" es solo una comodidad de UI: si de verdad tuvo las 2 partes
+    // (no un lado en $0, ya reducido a pago simple), cada movimiento que
+    // resulte de repartir por área debe seguir marcado como parte de un pago
+    // mixto — igual que antes de repartir por área.
+    const esPagoMixto = partesPago.length > 1;
 
-    // No hace falta agrupar por área antes de esta suma (a diferencia de
-    // Task 6): acá solo se necesita el total para el chequeo de abajo —
-    // agrupar por área ya lo hace descomponerPorAreaYMetodo internamente.
-    const sumaBruto = input.items.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0);
-    // Degenerado: se cobra plata real (input.monto > 0, exigido por el
-    // schema) pero NINGÚN ítem vale algo (ej. todo a $0) — no hay cómo
-    // repartir esa plata entre áreas. Sin este chequeo, descomponerPorAreaYMetodo
-    // recibiría solo líneas en $0 (las descarta su propio filtro de
-    // `monto > 0`) contra un pago > 0, y su invariante lanzaría un throw sin
-    // capturar (500) — mismo hallazgo de code review que en
+    const brutoPorArea = new Map<string, number>();
+    for (const item of input.items) {
+      brutoPorArea.set(
+        item.moduloOrigenSlug,
+        (brutoPorArea.get(item.moduloOrigenSlug) ?? 0) + item.cantidad * item.precioUnitario,
+      );
+    }
+    const areasConBruto = [...brutoPorArea].filter(([, bruto]) => bruto > 0);
+    const sumaBruto = areasConBruto.reduce((acc, [, bruto]) => acc + bruto, 0);
+    // Degenerado: se cobra plata real (totalNeto > 0, ya garantizado por el
+    // schema — `monto`/`montoEfectivo+montoBanco` positivos) pero NINGÚN
+    // ítem vale algo (ej. todo a $0) — no hay cómo repartir esa plata entre
+    // áreas. Mismo hallazgo de code review que en
     // caja.service.ts::registrarIngresoManual (Task 6, 2026-10-29).
     if (sumaBruto <= 0) {
       throw Errors.badRequest(
@@ -189,17 +221,23 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
       );
     }
 
-    const lineasPorArea = input.items.map((item) => ({
-      moduloOrigenSlug: item.moduloOrigenSlug,
-      monto: item.cantidad * item.precioUnitario,
+    const totalCentavos = Math.round(totalNeto * 100);
+    const exactos = areasConBruto.map(([, bruto]) => (bruto * totalCentavos) / sumaBruto);
+    const piso = exactos.map((e) => Math.floor(e));
+    let faltante = totalCentavos - piso.reduce((a, b) => a + b, 0);
+    const porRemanenteDesc = piso
+      .map((_, idx) => idx)
+      .sort((a, b) => exactos[b] - piso[b] - (exactos[a] - piso[a]));
+    const centavosPorArea = [...piso];
+    for (let i = 0; i < porRemanenteDesc.length && faltante > 0; i++) {
+      centavosPorArea[porRemanenteDesc[i]] += 1;
+      faltante--;
+    }
+    const lineasPorArea = areasConBruto.map(([moduloOrigenSlug], idx) => ({
+      moduloOrigenSlug,
+      monto: centavosPorArea[idx] / 100,
     }));
     const grupos = descomponerPorAreaYMetodo(lineasPorArea, pagoInput);
-
-    // "mixto" es solo una comodidad de UI (ver pago-mixto.ts): si de verdad
-    // tuvo las 2 partes (no un lado en $0, ya reducido a pago simple), cada
-    // movimiento que resulte de repartir por área debe seguir marcado como
-    // parte de un pago mixto — igual que antes de repartir por área.
-    const esPagoMixto = descomponerPago(pagoInput).length > 1;
 
     const motivo = `Venta Con Sentido - ${input.items.length} producto(s)`;
     for (const grupo of grupos) {

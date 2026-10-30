@@ -448,6 +448,19 @@ CREATE TABLE productos (
   INDEX idx_productos_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
+-- N:M: un producto puede estar en varias categorías (el e-commerce manda
+-- `categories[]` ya expandido con los ancestros; ver
+-- migraciones/2026-10-30-producto-categorias-multiples.sql). `categoria_id`
+-- arriba sigue existiendo para el alta manual (una sola categoría) y como
+-- "primera categoría" informativa de los productos sincronizados.
+CREATE TABLE producto_categorias (
+  producto_id  CHAR(36) NOT NULL,
+  categoria_id INT NOT NULL,
+  PRIMARY KEY (producto_id, categoria_id),
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (categoria_id) REFERENCES categorias_producto(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
 CREATE TABLE inventario_productos (
   id              BIGINT AUTO_INCREMENT PRIMARY KEY,
   producto_id     CHAR(36) NOT NULL UNIQUE,

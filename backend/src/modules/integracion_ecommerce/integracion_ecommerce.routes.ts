@@ -49,6 +49,9 @@ const eventoSchema = z.discriminatedUnion("type", [
       productId: z.string().min(1),
       name: z.string(),
       category: z.string().nullable(),
+      // Nombre de cada categoría del producto + sus ancestros (ver tipos.ts::SnapshotProducto).
+      // Opcional: avisos en vuelo de antes de este campo solo traen `category`.
+      categories: z.array(z.string()).optional(),
       imageUrl: z.string().nullable(),
       published: z.boolean(),
       deleted: z.boolean(),

@@ -25,6 +25,11 @@ export interface SnapshotProducto {
   productId: string;
   name: string;
   category: string | null;
+  // Nombre de cada categoría asignada directamente al producto MÁS sus
+  // ancestros (el e-commerce ya resolvió la cadena, el POS no arma ningún
+  // árbol), deduplicado, orden no garantizado. Opcional: avisos en vuelo de
+  // antes de este cambio solo traen `category`.
+  categories?: string[];
   imageUrl: string | null;
   published: boolean;
   deleted: boolean;

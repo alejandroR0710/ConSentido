@@ -33,14 +33,41 @@ const SELECT_PRODUCTO = `
          p.precio_mayorista, p.mayorista_desde, p.nota_mayorista,
          COALESCE(p.ecommerce_product_id, p.id) AS grupo,
          p.ecommerce_publicado, (p.ecommerce_item_key IS NOT NULL) AS sincronizado,
-         cp.nombre AS categoria, COALESCE(ip.cantidad_actual, 0) AS stock,
-         -- Área por defecto (binaria para este catálogo): "insumos" si la
-         -- categoría del producto está amarrada al módulo Insumos, si no
-         -- "con_sentido" (sin categoría, o categoría sin módulo asignado).
-         CASE WHEN m2.slug = 'insumos' THEN 'insumos' ELSE 'con_sentido' END AS area_defecto
+         cp.nombre AS categoria,
+         -- Todas las categorías del producto: la de categoria_id (alta manual
+         -- o "primera" sincronizada) unida con las de producto_categorias (el
+         -- producto puede estar en varias, ver recepcion.ts), sin duplicados.
+         (SELECT GROUP_CONCAT(DISTINCT nombre ORDER BY nombre SEPARATOR ', ')
+            FROM (
+              SELECT cp.nombre AS nombre
+              UNION
+              SELECT cpt.nombre AS nombre
+                FROM producto_categorias pct
+                JOIN categorias_producto cpt ON cpt.id = pct.categoria_id
+               WHERE pct.producto_id = p.id
+            ) todas_categorias
+         ) AS categorias,
+         COALESCE(ip.cantidad_actual, 0) AS stock,
+         -- Área por defecto (binaria para este catálogo): "insumos" si
+         -- CUALQUIERA de las categorías del producto —la de categoria_id
+         -- (alta manual, que nunca toca producto_categorias) o cualquiera de
+         -- producto_categorias (sincronizado del e-commerce, donde puede
+         -- haber varias)— está amarrada al módulo Insumos; si no, "con_sentido".
+         CASE WHEN
+           EXISTS (
+             SELECT 1 FROM categorias_producto cpi
+             LEFT JOIN modulos mi ON mi.id = cpi.modulo_id
+             WHERE cpi.id = p.categoria_id AND mi.slug = 'insumos'
+           )
+           OR EXISTS (
+             SELECT 1 FROM producto_categorias pci
+             JOIN categorias_producto cpj ON cpj.id = pci.categoria_id
+             JOIN modulos mj ON mj.id = cpj.modulo_id
+             WHERE pci.producto_id = p.id AND mj.slug = 'insumos'
+           )
+         THEN 'insumos' ELSE 'con_sentido' END AS area_defecto
     FROM productos p
     LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
-    LEFT JOIN modulos m2 ON m2.id = cp.modulo_id
     LEFT JOIN inventario_productos ip ON ip.producto_id = p.id
 `;
 

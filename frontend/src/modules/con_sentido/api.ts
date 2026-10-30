@@ -20,6 +20,10 @@ export interface ProductoConSentido {
   descripcion: string | null;
   imagen_url: string | null;
   categoria: string | null;
+  // Todas las categorías del producto (puede estar en varias, sincronizado
+  // del e-commerce), separadas por ", "; null si no tiene ninguna. Incluye
+  // siempre lo que haya en `categoria`. Ver con_sentido.repository.ts::SELECT_PRODUCTO.
+  categorias: string | null;
   stock: number;
   activo: boolean;
   // Área económica a la que pertenece por defecto, según el módulo

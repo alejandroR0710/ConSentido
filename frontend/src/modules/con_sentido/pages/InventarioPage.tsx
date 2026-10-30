@@ -88,7 +88,7 @@ export function InventarioConSentidoPage() {
                     {producto.sku || "—"}
                   </td>
                   <td className="px-4 py-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                    {producto.categoria || "—"}
+                    {producto.categorias || "—"}
                   </td>
                   <td className="px-4 py-2">
                     <span

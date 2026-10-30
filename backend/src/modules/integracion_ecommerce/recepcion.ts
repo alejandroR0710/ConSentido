@@ -52,7 +52,16 @@ export async function aplicarEvento(evento: EventoEntrante): Promise<ResultadoRe
 // ---------------------------------------------------------------------------
 
 async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Promise<ResultadoRecepcion> {
-  const categoriaId = await obtenerOCrearCategoria(client, snap.category);
+  // `categories` ya trae, por categoría asignada, el nombre de ella MÁS sus
+  // ancestros (resuelto allá); si un aviso en vuelo todavía no lo trae, se
+  // cae al `category` singular de siempre.
+  const nombresCategorias = snap.categories?.length ? snap.categories : snap.category ? [snap.category] : [];
+  const categoriaIds = await obtenerOCrearCategorias(client, nombresCategorias);
+  // `productos.categoria_id` queda en UNA sola (la primera resuelta) por
+  // compatibilidad con quien todavía la lea directo; ya no es lo que decide
+  // el área por defecto (ver con_sentido.repository.ts::SELECT_PRODUCTO, que
+  // también mira `producto_categorias`).
+  const categoriaId = categoriaIds[0] ?? null;
   const claves: string[] = [];
 
   for (const item of snap.items) {
@@ -60,20 +69,21 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
     claves.push(clave);
     const nombre = item.name.slice(0, 150);
 
+    let productoId: string;
     const existente = await client.query(`SELECT id FROM productos WHERE ecommerce_item_key = $1`, [clave]);
     if (existente.rowCount) {
-      const id = existente.rows[0].id as string;
+      productoId = existente.rows[0].id as string;
       await client.query(
         `UPDATE productos
             SET nombre = $2, sku = $3, precio = $4, categoria_id = $5, imagen_url = $6,
                 ecommerce_publicado = $7, activo = true,
                 precio_mayorista = $8, mayorista_desde = $9, nota_mayorista = $10
           WHERE id = $1`,
-        [id, nombre, item.sku, item.price, categoriaId, snap.imageUrl, snap.published, ...mayorista(item)],
+        [productoId, nombre, item.sku, item.price, categoriaId, snap.imageUrl, snap.published, ...mayorista(item)],
       );
       // El stock de un ítem que ya existe solo lo mueven los STOCK_DELTA, salvo
       // en la carga inicial / resincronización.
-      if (snap.setStock) await fijarStock(client, id, item.stock);
+      if (snap.setStock) await fijarStock(client, productoId, item.stock);
     } else {
       const creado = await client.query(
         `INSERT INTO productos
@@ -85,8 +95,11 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
         [nombre, item.sku, clave, item.productId, item.variantId, snap.published, categoriaId, item.price, snap.imageUrl,
           ...mayorista(item)],
       );
-      await fijarStock(client, creado.rows[0].id, item.stock);
+      productoId = creado.rows[0].id;
+      await fijarStock(client, productoId, item.stock);
     }
+
+    await reemplazarCategoriasProducto(client, productoId, categoriaIds);
   }
 
   await client.query(
@@ -130,6 +143,27 @@ async function obtenerOCrearCategoria(client: PoolClient, nombre: string | null)
     [limpio],
   );
   return creada.rows[0].id;
+}
+
+/** Versión plural de `obtenerOCrearCategoria`: una por nombre, sin duplicados, en orden de aparición. */
+async function obtenerOCrearCategorias(client: PoolClient, nombres: string[]): Promise<number[]> {
+  const ids: number[] = [];
+  for (const nombre of nombres) {
+    const id = await obtenerOCrearCategoria(client, nombre);
+    if (id !== null && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** Reemplaza (borra + inserta) las filas de `producto_categorias` de un producto: idempotente. */
+async function reemplazarCategoriasProducto(client: PoolClient, productoId: string, categoriaIds: number[]) {
+  await client.query(`DELETE FROM producto_categorias WHERE producto_id = $1`, [productoId]);
+  for (const categoriaId of categoriaIds) {
+    await client.query(`INSERT INTO producto_categorias (producto_id, categoria_id) VALUES ($1, $2)`, [
+      productoId,
+      categoriaId,
+    ]);
+  }
 }
 
 // ---------------------------------------------------------------------------

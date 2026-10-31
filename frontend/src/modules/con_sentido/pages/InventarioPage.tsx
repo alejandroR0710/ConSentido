@@ -45,6 +45,8 @@ export function InventarioConSentidoPage() {
         </Link>
       </div>
 
+      {tieneAccesoTotal(usuario?.rol) && <CategoriasAreaPanel />}
+
       {/* El catálogo de Con Sentido viene del e-commerce (ver
           backend/src/modules/integracion_ecommerce): los productos se crean y
           editan allá, y el stock se sincroniza en los dos sentidos. */}
@@ -110,8 +112,6 @@ export function InventarioConSentidoPage() {
           </table>
         </div>
       )}
-
-      {tieneAccesoTotal(usuario?.rol) && <CategoriasAreaPanel />}
     </div>
   );
 }

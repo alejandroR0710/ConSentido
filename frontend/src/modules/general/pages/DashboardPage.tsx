@@ -4,16 +4,18 @@ import { GeneralAnalyticsSection } from "../components/GeneralAnalyticsSection";
 import { MigaoAnalyticsSection } from "../components/MigaoAnalyticsSection";
 import { ConSentidoAnalyticsSection } from "../components/ConSentidoAnalyticsSection";
 import { InsumosAnalyticsSection } from "../components/InsumosAnalyticsSection";
+import { TalleresAnalyticsSection } from "../components/TalleresAnalyticsSection";
 import { PedidosAnalyticsSection } from "../components/PedidosAnalyticsSection";
 import { ReiniciarTodoModal } from "../components/ReiniciarTodoModal";
 
-type Seccion = "general" | "migao" | "consentido" | "insumos" | "pedidos";
+type Seccion = "general" | "migao" | "consentido" | "insumos" | "talleres" | "pedidos";
 
 const SECCIONES: { id: Seccion; label: string; icon: string }[] = [
   { id: "general", label: "Resumen General", icon: "📊" },
   { id: "migao", label: "Migao (POS)", icon: "🍽️" },
   { id: "consentido", label: "Con Sentido", icon: "🎨" },
   { id: "insumos", label: "Insumos", icon: "📦" },
+  { id: "talleres", label: "Talleres", icon: "🔧" },
   { id: "pedidos", label: "Pedidos", icon: "🚚" },
 ];
 
@@ -63,6 +65,7 @@ export function DashboardPage() {
         {seccionActual === "migao" && <MigaoAnalyticsSection />}
         {seccionActual === "consentido" && <ConSentidoAnalyticsSection />}
         {seccionActual === "insumos" && <InsumosAnalyticsSection />}
+        {seccionActual === "talleres" && <TalleresAnalyticsSection />}
         {seccionActual === "pedidos" && <PedidosAnalyticsSection />}
       </div>
 

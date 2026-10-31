@@ -35,6 +35,16 @@ export interface AnalyticsInsumos {
   }[];
 }
 
+// Talleres es deliberadamente más simple que Insumos: sin COGS/margen, sin
+// top de productos, sin movimientos de inventario — esos son conceptos
+// propios de Insumos que no aplican acá (no hay un catálogo de productos
+// "Talleres" con costo, ver decisión de diseño). Solo ingresos/egresos/saldo.
+export interface AnalyticsTalleres {
+  ingresos: number;
+  egresos: number;
+  saldoNeto: number;
+}
+
 export interface AnalyticsPedidos {
   pedidosTotal: number;
   ingresoTotal: number;

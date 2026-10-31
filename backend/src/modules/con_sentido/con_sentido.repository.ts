@@ -15,7 +15,7 @@ function normalizarProducto<T extends Record<string, unknown>>(fila: T) {
   // `area_defecto` (alias de la columna calculada en SELECT_PRODUCTO) se
   // expone en camelCase: a diferencia del resto de campos acá, no es una
   // columna real de `productos` sino un valor derivado para el frontend.
-  const { area_defecto, ...resto } = fila as T & { area_defecto?: "insumos" | "con_sentido" };
+  const { area_defecto, ...resto } = fila as T & { area_defecto?: "insumos" | "talleres" | "con_sentido" };
   return {
     ...resto,
     precio: Number(fila.precio),
@@ -48,24 +48,44 @@ const SELECT_PRODUCTO = `
             ) todas_categorias
          ) AS categorias,
          COALESCE(ip.cantidad_actual, 0) AS stock,
-         -- Área por defecto (binaria para este catálogo): "insumos" si
-         -- CUALQUIERA de las categorías del producto —la de categoria_id
-         -- (alta manual, que nunca toca producto_categorias) o cualquiera de
-         -- producto_categorias (sincronizado del e-commerce, donde puede
-         -- haber varias)— está amarrada al módulo Insumos; si no, "con_sentido".
-         CASE WHEN
-           EXISTS (
-             SELECT 1 FROM categorias_producto cpi
-             LEFT JOIN modulos mi ON mi.id = cpi.modulo_id
-             WHERE cpi.id = p.categoria_id AND mi.slug = 'insumos'
-           )
-           OR EXISTS (
-             SELECT 1 FROM producto_categorias pci
-             JOIN categorias_producto cpj ON cpj.id = pci.categoria_id
-             JOIN modulos mj ON mj.id = cpj.modulo_id
-             WHERE pci.producto_id = p.id AND mj.slug = 'insumos'
-           )
-         THEN 'insumos' ELSE 'con_sentido' END AS area_defecto
+         -- Área por defecto (3 vías para este catálogo), por prioridad —
+         -- insumos > talleres > con_sentido (la más específica/operativa
+         -- gana si el producto tiene categorías de más de un área, ver
+         -- decisión de diseño de Talleres): "insumos" si CUALQUIERA de las
+         -- categorías del producto —la de categoria_id (alta manual, que
+         -- nunca toca producto_categorias) o cualquiera de producto_categorias
+         -- (sincronizado del e-commerce, donde puede haber varias)— está
+         -- amarrada al módulo Insumos; si no, "talleres" bajo el mismo
+         -- criterio (dual-source); si tampoco, "con_sentido".
+         CASE
+           WHEN
+             EXISTS (
+               SELECT 1 FROM categorias_producto cpi
+               LEFT JOIN modulos mi ON mi.id = cpi.modulo_id
+               WHERE cpi.id = p.categoria_id AND mi.slug = 'insumos'
+             )
+             OR EXISTS (
+               SELECT 1 FROM producto_categorias pci
+               JOIN categorias_producto cpj ON cpj.id = pci.categoria_id
+               JOIN modulos mj ON mj.id = cpj.modulo_id
+               WHERE pci.producto_id = p.id AND mj.slug = 'insumos'
+             )
+           THEN 'insumos'
+           WHEN
+             EXISTS (
+               SELECT 1 FROM categorias_producto cpta
+               LEFT JOIN modulos mta ON mta.id = cpta.modulo_id
+               WHERE cpta.id = p.categoria_id AND mta.slug = 'talleres'
+             )
+             OR EXISTS (
+               SELECT 1 FROM producto_categorias pcta
+               JOIN categorias_producto cptb ON cptb.id = pcta.categoria_id
+               JOIN modulos mtb ON mtb.id = cptb.modulo_id
+               WHERE pcta.producto_id = p.id AND mtb.slug = 'talleres'
+             )
+           THEN 'talleres'
+           ELSE 'con_sentido'
+         END AS area_defecto
     FROM productos p
     LEFT JOIN categorias_producto cp ON cp.id = p.categoria_id
     LEFT JOIN inventario_productos ip ON ip.producto_id = p.id

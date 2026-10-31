@@ -12,7 +12,7 @@ export interface ItemPedidoInput {
   // De qué área es esta línea — obligatoria (no opcional): con ella el
   // backend fija, al crear el pedido, qué % de cada abono va a cada área
   // (ver itemPedidoSchema/calcularPorcentajesPorArea, Task 10).
-  moduloOrigenSlug: "insumos" | "con_sentido";
+  moduloOrigenSlug: "insumos" | "talleres" | "con_sentido";
 }
 
 export interface ItemPedido {

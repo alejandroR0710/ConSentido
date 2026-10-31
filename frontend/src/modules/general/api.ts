@@ -98,6 +98,14 @@ export interface AnalyticsInsumos {
   }[];
 }
 
+// Talleres es deliberadamente más simple que Insumos: sin COGS/margen, sin
+// top de productos, sin movimientos de inventario (ver backend analytics.types.ts).
+export interface AnalyticsTalleres {
+  ingresos: number;
+  egresos: number;
+  saldoNeto: number;
+}
+
 export interface AnalyticsPedidos {
   pedidosTotal: number;
   ingresoTotal: number;
@@ -121,6 +129,8 @@ export const analyticsApi = {
     apiFetch<AnalyticsConSentido>(`/analytics/con-sentido?desde=${desde}&hasta=${hasta}`),
   obtenerInsumos: (desde: string, hasta: string) =>
     apiFetch<AnalyticsInsumos>(`/analytics/insumos?desde=${desde}&hasta=${hasta}`),
+  obtenerTalleres: (desde: string, hasta: string) =>
+    apiFetch<AnalyticsTalleres>(`/analytics/talleres?desde=${desde}&hasta=${hasta}`),
   obtenerPedidos: (desde: string, hasta: string) =>
     apiFetch<AnalyticsPedidos>(`/analytics/pedidos?desde=${desde}&hasta=${hasta}`),
 };

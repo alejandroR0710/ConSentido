@@ -7,6 +7,7 @@ import {
   obtenerAnalyticsGeneralController,
   obtenerAnalyticsConSentidoController,
   obtenerAnalyticsInsumosController,
+  obtenerAnalyticsTalleresController,
   obtenerAnalyticsPedidosController,
 } from "./analytics.controller";
 
@@ -36,6 +37,12 @@ analyticsRouter.get(
   "/insumos",
   requirePermission("general.dashboard.analytics.ver"),
   asyncHandler(obtenerAnalyticsInsumosController),
+);
+
+analyticsRouter.get(
+  "/talleres",
+  requirePermission("general.dashboard.analytics.ver"),
+  asyncHandler(obtenerAnalyticsTalleresController),
 );
 
 analyticsRouter.get(

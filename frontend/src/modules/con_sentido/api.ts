@@ -27,9 +27,11 @@ export interface ProductoConSentido {
   stock: number;
   activo: boolean;
   // Área económica a la que pertenece por defecto, según el módulo
-  // (Insumos u otro) de su categoría — ver categorias_producto.modulo_id.
+  // (Insumos/Talleres/Con Sentido) de su categoría — ver categorias_producto.modulo_id.
   // Sirve para precargar el selector de área al vender/registrar un ingreso.
-  areaDefecto: "insumos" | "con_sentido";
+  // Prioridad cuando el producto tiene categorías de más de un área: insumos
+  // > talleres > con_sentido (ver con_sentido.repository.ts::SELECT_PRODUCTO).
+  areaDefecto: "insumos" | "talleres" | "con_sentido";
 }
 
 export interface ClienteConSentido {
@@ -41,11 +43,11 @@ export interface ClienteConSentido {
 
 // Categoría de producto de Con Sentido con su área (módulo) por defecto —
 // ver con_sentido.repository.ts::listarCategoriasConArea. A diferencia de
-// CategoriaGasto (caja), aquí solo existen dos áreas posibles.
+// CategoriaGasto (caja), aquí solo existen tres áreas posibles.
 export interface CategoriaConSentido {
   id: number;
   nombre: string;
-  areaSlug: "insumos" | "con_sentido";
+  areaSlug: "insumos" | "talleres" | "con_sentido";
 }
 
 export interface ItemVenta {
@@ -63,7 +65,7 @@ export interface ItemVenta {
   // Caja General, "Nueva venta" de Con Sentido no tiene modo "monto único"
   // sin productos, así que SIEMPRE hay un área que declarar (ver
   // itemVentaSchema en el backend, Task 8).
-  moduloOrigenSlug: "insumos" | "con_sentido";
+  moduloOrigenSlug: "insumos" | "talleres" | "con_sentido";
 }
 
 export interface Venta {
@@ -148,7 +150,7 @@ export const conSentidoApi = {
   // Administración del área por defecto de las categorías de producto —
   // ver con_sentido.routes.ts (gateado por con_sentido.categorias.administrar).
   listarCategorias: () => apiFetch<CategoriaConSentido[]>("/con-sentido/categorias"),
-  actualizarAreaCategoria: (id: number, areaSlug: "insumos" | "con_sentido") =>
+  actualizarAreaCategoria: (id: number, areaSlug: "insumos" | "talleres" | "con_sentido") =>
     apiFetch<{ id: number; nombre: string }>(`/con-sentido/categorias/${id}`, {
       method: "PATCH",
       body: { areaSlug },

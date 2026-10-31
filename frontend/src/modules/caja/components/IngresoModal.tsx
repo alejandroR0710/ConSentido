@@ -105,7 +105,9 @@ export function IngresoModal({
   // modo "productos", pero para el único item sintético que se manda en este
   // modo (ver registrar() más abajo). "" = todavía sin elegir, el cajero
   // siempre elige (nunca hay default).
-  const [areaMontoUnico, setAreaMontoUnico] = useState<"insumos" | "con_sentido" | "">(f?.areaMontoUnico ?? "");
+  const [areaMontoUnico, setAreaMontoUnico] = useState<"insumos" | "talleres" | "con_sentido" | "">(
+    f?.areaMontoUnico ?? "",
+  );
   const [lineas, setLineas] = useState<LineaIngreso[]>(
     f
       // Re-clavar las keys con el contador de ESTA sesión: las que traía el
@@ -509,7 +511,7 @@ export function IngresoModal({
                 nombre: motivo.trim() || "Ingreso registrado",
                 cantidad: 1,
                 precioUnitario: monto,
-                moduloOrigenSlug: areaMontoUnico as "insumos" | "con_sentido",
+                moduloOrigenSlug: areaMontoUnico as "insumos" | "talleres" | "con_sentido",
               },
             ];
       const montoRecibidoEfectivo = montoEnEfectivo > 0 ? montoRecibido : undefined;
@@ -848,7 +850,9 @@ export function IngresoModal({
                     value={linea.moduloOrigenSlug ?? ""}
                     onChange={(e) =>
                       actualizarLinea(linea.key, {
-                        moduloOrigenSlug: e.target.value ? (e.target.value as "insumos" | "con_sentido") : undefined,
+                        moduloOrigenSlug: e.target.value
+                          ? (e.target.value as "insumos" | "talleres" | "con_sentido")
+                          : undefined,
                       })
                     }
                     className={`w-32 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
@@ -861,6 +865,7 @@ export function IngresoModal({
                       Elegir área...
                     </option>
                     <option value="insumos">📦 Insumos</option>
+                    <option value="talleres">🔧 Talleres</option>
                     <option value="con_sentido">🎨 Con Sentido</option>
                   </select>
                 )}
@@ -1041,7 +1046,7 @@ export function IngresoModal({
               cajero siempre elige, nunca hay default (ver LineaIngreso.moduloOrigenSlug). */}
           <select
             value={areaMontoUnico}
-            onChange={(e) => setAreaMontoUnico(e.target.value as "insumos" | "con_sentido" | "")}
+            onChange={(e) => setAreaMontoUnico(e.target.value as "insumos" | "talleres" | "con_sentido" | "")}
             className={`w-36 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
               areaMontoUnico ? "border-brand-vanilla-dark dark:border-brand-green-700" : "border-red-400 dark:border-red-500"
             }`}
@@ -1050,6 +1055,7 @@ export function IngresoModal({
               Elegir área...
             </option>
             <option value="insumos">📦 Insumos</option>
+            <option value="talleres">🔧 Talleres</option>
             <option value="con_sentido">🎨 Con Sentido</option>
           </select>
         </div>

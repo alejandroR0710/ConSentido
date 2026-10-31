@@ -11,7 +11,7 @@ const itemPedidoSchema = z.object({
   // Área económica de la línea (mismo criterio que con_sentido.schema.ts):
   // con ella se fija, al crear el pedido, qué % de cada abono va a cada área
   // (ver pedidos.service.ts::calcularPorcentajesPorArea).
-  moduloOrigenSlug: z.enum(["insumos", "con_sentido"]),
+  moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido"]),
 });
 
 const ESTADOS_DESTINO = ["alistado", "enviado", "entregado", "cancelado"] as const;

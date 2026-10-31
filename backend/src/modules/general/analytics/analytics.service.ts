@@ -1,5 +1,5 @@
 import * as repo from "./analytics.repository";
-import type { AnalyticsConSentido, AnalyticsInsumos, AnalyticsPedidos } from "./analytics.types";
+import type { AnalyticsConSentido, AnalyticsInsumos, AnalyticsPedidos, AnalyticsTalleres } from "./analytics.types";
 
 /**
  * Analíticas generales: resumen de movimientos de caja por todas las áreas
@@ -165,6 +165,30 @@ export async function obtenerAnalyticsInsumos(desde: string, hasta: string): Pro
       precio: Number(p.precio),
       margen: Number(p.precio) - Number(p.costo || 0),
     })),
+  };
+}
+
+/**
+ * Analíticas de Talleres: a diferencia de Insumos (que vende producto con
+ * costo/margen), Talleres todavía no tiene una operación de catálogo propia
+ * — es solo un área económica a la que ahora se puede etiquetar un ingreso o
+ * un egreso (ver Caja General/Pedidos/Con Sentido). Por eso la vista es
+ * deliberadamente simple: ingresos, egresos y saldo neto, nada de COGS ni
+ * top de productos. moduloId=3 ('talleres', ver modulos en database/mysql/schema.sql).
+ */
+export async function obtenerAnalyticsTalleres(desde: string, hasta: string): Promise<AnalyticsTalleres> {
+  const [ingresos, egresos] = await Promise.all([
+    repo.getIngresosModulo(3, desde, hasta),
+    repo.getEgresosModulo(3, desde, hasta),
+  ]);
+
+  const totalIngresos = Number(ingresos.total || 0);
+  const totalEgresos = Number(egresos.total || 0);
+
+  return {
+    ingresos: totalIngresos,
+    egresos: totalEgresos,
+    saldoNeto: totalIngresos - totalEgresos,
   };
 }
 

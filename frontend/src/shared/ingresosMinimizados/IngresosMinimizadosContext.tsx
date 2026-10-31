@@ -25,7 +25,7 @@ export interface LineaIngreso {
   // el cajero la elige a mano. Cada línea reparte su pago a SU propia área
   // (ver caja.service.ts::registrarIngresoManual) — ya no hay un solo
   // selector de "Viene de" para todo el ingreso.
-  moduloOrigenSlug?: "insumos" | "con_sentido";
+  moduloOrigenSlug?: "insumos" | "talleres" | "con_sentido";
 }
 
 /** De dónde sale este formulario — determina a qué pantalla navega restaurar
@@ -45,7 +45,7 @@ export interface FormularioIngreso {
   monto: number;
   // Área elegida en modo "Monto único" (ver IngresoModal.tsx) — "" = todavía
   // sin elegir. En modo "productos" cada línea lleva la suya (LineaIngreso).
-  areaMontoUnico: "insumos" | "con_sentido" | "";
+  areaMontoUnico: "insumos" | "talleres" | "con_sentido" | "";
   lineas: LineaIngreso[];
   descuentoPorcentaje: number;
   pago: MetodoPagoValor;

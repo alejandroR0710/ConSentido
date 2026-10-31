@@ -29,11 +29,11 @@ export interface ItemIngresoInput {
   // De qué área es ESTE ítem — IngresoModal.tsx manda uno por línea (ya no un
   // solo moduloOrigenSlug para todo el ingreso); el backend rechaza el
   // registro si `items` viene no vacío y a algún ítem le falta (ver
-  // registrarIngresoSchema en el backend). Acotado a las dos áreas que puede
+  // registrarIngresoSchema en el backend). Acotado a las tres áreas que puede
   // tener un producto (ver ProductoConSentido.areaDefecto) — mismo tipo que
   // LineaIngreso.moduloOrigenSlug — aunque el backend acepta el enum completo
   // para otros llamados internos sin desglose por línea.
-  moduloOrigenSlug?: "insumos" | "con_sentido";
+  moduloOrigenSlug?: "insumos" | "talleres" | "con_sentido";
 }
 
 // Igual que PagoInput pero sin `monto`: al corregir un movimiento ya existente

@@ -27,6 +27,12 @@ export async function obtenerAnalyticsInsumosController(req: Request, res: Respo
   return ok(res, analytics);
 }
 
+export async function obtenerAnalyticsTalleresController(req: Request, res: Response) {
+  const { desde, hasta } = analyticsRangoSchema.parse(req.query);
+  const analytics = await service.obtenerAnalyticsTalleres(desde, hasta);
+  return ok(res, analytics);
+}
+
 export async function obtenerAnalyticsPedidosController(req: Request, res: Response) {
   const { desde, hasta } = analyticsRangoSchema.parse(req.query);
   const analytics = await service.obtenerAnalyticsPedidos(desde, hasta);

@@ -27,7 +27,7 @@ interface Producto {
   mayorista_desde?: number | null;
   // Área económica por defecto del producto (Task 3) — precarga el selector
   // de área de la línea al agregarlo al carrito (ver agregarProducto).
-  areaDefecto?: "insumos" | "con_sentido";
+  areaDefecto?: "insumos" | "talleres" | "con_sentido";
 }
 
 // Normaliza para buscar sin importar mayúsculas ni tildes ("fragancia" encuentra "Fragáncia").
@@ -52,7 +52,7 @@ interface ItemCarrito {
   // en TODAS las líneas — a diferencia de Caja General, "Nueva venta" de Con
   // Sentido no tiene modo "monto único" (ver itemVentaSchema en el backend,
   // Task 8: moduloOrigenSlug ya no es opcional).
-  moduloOrigenSlug?: "insumos" | "con_sentido";
+  moduloOrigenSlug?: "insumos" | "talleres" | "con_sentido";
 }
 
 interface NuevaVentaModalProps {
@@ -201,7 +201,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
           observacionInventario: faltaStock(item) ? item.observacionInventario.trim() : undefined,
           // puedeRegistrar ya garantiza que todas las líneas la tienen (ver
           // faltaAreaCarrito) — el cast es seguro acá.
-          moduloOrigenSlug: item.moduloOrigenSlug as "insumos" | "con_sentido",
+          moduloOrigenSlug: item.moduloOrigenSlug as "insumos" | "talleres" | "con_sentido",
         })),
         monto: total,
         metodoPago: pago.metodoPago,
@@ -457,7 +457,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                       onChange={(e) =>
                         actualizarItem(item.id, {
                           moduloOrigenSlug: e.target.value
-                            ? (e.target.value as "insumos" | "con_sentido")
+                            ? (e.target.value as "insumos" | "talleres" | "con_sentido")
                             : undefined,
                         })
                       }
@@ -471,6 +471,7 @@ export function NuevaVentaModal({ productos, onCerrar, onGuardar }: NuevaVentaMo
                         Elegir área...
                       </option>
                       <option value="insumos">📦 Insumos</option>
+                      <option value="talleres">🔧 Talleres</option>
                       <option value="con_sentido">🎨 Con Sentido</option>
                     </select>
                   </div>

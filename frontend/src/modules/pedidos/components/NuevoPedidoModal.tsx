@@ -26,7 +26,7 @@ interface LineaPedido {
   // línea escrita a mano arranca sin valor y hay que elegirla a mano.
   // Obligatoria en TODAS las líneas (ver itemPedidoSchema en el backend,
   // Task 10: moduloOrigenSlug ya no es opcional).
-  moduloOrigenSlug?: "insumos" | "con_sentido";
+  moduloOrigenSlug?: "insumos" | "talleres" | "con_sentido";
 }
 
 let siguienteKeyLinea = 1;
@@ -116,7 +116,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
           productoId: l.productoId,
           // puedeGuardar ya garantiza que todas las líneas la tienen (ver
           // faltaAreaLineas) — el cast es seguro acá.
-          moduloOrigenSlug: l.moduloOrigenSlug as "insumos" | "con_sentido",
+          moduloOrigenSlug: l.moduloOrigenSlug as "insumos" | "talleres" | "con_sentido",
         })),
         abonoInicial: conAbono
           ? {
@@ -221,7 +221,9 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                   value={linea.moduloOrigenSlug ?? ""}
                   onChange={(e) =>
                     actualizarLinea(linea.key, {
-                      moduloOrigenSlug: e.target.value ? (e.target.value as "insumos" | "con_sentido") : undefined,
+                      moduloOrigenSlug: e.target.value
+                        ? (e.target.value as "insumos" | "talleres" | "con_sentido")
+                        : undefined,
                     })
                   }
                   className={`w-32 rounded-md border bg-brand-vanilla px-2 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:bg-brand-green-900 dark:text-brand-vanilla ${
@@ -234,6 +236,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
                     Elegir área...
                   </option>
                   <option value="insumos">📦 Insumos</option>
+                  <option value="talleres">🔧 Talleres</option>
                   <option value="con_sentido">🎨 Con Sentido</option>
                 </select>
                 <span className="w-24 text-right text-sm text-brand-ink/70 dark:text-brand-vanilla/70">

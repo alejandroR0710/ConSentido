@@ -184,6 +184,29 @@ export async function getIngresosModulo(moduloId: number, desde: string, hasta: 
   return result.rows[0];
 }
 
+/**
+ * Egresos de un módulo puntual — mismo patrón que `getIngresosModulo` arriba,
+ * pero filtrando `tipo = 'egreso'`. A diferencia del "saldo neto" genérico de
+ * `getMovimientosPorModulo` (que además respalda con `categorias_gasto.modulo_id`
+ * cuando el egreso no trae área propia), esta consulta es más simple a
+ * propósito: solo cuenta egresos que YA traen `modulo_origen_id` seteado
+ * directamente (ver EgresoModal.tsx/moduloOrigen.ts, que ya permite elegir
+ * área en cualquier egreso) — usada hoy por `obtenerAnalyticsTalleres`.
+ */
+export async function getEgresosModulo(moduloId: number, desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(*) as cantidad,
+       COALESCE(SUM(mc.monto), 0) as total
+     FROM movimientos_caja mc
+     WHERE mc.modulo_origen_id = $1
+       AND mc.tipo = 'egreso'
+       AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $2 AND $3`,
+    [moduloId, desde, hasta],
+  );
+  return result.rows[0];
+}
+
 export async function getVentasPorCategoria(moduloId: number, desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT

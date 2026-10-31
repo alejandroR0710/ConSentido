@@ -21,7 +21,7 @@ const itemVentaSchema = z
     // declarar: nunca opcional acá. Usado para repartir el ingreso de Caja
     // entre áreas (ver con_sentido.service.ts::registrarVenta y
     // descomponerPorAreaYMetodo).
-    moduloOrigenSlug: z.enum(["insumos", "con_sentido"]),
+    moduloOrigenSlug: z.enum(["insumos", "talleres", "con_sentido"]),
   })
   // El stock es por unidades enteras (el del e-commerce también).
   .refine((item) => !item.productoId || Number.isInteger(item.cantidad), {
@@ -128,6 +128,6 @@ export type VincularMesaInput = z.infer<typeof vincularMesaSchema>;
 // Administración del área (módulo) por defecto de una categoría de producto
 // — ver con_sentido.repository.ts::listarCategoriasConArea/actualizarAreaCategoria.
 export const actualizarAreaCategoriaSchema = z.object({
-  areaSlug: z.enum(["insumos", "con_sentido"]),
+  areaSlug: z.enum(["insumos", "talleres", "con_sentido"]),
 });
 export type ActualizarAreaCategoriaInput = z.infer<typeof actualizarAreaCategoriaSchema>;

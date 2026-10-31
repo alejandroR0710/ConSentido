@@ -3,10 +3,11 @@ import { ApiError } from "../../../shared/api/client";
 import { conSentidoApi, type CategoriaConSentido } from "../api";
 
 // A diferencia de CategoriasPanel.tsx (caja, que ofrece los 6 módulos), aquí
-// solo existen dos áreas posibles para una categoría de producto de Con
+// solo existen tres áreas posibles para una categoría de producto de Con
 // Sentido — ver con_sentido.repository.ts::listarCategoriasConArea.
 const AREAS: { value: CategoriaConSentido["areaSlug"]; label: string }[] = [
   { value: "insumos", label: "Insumos" },
+  { value: "talleres", label: "Talleres" },
   { value: "con_sentido", label: "Con Sentido" },
 ];
 
@@ -60,7 +61,7 @@ export function CategoriasAreaPanel() {
       </div>
 
       <p className="mb-3 text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">
-        Marca qué categorías cuentan como Insumos y cuáles como Con Sentido (tienda) — define el área por defecto al
+        Marca qué categorías cuentan como Insumos, Talleres o Con Sentido (tienda) — define el área por defecto al
         vender o registrar un producto de esa categoría.
       </p>
 

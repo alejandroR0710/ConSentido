@@ -245,8 +245,8 @@ export async function registrarVenta(input: RegistrarVentaInput, usuarioId: stri
         {
           // `descomponerPorAreaYMetodo` trabaja sobre `string` genérico (lo
           // comparte con Caja General, que admite más áreas) — acá se sabe
-          // que solo puede ser una de las dos que mandó itemVentaSchema.
-          moduloOrigenSlug: grupo.moduloOrigenSlug as "insumos" | "con_sentido",
+          // que solo puede ser una de las tres que mandó itemVentaSchema.
+          moduloOrigenSlug: grupo.moduloOrigenSlug as "insumos" | "talleres" | "con_sentido",
           motivo,
           referenciaEntidad: "con_sentido_ventas",
           referenciaId: venta.id,

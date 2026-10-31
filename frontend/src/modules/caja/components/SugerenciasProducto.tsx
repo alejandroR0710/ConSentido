@@ -140,30 +140,34 @@ export function SugerenciasProducto({ productos, texto, onSeleccionar }: Sugeren
           document.body,
         )}
 
-      {imagenAmpliada && (
-        <div
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setImagenAmpliada(null)}
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-6"
-        >
-          <div className="relative">
-            <img
-              src={imagenAmpliada.url}
-              alt={imagenAmpliada.nombre}
-              className="max-h-[80vh] max-w-[80vw] rounded-lg object-contain shadow-2xl"
-            />
-            <button
-              type="button"
-              onClick={() => setImagenAmpliada(null)}
-              aria-label="Cerrar"
-              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg text-brand-ink shadow-lg hover:bg-brand-vanilla"
-            >
-              ✕
-            </button>
-            <p className="mt-2 text-center text-sm font-medium text-white">{imagenAmpliada.nombre}</p>
-          </div>
-        </div>
-      )}
+      {/* También en un portal: dentro de un modal quedaría atrapada en su capa y la lista (que
+          vive en document.body) se le vería por encima. */}
+      {imagenAmpliada &&
+        createPortal(
+          <div
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setImagenAmpliada(null)}
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-6"
+          >
+            <div className="relative">
+              <img
+                src={imagenAmpliada.url}
+                alt={imagenAmpliada.nombre}
+                className="max-h-[80vh] max-w-[80vw] rounded-lg object-contain shadow-2xl"
+              />
+              <button
+                type="button"
+                onClick={() => setImagenAmpliada(null)}
+                aria-label="Cerrar"
+                className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg text-brand-ink shadow-lg hover:bg-brand-vanilla"
+              >
+                ✕
+              </button>
+              <p className="mt-2 text-center text-sm font-medium text-white">{imagenAmpliada.nombre}</p>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

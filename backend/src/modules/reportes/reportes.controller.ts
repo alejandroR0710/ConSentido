@@ -14,3 +14,9 @@ export async function obtenerVentasController(req: Request, res: Response) {
   const ventas = await service.obtenerVentas(filtros);
   return ok(res, ventas);
 }
+
+export async function obtenerVentasPorTipoController(req: Request, res: Response) {
+  const { desde, hasta } = reportesRangoSchema.parse(req.query);
+  const ventasPorTipo = await service.obtenerVentasPorTipo(desde, hasta);
+  return ok(res, ventasPorTipo);
+}

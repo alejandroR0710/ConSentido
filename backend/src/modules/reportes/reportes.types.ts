@@ -128,3 +128,44 @@ export interface VentasReporte {
   porDia: VentasPorDia[];
   totales: VentasTotalesReporte;
 }
+
+/**
+ * Reporte "Ventas por tipo" — pivot diario de las 3 líneas de negocio
+ * (Insumos/Con Sentido/Talleres), mismo universo de filas que el Bloque D
+ * del Resumen (`ingresosPorTipo`) pero agrupado por día. Ver
+ * reportes.repository.ts::getVentasPorTipoDiario / reportes.service.ts::obtenerVentasPorTipo.
+ */
+
+/** Una fila por día: total de cada línea de negocio + `total` (suma de las 3). */
+export interface VentasPorTipoDiaFila {
+  fecha: string;
+  insumos: number;
+  con_sentido: number;
+  talleres: number;
+  total: number;
+}
+
+/** Totales del rango completo por línea de negocio + `total` general — debe
+ *  coincidir con `ingresosPorTipo`/`ingresos_total` del Bloque D del Resumen
+ *  para el mismo rango (misma fuente de filas, agrupada distinto). */
+export interface VentasPorTipoTotales {
+  insumos: number;
+  con_sentido: number;
+  talleres: number;
+  total: number;
+}
+
+/** % de participación de cada línea de negocio sobre `totales.total` del
+ *  rango (escala 0-100, igual convención que `porcentaje` en el resto del
+ *  backend — ej. `descuento_porcentaje`/`velas_producto_fragancias.porcentaje`). */
+export interface VentasPorTipoParticipacion {
+  insumos: number;
+  con_sentido: number;
+  talleres: number;
+}
+
+export interface VentasPorTipoReporte {
+  porDia: VentasPorTipoDiaFila[];
+  totales: VentasPorTipoTotales;
+  participacion: VentasPorTipoParticipacion;
+}

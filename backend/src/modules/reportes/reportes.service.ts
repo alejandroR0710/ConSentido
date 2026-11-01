@@ -5,6 +5,8 @@ import type {
   VentasFila,
   VentasFiltros,
   VentasPorDia,
+  VentasPorTipoDiaFila,
+  VentasPorTipoReporte,
   VentasReporte,
 } from "./reportes.types";
 
@@ -259,4 +261,63 @@ export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasRepor
     porDia,
     totales: { total_general, total_efectivo, total_bancos },
   };
+}
+
+/**
+ * Reporte "Ventas por tipo" — pivotea las filas planas de
+ * `getVentasPorTipoDiario` (fecha, slug, total) a una fila por día con
+ * columnas insumos/con_sentido/talleres/total, más los totales del rango
+ * completo por línea y el % de participación de cada una sobre ese total.
+ *
+ * Invariante (ver self-review del brief): la suma de `total` de todos los
+ * días == `totales.total` == el `ingresos_total` del Bloque D de
+ * `obtenerResumen` para el mismo rango — ambos leen exactamente las mismas
+ * filas de `movimientos_caja` (mismo filtro de 3 líneas de negocio, mismo
+ * `tipo='ingreso'`, mismo rango), solo que agrupadas distinto (por día aquí,
+ * sin agrupar allá).
+ *
+ * Días sin ninguna línea con ingreso no aparecen (no hay fila que agrupar) —
+ * mismo comportamiento que el resto del módulo, que no sintetiza días
+ * vacíos. Dentro de un día que SÍ aparece, una línea sin ingreso ese día
+ * queda en 0 explícito (no se omite la columna) porque el pivot inicializa
+ * las 3 líneas en 0 antes de llenar las que trae la query.
+ */
+export async function obtenerVentasPorTipo(desde: string, hasta: string): Promise<VentasPorTipoReporte> {
+  const filas = await repo.getVentasPorTipoDiario(desde, hasta);
+
+  const porDiaMap = new Map<string, Record<(typeof LINEAS_NEGOCIO)[number], number>>();
+  for (const fila of filas) {
+    const slug = fila.slug as (typeof LINEAS_NEGOCIO)[number];
+    const valoresDia = porDiaMap.get(fila.fecha) ?? { insumos: 0, con_sentido: 0, talleres: 0 };
+    valoresDia[slug] = Number(fila.total);
+    porDiaMap.set(fila.fecha, valoresDia);
+  }
+
+  const porDia: VentasPorTipoDiaFila[] = [...porDiaMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, valores]) => ({
+      fecha,
+      insumos: valores.insumos,
+      con_sentido: valores.con_sentido,
+      talleres: valores.talleres,
+      total: valores.insumos + valores.con_sentido + valores.talleres,
+    }));
+
+  const totales = porDia.reduce(
+    (acum, dia) => ({
+      insumos: acum.insumos + dia.insumos,
+      con_sentido: acum.con_sentido + dia.con_sentido,
+      talleres: acum.talleres + dia.talleres,
+      total: acum.total + dia.total,
+    }),
+    { insumos: 0, con_sentido: 0, talleres: 0, total: 0 },
+  );
+
+  const participacion = {
+    insumos: totales.total ? (totales.insumos / totales.total) * 100 : 0,
+    con_sentido: totales.total ? (totales.con_sentido / totales.total) * 100 : 0,
+    talleres: totales.total ? (totales.talleres / totales.total) * 100 : 0,
+  };
+
+  return { porDia, totales, participacion };
 }

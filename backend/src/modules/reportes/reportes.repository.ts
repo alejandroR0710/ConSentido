@@ -79,6 +79,28 @@ export async function getIngresosPorTipo(desde: string, hasta: string) {
 }
 
 /**
+ * Reporte "Ventas por tipo" — mismo idioma que `getIngresosPorTipo` (mismo
+ * filtro de 3 líneas de negocio, a propósito distinto de las 5 slugs de
+ * `MODULOS_ALCANCE_SUBQUERY` — ver nota de Bloque D arriba, aplica igual
+ * aquí), pero agrupado por día en vez de total — el servicio pivotea estas
+ * filas planas a filas por día con columnas insumos/con_sentido/talleres.
+ */
+export async function getVentasPorTipoDiario(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT DATE_FORMAT(mc.created_at, '%Y-%m-%d') AS fecha, m.slug, COALESCE(SUM(mc.monto), 0) AS total
+       FROM movimientos_caja mc
+       JOIN modulos m ON m.id = mc.modulo_origen_id
+      WHERE mc.tipo = 'ingreso'
+        AND m.slug IN ('insumos', 'con_sentido', 'talleres')
+        AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+      GROUP BY fecha, m.slug
+      ORDER BY fecha`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
+/**
  * Bloque E: matriz de ventas por mes — a propósito SIN parámetros de fecha.
  * Spec: este bloque siempre muestra el histórico completo (todas las filas
  * mes/línea de negocio que existan), independiente del selector de período

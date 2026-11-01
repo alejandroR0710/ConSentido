@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CierreCajaTab } from "../components/CierreCajaTab";
+import { ConciliacionTab } from "../components/ConciliacionTab";
 import { GastosTab } from "../components/GastosTab";
 import { PeriodoSelector, periodoInicial, type PeriodoValue } from "../components/PeriodoSelector";
 import { PrestamosTab } from "../components/PrestamosTab";
@@ -29,27 +30,13 @@ const PESTANAS: { id: Pestana; label: string }[] = [
   { id: "conciliacion", label: "Conciliación" },
 ];
 
-// Placeholder temporal de la pestaña restante hasta que Task 17 agregue el
-// componente real (una línea por pestaña se reemplaza con el import real,
-// sin tocar el resto de este archivo — "resumen"/"ventas"/"ventas-por-tipo"/
-// "gastos"/"cierre-caja"/"prestamos" ya se reemplazaron así en Tasks 11-16,
-// ver `ResumenTab`/`VentasTab`/`VentasPorTipoTab`/`GastosTab`/
-// `CierreCajaTab`/`PrestamosTab`).
-function PlaceholderReporte({ titulo }: { titulo: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-brand-vanilla-dark p-8 text-center dark:border-brand-green-700">
-      <p className="text-brand-ink/60 dark:text-brand-vanilla/60">{titulo}: Próximamente</p>
-    </div>
-  );
-}
-
 /**
  * Contenedor de pestañas del módulo Reportes (Task 10 — scaffolding puro).
  * Un `PeriodoSelector` compartido arriba resuelve `desde`/`hasta` una sola
  * vez; cada pestaña (Tasks 11-17) lo toma y hace su propia llamada a
  * `reportesApi` con esos valores — este contenedor no llama ninguna API.
- * "Resumen" (Task 11), "Ventas" (Task 12), "Ventas por tipo" (Task 13) y
- * "Gastos" (Task 14) ya siguen ese patrón.
+ * "Resumen" (Task 11), "Ventas" (Task 12), "Ventas por tipo" (Task 13),
+ * "Gastos" (Task 14) y "Conciliación" (Task 17) ya siguen ese patrón.
  *
  * "Cierre de caja" (Task 15) y "Préstamos" (Task 16) son la excepción: ninguna
  * de las dos usa `desde`/`hasta` (la primera filtra por `mes`, la segunda por
@@ -100,7 +87,9 @@ export function ReportesPage() {
         {pestanaActual === "gastos" && <GastosTab desde={periodo.desde} hasta={periodo.hasta} />}
         {pestanaActual === "cierre-caja" && <CierreCajaTab />}
         {pestanaActual === "prestamos" && <PrestamosTab />}
-        {pestanaActual === "conciliacion" && <PlaceholderReporte titulo="Conciliación" />}
+        {pestanaActual === "conciliacion" && (
+          <ConciliacionTab desde={periodo.desde} hasta={periodo.hasta} />
+        )}
       </div>
     </div>
   );

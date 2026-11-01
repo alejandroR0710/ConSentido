@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PeriodoSelector, periodoInicial, type PeriodoValue } from "../components/PeriodoSelector";
 import { ResumenTab } from "../components/ResumenTab";
+import { VentasPorTipoTab } from "../components/VentasPorTipoTab";
 import { VentasTab } from "../components/VentasTab";
 
 type Pestana = "resumen" | "ventas" | "ventas-por-tipo" | "gastos" | "cierre-caja" | "prestamos" | "conciliacion";
@@ -68,7 +69,9 @@ export function ReportesPage() {
       <div className="mt-2">
         {pestanaActual === "resumen" && <ResumenTab desde={periodo.desde} hasta={periodo.hasta} />}
         {pestanaActual === "ventas" && <VentasTab desde={periodo.desde} hasta={periodo.hasta} />}
-        {pestanaActual === "ventas-por-tipo" && <PlaceholderReporte titulo="Ventas por tipo" />}
+        {pestanaActual === "ventas-por-tipo" && (
+          <VentasPorTipoTab desde={periodo.desde} hasta={periodo.hasta} />
+        )}
         {pestanaActual === "gastos" && <PlaceholderReporte titulo="Gastos" />}
         {pestanaActual === "cierre-caja" && <PlaceholderReporte titulo="Cierre de caja" />}
         {pestanaActual === "prestamos" && <PlaceholderReporte titulo="Préstamos" />}

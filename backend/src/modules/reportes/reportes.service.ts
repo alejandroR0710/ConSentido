@@ -111,23 +111,25 @@ export async function obtenerResumen(desde: string, hasta: string): Promise<Resu
  * sistema"), así que no hay columna real contra la que filtrar. Se deja en
  * el esquema/tipo por si una fuente futura (Task 9 u otra) sí lo necesita.
  *
- * `total_efectivo`/`total_bancos` suman solo las filas con
- * `metodo_pago` exactamente `'efectivo'`/`'banco'` — una venta de
- * mostrador con `metodo_pago = 'mixto'` (pago repartido entre los dos) no
- * cae en ninguno de los dos, así que `total_efectivo + total_bancos` puede
- * quedar por debajo de `total_general` cuando hay ventas mixtas en el
- * rango. El brief solo fija como invariante que `total_general` cuadre
- * contra `ingresos_total` de Resumen (eso sí se cumple siempre, sin
- * importar el método) — partir el monto de una venta mixta entre
- * efectivo/banco por ítem requeriría prorratear con `monto_efectivo`/
- * `monto_banco` de la venta, que el Paso 1 del brief no pide traer.
+ * `total_efectivo`/`total_bancos` NO se calculan sumando `filas.subtotal`
+ * agrupadas por el `metodo_pago` de cada fila (eso era un bug real, ver
+ * finding "Important" del Task 3 report): `con_sentido_ventas.metodo_pago`
+ * admite `'mixto'`, así que una venta mixta en el rango quedaba fuera de
+ * ambos conteos aunque sí sumaba a `total_general`. En cambio se leen de
+ * `repo.getVentasTotalesPorMetodoPago`, que agrupa directo sobre
+ * `movimientos_caja` (tabla donde `metodo_pago` NUNCA es `'mixto'` —
+ * `con_sentido.service.ts` ya reparte cada venta mixta en movimientos
+ * `efectivo`/`banco` separados al escribir en caja) — ver el comentario de
+ * esa función en reportes.repository.ts para el detalle del invariante.
+ * `total_general` sigue viniendo de `filas` (no cambia: ya era correcto).
  */
 export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasReporte> {
   const { desde, hasta, metodo, cliente, producto } = filtros;
 
-  const [detalle, sinDetalle] = await Promise.all([
+  const [detalle, sinDetalle, totalesPorMetodo] = await Promise.all([
     repo.getVentasDetalle(desde, hasta, { metodo, cliente, producto }),
     repo.getIngresosSinDetalle(desde, hasta, { metodo }),
+    repo.getVentasTotalesPorMetodoPago(desde, hasta, { metodo }),
   ]);
 
   const filasDetalle: VentasFila[] = detalle.map((d) => ({
@@ -167,10 +169,12 @@ export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasRepor
     .map(([fecha, total]) => ({ fecha, total }));
 
   const total_general = filas.reduce((acc, f) => acc + f.subtotal, 0);
-  const total_efectivo = filas
-    .filter((f) => f.metodo_pago === "efectivo")
-    .reduce((acc, f) => acc + f.subtotal, 0);
-  const total_bancos = filas.filter((f) => f.metodo_pago === "banco").reduce((acc, f) => acc + f.subtotal, 0);
+  const total_efectivo = Number(
+    totalesPorMetodo.find((t) => t.metodo_pago === "efectivo")?.total ?? 0,
+  );
+  const total_bancos = Number(
+    totalesPorMetodo.find((t) => t.metodo_pago === "banco")?.total ?? 0,
+  );
 
   return {
     filas,

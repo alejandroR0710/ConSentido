@@ -3,6 +3,7 @@ import { ok } from "../../shared/utils/response";
 import {
   reportesCierreCajaSchema,
   reportesGastosFiltrosSchema,
+  reportesPrestamosFiltrosSchema,
   reportesRangoSchema,
   reportesVentasFiltrosSchema,
 } from "./reportes.schema";
@@ -36,4 +37,10 @@ export async function obtenerCierreCajaController(req: Request, res: Response) {
   const { mes } = reportesCierreCajaSchema.parse(req.query);
   const cierreCaja = await service.obtenerCierreCaja(mes);
   return ok(res, cierreCaja);
+}
+
+export async function obtenerPrestamosController(req: Request, res: Response) {
+  const { destinatarioUsuarioId } = reportesPrestamosFiltrosSchema.parse(req.query);
+  const prestamos = await service.obtenerPrestamos(destinatarioUsuarioId);
+  return ok(res, prestamos);
 }

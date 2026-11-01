@@ -5,6 +5,7 @@ import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   obtenerCierreCajaController,
   obtenerGastosController,
+  obtenerPrestamosController,
   obtenerResumenController,
   obtenerVentasController,
   obtenerVentasPorTipoController,
@@ -41,4 +42,10 @@ reportesRouter.get(
   "/cierre-caja",
   requirePermission("general.dashboard.analytics.ver"),
   asyncHandler(obtenerCierreCajaController),
+);
+
+reportesRouter.get(
+  "/prestamos",
+  requirePermission("general.dashboard.analytics.ver"),
+  asyncHandler(obtenerPrestamosController),
 );

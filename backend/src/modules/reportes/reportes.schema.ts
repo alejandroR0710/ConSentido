@@ -49,3 +49,14 @@ export const reportesCierreCajaSchema = z.object({
   mes: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Formato de mes inválido (YYYY-MM)"),
 });
 export type ReportesCierreCajaInput = z.infer<typeof reportesCierreCajaSchema>;
+
+// Reporte "Préstamos" — esquema propio (NO `reportesRangoSchema`): sin
+// filtro de fecha obligatorio (Spec: selector de destinatario, no de
+// período). `destinatarioUsuarioId` es opcional y sin validar como UUID a
+// propósito (mismo criterio que `proveedorId` en `reportesGastosFiltrosSchema`
+// arriba) — un id con formato inválido simplemente no matchea ninguna fila
+// en `getVales`, no hace falta un 400 propio para eso.
+export const reportesPrestamosFiltrosSchema = z.object({
+  destinatarioUsuarioId: z.string().optional(),
+});
+export type ReportesPrestamosFiltrosInput = z.infer<typeof reportesPrestamosFiltrosSchema>;

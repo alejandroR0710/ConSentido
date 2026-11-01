@@ -6,6 +6,8 @@ import type {
   GastoFila,
   GastosFiltros,
   GastosReporte,
+  PrestamoFila,
+  PrestamosReporte,
   ResumenReporte,
   ResumenVentasPorMesFila,
   VentasFila,
@@ -525,4 +527,67 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
   };
 
   return { mes, saldo_inicial, dias, total };
+}
+
+/**
+ * Reporte "Préstamos" — único reporte del módulo que lee `vales` en vez de
+ * `movimientos_caja`; no hay concepto de módulo/alcance de negocio acá (un
+ * vale no está etiquetado por área), así que no se reutiliza ningún query
+ * builder del resto del módulo.
+ *
+ * Por cada vale (ya filtrado sin anulados por `getVales`), `monto`/`estado`/
+ * `fecha_resolucion` se derivan según `tipo` — dos obligaciones distintas,
+ * con sus propias columnas de "cuánto"/"cuándo se resolvió":
+ * - `tipo='deuda'`: `monto = monto_adeudado`; se resuelve cuando se cobra
+ *   (`cobrado_en`) → `estado: 'Cobrado'` / `'Pendiente de cobro'`.
+ * - `tipo='pago'`: `monto = monto_efectivo + monto_banco`; se resuelve
+ *   cuando se repone al dueño (`repuesto_en`) → `estado: 'Repuesto'` /
+ *   `'Pendiente de reposición'`.
+ * Las etiquetas NUNCA se comparten entre los dos tipos (a propósito, para no
+ * mezclar "cobrar una deuda" con "reponerle a un dueño") — ver brief, Paso 2.
+ *
+ * `total_pendiente`/`total_resuelto` suman `monto` según si la fila tiene
+ * `fecha_resolucion` o no, sobre el mismo array `filas` que se devuelve (no
+ * una query de agregación aparte) — mismo patrón de "totales derivados del
+ * array ya construido" que `obtenerVentas`/`obtenerGastos`.
+ */
+export async function obtenerPrestamos(destinatarioUsuarioId?: string): Promise<PrestamosReporte> {
+  const valesRows = await repo.getVales(destinatarioUsuarioId);
+
+  let total_pendiente = 0;
+  let total_resuelto = 0;
+
+  const filas: PrestamoFila[] = valesRows.map((v) => {
+    let monto: number;
+    let estado: string;
+    let fecha_resolucion: string | null;
+
+    if (v.tipo === "deuda") {
+      monto = Number(v.monto_adeudado);
+      estado = v.cobrado_en ? "Cobrado" : "Pendiente de cobro";
+      fecha_resolucion = v.cobrado_en;
+    } else {
+      monto = Number(v.monto_efectivo) + Number(v.monto_banco);
+      estado = v.repuesto_en ? "Repuesto" : "Pendiente de reposición";
+      fecha_resolucion = v.repuesto_en;
+    }
+
+    if (fecha_resolucion) total_resuelto += monto;
+    else total_pendiente += monto;
+
+    return {
+      id: String(v.id),
+      numero: v.numero,
+      tipo: v.tipo,
+      pagado_a: v.pagado_a,
+      destinatario_usuario_id: v.destinatario_usuario_id,
+      concepto: v.concepto,
+      monto,
+      estado,
+      fecha_resolucion,
+      created_at: v.created_at,
+    };
+  });
+
+  return { filas, totales: { total_pendiente, total_resuelto } };
 }

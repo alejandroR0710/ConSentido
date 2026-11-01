@@ -423,3 +423,36 @@ export async function getCajerosPorDia(mes: string) {
   );
   return result.rows;
 }
+
+/**
+ * Reporte "Préstamos" — independiente de todo lo demás del módulo: lee
+ * `vales`, no `movimientos_caja`, así que no hay concepto de módulo/alcance
+ * de negocio acá (un vale no está etiquetado por área). `anulado_en IS NOT
+ * NULL` excluye por completo un vale anulado (nunca debe contarse ni como
+ * pendiente ni como resuelto) — mismo criterio que usa `listVales` de
+ * vales.repository.ts para su filtro `estado='anulado'`, solo que acá se
+ * excluye directo en vez de ofrecerse como opción.
+ *
+ * `destinatarioUsuarioId` es el único filtro (Spec: selector de
+ * destinatario, no de período — por eso no hay `desde`/`hasta` aquí).
+ */
+export async function getVales(destinatarioUsuarioId?: string) {
+  const params: unknown[] = [];
+  let condicion = "";
+  if (destinatarioUsuarioId) {
+    params.push(destinatarioUsuarioId);
+    condicion = ` AND destinatario_usuario_id = $${params.length}`;
+  }
+
+  const result = await pool.query(
+    `SELECT id, numero, tipo, pagado_a, destinatario_usuario_id, concepto,
+            monto_efectivo, monto_banco, monto_adeudado, cobrado_en,
+            monto_cobrado_efectivo, monto_cobrado_banco, repuesto_en, created_at
+       FROM vales
+      WHERE anulado_en IS NULL
+        ${condicion}
+      ORDER BY created_at DESC`,
+    params,
+  );
+  return result.rows;
+}

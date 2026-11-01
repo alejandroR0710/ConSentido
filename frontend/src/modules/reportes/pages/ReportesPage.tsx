@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { GastosTab } from "../components/GastosTab";
 import { PeriodoSelector, periodoInicial, type PeriodoValue } from "../components/PeriodoSelector";
 import { ResumenTab } from "../components/ResumenTab";
 import { VentasPorTipoTab } from "../components/VentasPorTipoTab";
@@ -72,7 +73,7 @@ export function ReportesPage() {
         {pestanaActual === "ventas-por-tipo" && (
           <VentasPorTipoTab desde={periodo.desde} hasta={periodo.hasta} />
         )}
-        {pestanaActual === "gastos" && <PlaceholderReporte titulo="Gastos" />}
+        {pestanaActual === "gastos" && <GastosTab desde={periodo.desde} hasta={periodo.hasta} />}
         {pestanaActual === "cierre-caja" && <PlaceholderReporte titulo="Cierre de caja" />}
         {pestanaActual === "prestamos" && <PlaceholderReporte titulo="Préstamos" />}
         {pestanaActual === "conciliacion" && <PlaceholderReporte titulo="Conciliación" />}

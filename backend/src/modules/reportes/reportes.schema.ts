@@ -24,3 +24,15 @@ export const reportesVentasFiltrosSchema = z.intersection(
   }),
 );
 export type ReportesVentasFiltrosInput = z.infer<typeof reportesVentasFiltrosSchema>;
+
+// Mismo patrón que `reportesVentasFiltrosSchema` arriba (z.intersection en
+// vez de `.extend()`, que no compila sobre un ZodEffects ya refinado).
+export const reportesGastosFiltrosSchema = z.intersection(
+  reportesRangoSchema,
+  z.object({
+    categoriaId: z.coerce.number().int().positive().optional(),
+    proveedorId: z.string().optional(),
+    metodo: z.enum(["efectivo", "banco"]).optional(),
+  }),
+);
+export type ReportesGastosFiltrosInput = z.infer<typeof reportesGastosFiltrosSchema>;

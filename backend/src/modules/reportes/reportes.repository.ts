@@ -226,3 +226,85 @@ export async function getIngresosSinDetalle(
   );
   return result.rows;
 }
+
+/**
+ * Reporte "Gastos", Paso 1 — detalle de egresos del alcance de negocio (las
+ * 5 slugs de `MODULOS_ALCANCE_SUBQUERY`, NO las 3 líneas de `getIngresosPorTipo`
+ * — Gastos es del negocio completo, no solo de las líneas de producto, igual
+ * que Bloques A-C del Resumen).
+ *
+ * `cg` (`categorias_gasto`) usa `JOIN` (no `LEFT JOIN`): el `CHECK (tipo =
+ * 'ingreso' OR categoria_gasto_id IS NOT NULL)` de `movimientos_caja`
+ * (schema.sql) garantiza que todo egreso SIEMPRE tiene `categoria_gasto_id`
+ * — a diferencia de `proveedor_id` (nullable, de ahí el `LEFT JOIN p`: un
+ * egreso sin proveedor asociado, ej. un gasto de nómina, no debe desaparecer
+ * de la tabla, solo mostrar `proveedor: null`).
+ *
+ * Explícito por diseño (ver Spec, Brecha #3): la respuesta NO trae
+ * `cantidad`/`costo_unitario` — un egreso es un monto total con `motivo` en
+ * texto libre, no existe un desglose por línea en el modelo actual. No se
+ * inventa ese dato ni se devuelve como `null` — simplemente no está en el
+ * `SELECT`.
+ */
+export async function getGastosDetalle(
+  desde: string,
+  hasta: string,
+  filtros: { categoriaId?: number; proveedorId?: string; metodo?: "efectivo" | "banco" } = {},
+) {
+  const params: unknown[] = [desde, hasta];
+  let condiciones = "";
+  if (filtros.categoriaId) {
+    params.push(filtros.categoriaId);
+    condiciones += ` AND cg.id = $${params.length}`;
+  }
+  if (filtros.proveedorId) {
+    params.push(filtros.proveedorId);
+    condiciones += ` AND p.id = $${params.length}`;
+  }
+  if (filtros.metodo) {
+    params.push(filtros.metodo);
+    condiciones += ` AND mc.metodo_pago = $${params.length}`;
+  }
+
+  const result = await pool.query(
+    `SELECT mc.id, mc.created_at, DATE_FORMAT(mc.created_at, '%Y-%m-%d') AS fecha,
+            p.nombre AS proveedor, cg.nombre AS categoria,
+            mc.motivo, mc.monto, mc.metodo_pago
+       FROM movimientos_caja mc
+       LEFT JOIN proveedores p ON p.id = mc.proveedor_id
+       JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+      WHERE mc.tipo = 'egreso'
+        AND mc.modulo_origen_id IN ${MODULOS_ALCANCE_SUBQUERY}
+        AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+        ${condiciones}
+      ORDER BY mc.created_at ASC`,
+    params,
+  );
+  return result.rows;
+}
+
+/**
+ * Reporte "Gastos", Paso 2 — ranking top N proveedores por gasto total del
+ * rango (mismo filtro base de alcance/tipo/rango que `getGastosDetalle`,
+ * sin los 3 filtros opcionales — el ranking es sobre el universo completo,
+ * no sobre la vista filtrada de la tabla de detalle).
+ *
+ * `JOIN proveedores` (no `LEFT JOIN`) excluye por construcción cualquier
+ * egreso sin proveedor asociado — "solo proveedores no nulos" del brief,
+ * sin necesitar un `WHERE p.id IS NOT NULL` aparte.
+ */
+export async function getTopProveedores(desde: string, hasta: string, limit = 10) {
+  const result = await pool.query(
+    `SELECT p.id, p.nombre, COALESCE(SUM(mc.monto), 0) AS total
+       FROM movimientos_caja mc
+       JOIN proveedores p ON p.id = mc.proveedor_id
+      WHERE mc.tipo = 'egreso'
+        AND mc.modulo_origen_id IN ${MODULOS_ALCANCE_SUBQUERY}
+        AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+      GROUP BY p.id, p.nombre
+      ORDER BY total DESC
+      LIMIT $3`,
+    [desde, hasta, limit],
+  );
+  return result.rows;
+}

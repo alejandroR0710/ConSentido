@@ -3,6 +3,7 @@ import { authMiddleware } from "../../shared/middlewares/auth.middleware";
 import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
+  obtenerGastosController,
   obtenerResumenController,
   obtenerVentasController,
   obtenerVentasPorTipoController,
@@ -27,4 +28,10 @@ reportesRouter.get(
   "/ventas-por-tipo",
   requirePermission("general.dashboard.analytics.ver"),
   asyncHandler(obtenerVentasPorTipoController),
+);
+
+reportesRouter.get(
+  "/gastos",
+  requirePermission("general.dashboard.analytics.ver"),
+  asyncHandler(obtenerGastosController),
 );

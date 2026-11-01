@@ -1,5 +1,8 @@
 import * as repo from "./reportes.repository";
 import type {
+  GastoFila,
+  GastosFiltros,
+  GastosReporte,
   ResumenReporte,
   ResumenVentasPorMesFila,
   VentasFila,
@@ -320,4 +323,58 @@ export async function obtenerVentasPorTipo(desde: string, hasta: string): Promis
   };
 
   return { porDia, totales, participacion };
+}
+
+/**
+ * Reporte "Gastos" — compone 3 queries independientes vía `Promise.all`:
+ * detalle de egresos (filtrable), ranking top-10 de proveedores (siempre
+ * sobre el universo completo del rango, sin los filtros opcionales — ver
+ * nota del repository) y gastos por categoría (`getGastosPorCategoria`,
+ * reusada literalmente de Task 2 para el gráfico de este reporte, no
+ * duplicada).
+ *
+ * `total_efectivo`/`total_bancos` — a diferencia de `obtenerVentas`
+ * (`con_sentido_ventas.metodo_pago` sí admite `'mixto'`, de ahí el
+ * prorrateo por fila), acá NO hace falta: `movimientos_caja.metodo_pago`
+ * tiene `CHECK (metodo_pago IN ('efectivo', 'banco'))` (schema.sql) — nunca
+ * `'mixto'`, nunca "préstamo" (esa forma de pago no existe en el sistema,
+ * Spec/Brecha #2). Sumar por igualdad literal sobre `filas` es exacto y, por
+ * construcción, `total_efectivo + total_bancos === total_general` siempre
+ * (toda fila cae en exactamente uno de los dos baldes).
+ */
+export async function obtenerGastos(filtros: GastosFiltros): Promise<GastosReporte> {
+  const { desde, hasta, categoriaId, proveedorId, metodo } = filtros;
+
+  const [detalle, topProveedores, gastosPorCategoria] = await Promise.all([
+    repo.getGastosDetalle(desde, hasta, { categoriaId, proveedorId, metodo }),
+    repo.getTopProveedores(desde, hasta),
+    repo.getGastosPorCategoria(desde, hasta),
+  ]);
+
+  let total_efectivo = 0;
+  let total_bancos = 0;
+
+  const filas: GastoFila[] = detalle.map((d) => {
+    const monto = Number(d.monto);
+    if (d.metodo_pago === "efectivo") total_efectivo += monto;
+    else if (d.metodo_pago === "banco") total_bancos += monto;
+    return {
+      id: String(d.id),
+      fecha: d.fecha,
+      proveedor: d.proveedor,
+      categoria: d.categoria,
+      motivo: d.motivo,
+      monto,
+      metodo_pago: d.metodo_pago,
+    };
+  });
+
+  const total_general = filas.reduce((acc, f) => acc + f.monto, 0);
+
+  return {
+    filas,
+    topProveedores: topProveedores.map((p) => ({ id: p.id, nombre: p.nombre, total: Number(p.total) })),
+    gastosPorCategoria: gastosPorCategoria.map((g) => ({ id: g.id, nombre: g.nombre, total: Number(g.total) })),
+    totales: { total_general, total_efectivo, total_bancos },
+  };
 }

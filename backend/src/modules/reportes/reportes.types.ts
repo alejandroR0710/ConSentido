@@ -169,3 +169,60 @@ export interface VentasPorTipoReporte {
   totales: VentasPorTipoTotales;
   participacion: VentasPorTipoParticipacion;
 }
+
+/**
+ * Reporte "Gastos" — detalle de egresos del alcance de negocio completo (las
+ * 5 slugs, no solo las 3 líneas de producto), ranking de proveedores (top
+ * 10) y gastos por categoría (reusa `ResumenGastoCategoria`/
+ * `getGastosPorCategoria` de Task 2 para el gráfico de este reporte). Ver
+ * reportes.repository.ts/reportes.service.ts.
+ */
+
+/** Filtros opcionales del reporte de Gastos, además de `desde`/`hasta`. */
+export interface GastosFiltros {
+  desde: string;
+  hasta: string;
+  categoriaId?: number;
+  proveedorId?: string;
+  metodo?: "efectivo" | "banco";
+}
+
+/** Fila de detalle — un egreso de `movimientos_caja`. Nunca trae `cantidad`/
+ *  `costo_unitario`: ese desglose por línea no existe en el modelo actual
+ *  (Spec, Brecha #3) — un egreso es un monto total con `motivo` en texto
+ *  libre, no una lista de ítems. */
+export interface GastoFila {
+  id: string;
+  fecha: string;
+  /** `null` si el egreso no tiene proveedor asociado (ej. nómina). */
+  proveedor: string | null;
+  categoria: string;
+  motivo: string | null;
+  monto: number;
+  /** `movimientos_caja.metodo_pago` solo admite 'efectivo'/'banco' (CHECK
+   *  constraint) — "préstamo" no es un valor real en este sistema (Spec,
+   *  Brecha #2), nunca aparece aquí. */
+  metodo_pago: "efectivo" | "banco";
+}
+
+/** Fila del ranking de proveedores (top 10 por gasto total del rango). */
+export interface GastoProveedorTotal {
+  id: string;
+  nombre: string;
+  total: number;
+}
+
+export interface GastosTotalesReporte {
+  total_general: number;
+  total_efectivo: number;
+  total_bancos: number;
+}
+
+export interface GastosReporte {
+  filas: GastoFila[];
+  topProveedores: GastoProveedorTotal[];
+  /** Mismo shape que `ResumenGastoCategoria` del Resumen (Bloque C) — reusa
+   *  `getGastosPorCategoria`, no duplica la query. */
+  gastosPorCategoria: ResumenGastoCategoria[];
+  totales: GastosTotalesReporte;
+}

@@ -15,6 +15,7 @@ import { usuariosRouter } from "./modules/general/usuarios/usuarios.routes";
 import { migaoRouter } from "./modules/migao/migao.routes";
 import { pedidosRouter } from "./modules/pedidos/pedidos.routes";
 import { recetarioRouter } from "./modules/recetario/recetario.routes";
+import { reportesRouter } from "./modules/reportes/reportes.routes";
 import { valesRouter } from "./modules/vales/vales.routes";
 import { velasRouter } from "./modules/velas/velas.routes";
 import { errorHandler, notFoundHandler } from "./shared/middlewares/error-handler";
@@ -92,6 +93,7 @@ export function createApp() {
   app.use("/api/v1/velas", velasRouter);
   app.use("/api/v1/concreto", concretoRouter);
   app.use("/api/v1/analytics", analyticsRouter);
+  app.use("/api/v1/reportes", reportesRouter);
   app.use("/api/v1/notificaciones", notificacionesRouter);
   app.use("/api/v1/usuarios", usuariosRouter);
   app.use("/api/v1/pedidos", pedidosRouter);

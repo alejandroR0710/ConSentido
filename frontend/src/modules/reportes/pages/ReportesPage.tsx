@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PeriodoSelector, periodoInicial, type PeriodoValue } from "../components/PeriodoSelector";
 import { ResumenTab } from "../components/ResumenTab";
+import { VentasTab } from "../components/VentasTab";
 
 type Pestana = "resumen" | "ventas" | "ventas-por-tipo" | "gastos" | "cierre-caja" | "prestamos" | "conciliacion";
 
@@ -14,10 +15,10 @@ const PESTANAS: { id: Pestana; label: string }[] = [
   { id: "conciliacion", label: "Conciliación" },
 ];
 
-// Placeholder temporal de cada pestaña restante hasta que Tasks 12-17
+// Placeholder temporal de cada pestaña restante hasta que Tasks 13-17
 // agreguen el componente real (una línea por pestaña se reemplaza con el
-// import real, sin tocar el resto de este archivo — "resumen" ya se
-// reemplazó así en Task 11, ver `ResumenTab`).
+// import real, sin tocar el resto de este archivo — "resumen"/"ventas" ya se
+// reemplazaron así en Tasks 11/12, ver `ResumenTab`/`VentasTab`).
 function PlaceholderReporte({ titulo }: { titulo: string }) {
   return (
     <div className="rounded-lg border border-dashed border-brand-vanilla-dark p-8 text-center dark:border-brand-green-700">
@@ -31,7 +32,7 @@ function PlaceholderReporte({ titulo }: { titulo: string }) {
  * Un `PeriodoSelector` compartido arriba resuelve `desde`/`hasta` una sola
  * vez; cada pestaña (Tasks 11-17) lo toma y hace su propia llamada a
  * `reportesApi` con esos valores — este contenedor no llama ninguna API.
- * "Resumen" (Task 11) es la primera en seguir ese patrón.
+ * "Resumen" (Task 11) y "Ventas" (Task 12) ya siguen ese patrón.
  */
 export function ReportesPage() {
   const [pestanaActual, setPestanaActual] = useState<Pestana>("resumen");
@@ -66,7 +67,7 @@ export function ReportesPage() {
 
       <div className="mt-2">
         {pestanaActual === "resumen" && <ResumenTab desde={periodo.desde} hasta={periodo.hasta} />}
-        {pestanaActual === "ventas" && <PlaceholderReporte titulo="Ventas" />}
+        {pestanaActual === "ventas" && <VentasTab desde={periodo.desde} hasta={periodo.hasta} />}
         {pestanaActual === "ventas-por-tipo" && <PlaceholderReporte titulo="Ventas por tipo" />}
         {pestanaActual === "gastos" && <PlaceholderReporte titulo="Gastos" />}
         {pestanaActual === "cierre-caja" && <PlaceholderReporte titulo="Cierre de caja" />}

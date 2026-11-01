@@ -40,6 +40,12 @@ export type ReportesGastosFiltrosInput = z.infer<typeof reportesGastosFiltrosSch
 // Esquema propio (NO `reportesRangoSchema`): este reporte recibe un único
 // `mes` (YYYY-MM), no un rango `desde`/`hasta` — ver reportes.service.ts::obtenerCierreCaja.
 export const reportesCierreCajaSchema = z.object({
-  mes: z.string().regex(/^\d{4}-\d{2}$/, "Formato de mes inválido (YYYY-MM)"),
+  // `(0[1-9]|1[0-2])` en vez del `\d{2}` original del brief (fix de review,
+  // Finding 2): el regex anterior aceptaba `mes=2026-13` — no hay mes 13,
+  // así que la comparación de strings `DATE_FORMAT(abierto_en,'%Y-%m') <= $1`
+  // de `getPrimerTurnoDelRango` colaba un falso positivo lexicográfico
+  // (`'2026-10' <= '2026-13'`), devolviendo un `saldo_inicial` fabricado para
+  // un mes que no existe.
+  mes: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Formato de mes inválido (YYYY-MM)"),
 });
 export type ReportesCierreCajaInput = z.infer<typeof reportesCierreCajaSchema>;

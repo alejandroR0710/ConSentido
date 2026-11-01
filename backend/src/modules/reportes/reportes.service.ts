@@ -2,6 +2,7 @@ import * as repo from "./reportes.repository";
 import type {
   CierreCajaFila,
   CierreCajaReporte,
+  CierreCajaSaldoInicial,
   GastoFila,
   GastosFiltros,
   GastosReporte,
@@ -415,6 +416,19 @@ function diasDelMes(mes: string): string[] {
  * mes sin turno previo sigue devolviendo `saldo_inicial: null` (dato no
  * disponible) aunque el saldo corrido interno arranque en 0 para poder
  * calcularse igual.
+ *
+ * Fix de review (Finding 1) — `saldo_inicial` YA NO es solo los montos de
+ * apertura crudos del turno semilla: ahora les suma el flujo (venta −
+ * gastos, por método, `getFlujoEntreFechas`) de TODOS los `movimientos_caja`
+ * entre `turno.abierto_en` (inclusive) y el día 1 del mes solicitado
+ * (exclusive). El algoritmo original del brief ignoraba ese arrastre — para
+ * cualquier mes POSTERIOR al mes de apertura del turno, perdía todo lo que
+ * pasó en la caja entre esa apertura y el inicio del mes pedido (ej. pedir
+ * `mes=2026-11` con el turno abierto el 2026-10-20 mostraba
+ * `saldo_inicial: {0, 0}` en vez del saldo real de fin de octubre). Para el
+ * propio mes de apertura del turno la ventana es vacía (nada pasa en la caja
+ * antes de que el turno la abra), así que este fix no cambia nada para una
+ * consulta sobre ESE mes — solo corrige los meses posteriores.
  */
 export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte> {
   const [movimientos, primerTurno, cajerosPorDiaFilas] = await Promise.all([
@@ -444,9 +458,20 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
     cajerosPorFecha.set(c.fecha, nombres);
   }
 
-  const saldo_inicial = primerTurno
-    ? { efectivo: Number(primerTurno.monto_inicial_efectivo), banco: Number(primerTurno.monto_inicial_banco) }
-    : null;
+  let saldo_inicial: CierreCajaSaldoInicial | null = null;
+  if (primerTurno) {
+    const flujo = await repo.getFlujoEntreFechas(primerTurno.abierto_en, `${mes}-01`);
+    saldo_inicial = {
+      efectivo:
+        Number(primerTurno.monto_inicial_efectivo) +
+        Number(flujo.venta_efectivo ?? 0) -
+        Number(flujo.gastos_efectivo ?? 0),
+      banco:
+        Number(primerTurno.monto_inicial_banco) +
+        Number(flujo.venta_banco ?? 0) -
+        Number(flujo.gastos_banco ?? 0),
+    };
+  }
 
   let efectivoCorrido = saldo_inicial?.efectivo ?? 0;
   let bancoCorrido = saldo_inicial?.banco ?? 0;

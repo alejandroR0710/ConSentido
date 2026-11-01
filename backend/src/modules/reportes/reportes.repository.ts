@@ -345,6 +345,14 @@ export async function getMovimientosDiarios(mes: string) {
  * ordena igual que una fecha real). Si no existe ninguno (`rows[0] ===
  * undefined`), el service devuelve `saldo_inicial: null` — dato no
  * disponible, nunca `0` (Review Focus).
+ *
+ * `abierto_en` se trae (además de los dos montos iniciales) porque el
+ * service lo necesita como límite inferior de `getFlujoEntreFechas` — ver
+ * fix de review abajo: por definición no existe OTRO turno que haya abierto
+ * entre el `abierto_en` de este turno y el inicio del mes solicitado (si
+ * existiera, ESE sería "el turno más reciente" y este query lo habría
+ * devuelto a él en su lugar), así que no hay ningún reseteo de caja physical
+ * que se nos pueda escapar en esa ventana.
  */
 export async function getPrimerTurnoDelRango(mes: string) {
   const result = await pool.query(
@@ -354,6 +362,47 @@ export async function getPrimerTurnoDelRango(mes: string) {
       ORDER BY abierto_en DESC
       LIMIT 1`,
     [mes],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Reporte "Cierre de caja diario", Paso 2c (fix de review, Finding 1) — el
+ * `saldo_inicial` del mes NO es solo `monto_inicial_efectivo`/
+ * `monto_inicial_banco` del turno semilla (Paso 2a): si el mes solicitado es
+ * posterior al mes en que ese turno abrió (ej. turno de octubre, mes
+ * solicitado noviembre), falta sumarle todo lo que pasó en la caja entre esa
+ * apertura y el día 1 del mes pedido — de lo contrario `saldo_inicial`
+ * ignoraría ese arrastre y mostraría el monto de apertura crudo del turno en
+ * vez del saldo real con el que la caja entra al mes.
+ *
+ * Mismo agregado que `getMovimientosDiarios` (ingreso − egreso por método,
+ * SIN filtro de módulo — misma excepción de alcance de todo este reporte),
+ * pero como UN total (no agrupado por día) y con límites de fecha explícitos
+ * (`desde` inclusive, `hastaExclusive` exclusive) en vez de
+ * `DATE_FORMAT(...) = $1`: necesita poder empezar a mitad de un mes, en el
+ * `abierto_en` exacto del turno, no en el día 1 de su propio mes (eso evita
+ * el otro bug del algoritmo original: contar dos veces los movimientos del
+ * propio mes de apertura anteriores a `abierto_en`).
+ *
+ * El service la llama con `desde = turno.abierto_en` y
+ * `hastaExclusive = '<mes>-01'`. Para el propio mes del turno (`mes ===
+ * mes_de_abierto_en`), esa ventana es vacía o casi vacía (nada puede haber
+ * pasado en la caja ANTES de que el turno la abriera) — por eso este fix no
+ * cambia nada para una consulta sobre el mes del turno, solo para meses
+ * posteriores.
+ */
+export async function getFlujoEntreFechas(desde: Date | string, hastaExclusive: string) {
+  const result = await pool.query(
+    `SELECT
+       SUM(CASE WHEN mc.tipo = 'ingreso' AND mc.metodo_pago = 'efectivo' THEN mc.monto END) AS venta_efectivo,
+       SUM(CASE WHEN mc.tipo = 'ingreso' AND mc.metodo_pago = 'banco' THEN mc.monto END) AS venta_banco,
+       SUM(CASE WHEN mc.tipo = 'egreso' AND mc.metodo_pago = 'efectivo' THEN mc.monto END) AS gastos_efectivo,
+       SUM(CASE WHEN mc.tipo = 'egreso' AND mc.metodo_pago = 'banco' THEN mc.monto END) AS gastos_banco
+       FROM movimientos_caja mc
+      WHERE mc.created_at >= $1
+        AND mc.created_at < $2`,
+    [desde, hastaExclusive],
   );
   return result.rows[0];
 }

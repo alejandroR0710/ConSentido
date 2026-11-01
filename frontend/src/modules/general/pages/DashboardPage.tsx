@@ -7,8 +7,9 @@ import { InsumosAnalyticsSection } from "../components/InsumosAnalyticsSection";
 import { TalleresAnalyticsSection } from "../components/TalleresAnalyticsSection";
 import { PedidosAnalyticsSection } from "../components/PedidosAnalyticsSection";
 import { ReiniciarTodoModal } from "../components/ReiniciarTodoModal";
+import { ReportesPage } from "../../reportes/pages/ReportesPage";
 
-type Seccion = "general" | "migao" | "consentido" | "insumos" | "talleres" | "pedidos";
+type Seccion = "general" | "migao" | "consentido" | "insumos" | "talleres" | "pedidos" | "reportes";
 
 const SECCIONES: { id: Seccion; label: string; icon: string }[] = [
   { id: "general", label: "Resumen General", icon: "📊" },
@@ -17,6 +18,9 @@ const SECCIONES: { id: Seccion; label: string; icon: string }[] = [
   { id: "insumos", label: "Insumos", icon: "📦" },
   { id: "talleres", label: "Talleres", icon: "🔧" },
   { id: "pedidos", label: "Pedidos", icon: "🚚" },
+  // Icono distinto a "general" (🧾 en vez del 📊 sugerido en el brief) para
+  // no repetir el mismo ícono dos veces en la misma barra de pestañas.
+  { id: "reportes", label: "Reportes", icon: "🧾" },
 ];
 
 export function DashboardPage() {
@@ -67,6 +71,7 @@ export function DashboardPage() {
         {seccionActual === "insumos" && <InsumosAnalyticsSection />}
         {seccionActual === "talleres" && <TalleresAnalyticsSection />}
         {seccionActual === "pedidos" && <PedidosAnalyticsSection />}
+        {seccionActual === "reportes" && <ReportesPage />}
       </div>
 
       {esSuperRoot && (

@@ -101,6 +101,49 @@ export async function getVentasPorTipoDiario(desde: string, hasta: string) {
 }
 
 /**
+ * Reporte "Conciliación" — verificación cruzada día por día: compara el
+ * total de ingresos por método de pago (efectivo/banco) contra el total por
+ * línea de negocio (Insumos/Con Sentido/Talleres). Mismo filtro de 3 líneas
+ * de negocio que `getVentasPorTipoDiario`/`getIngresosPorTipo` arriba (NO las
+ * 5 slugs de `MODULOS_ALCANCE_SUBQUERY` — ver nota de Bloque D), porque esta
+ * comparación solo tiene sentido entre las líneas con ventas propias.
+ *
+ * A propósito UNA sola consulta con las 5 sumas condicionales en el mismo
+ * `SELECT`, en vez de dos queries separadas (una agrupando por método, otra
+ * por línea): el filtro (`tipo='ingreso' AND m.slug IN (...) AND rango`) se
+ * aplica una única vez, ANTES de las dos agregaciones condicionales, así que
+ * ambos lados leen exactamente el mismo conjunto de filas — por construcción
+ * no puede haber divergencia entre ellos por un filtro que se desincronice
+ * entre dos consultas (el bug real que Task 4 ya tuvo que evitar). El
+ * `JOIN modulos` (no `LEFT JOIN`) no duplica filas: `modulos.id` es PK, cada
+ * `mc.modulo_origen_id` matchea a lo sumo una fila de `modulos`.
+ *
+ * Sin `COALESCE` en las 5 columnas (literal del brief): un día con al menos
+ * una fila que matchea el filtro pero, por ejemplo, ningún ingreso en banco,
+ * trae `por_metodo_banco = NULL` para esa fila — el service lo normaliza a
+ * `0` al sumar los totales (mismo patrón que `getMovimientosDiarios`).
+ */
+export async function getConciliacionDiaria(desde: string, hasta: string) {
+  const result = await pool.query(
+    `SELECT DATE_FORMAT(mc.created_at, '%Y-%m-%d') AS fecha,
+            SUM(CASE WHEN mc.metodo_pago = 'efectivo' THEN mc.monto END) AS por_metodo_efectivo,
+            SUM(CASE WHEN mc.metodo_pago = 'banco' THEN mc.monto END) AS por_metodo_banco,
+            SUM(CASE WHEN m.slug = 'insumos' THEN mc.monto END) AS insumos,
+            SUM(CASE WHEN m.slug = 'con_sentido' THEN mc.monto END) AS con_sentido,
+            SUM(CASE WHEN m.slug = 'talleres' THEN mc.monto END) AS talleres
+       FROM movimientos_caja mc
+       JOIN modulos m ON m.id = mc.modulo_origen_id
+      WHERE mc.tipo = 'ingreso'
+        AND m.slug IN ('insumos', 'con_sentido', 'talleres')
+        AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+      GROUP BY fecha
+      ORDER BY fecha`,
+    [desde, hasta],
+  );
+  return result.rows;
+}
+
+/**
  * Bloque E: matriz de ventas por mes — a propósito SIN parámetros de fecha.
  * Spec: este bloque siempre muestra el histórico completo (todas las filas
  * mes/línea de negocio que existan), independiente del selector de período

@@ -4,6 +4,7 @@ import { requirePermission } from "../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   obtenerCierreCajaController,
+  obtenerConciliacionController,
   obtenerGastosController,
   obtenerPrestamosController,
   obtenerResumenController,
@@ -48,4 +49,10 @@ reportesRouter.get(
   "/prestamos",
   requirePermission("general.dashboard.analytics.ver"),
   asyncHandler(obtenerPrestamosController),
+);
+
+reportesRouter.get(
+  "/conciliacion",
+  requirePermission("general.dashboard.analytics.ver"),
+  asyncHandler(obtenerConciliacionController),
 );

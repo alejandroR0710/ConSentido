@@ -3,6 +3,8 @@ import type {
   CierreCajaFila,
   CierreCajaReporte,
   CierreCajaSaldoInicial,
+  ConciliacionFila,
+  ConciliacionReporte,
   GastoFila,
   GastosFiltros,
   GastosReporte,
@@ -328,6 +330,43 @@ export async function obtenerVentasPorTipo(desde: string, hasta: string): Promis
   };
 
   return { porDia, totales, participacion };
+}
+
+/**
+ * Reporte "Conciliación" — por cada día, `total_por_metodo` (efectivo +
+ * banco) vs. `total_por_tipo` (insumos + con_sentido + talleres), ambos
+ * leídos de las 5 sumas condicionales de `getConciliacionDiaria` (una sola
+ * consulta, un solo filtro — ver doc del repository).
+ *
+ * `diferencia` se redondea a 2 decimales (centavos de COP, misma precisión
+ * que el resto del dinero en este sistema) ANTES de compararla con `0`: los
+ * valores ya llegan convertidos de `DECIMAL` de MySQL a `number` de JS, y
+ * sumar/restar varios de esos `number` puede dejar un residuo de punto
+ * flotante del orden de `1e-10` sin que haya ningún problema real en los
+ * datos — redondear evita que ese ruido aritmético se reporte como un falso
+ * `tiene_diferencia: true`. Como ambos totales salen de la MISMA fila de
+ * `movimientos_caja` agrupada de dos formas distintas (ver repository),
+ * `diferencia` debería dar `0` siempre contra datos reales — un valor
+ * distinto de `0` (más allá de ese ruido sub-centavo) es un bug real en la
+ * consulta, no un descuadre legítimo a documentar.
+ */
+export async function obtenerConciliacion(desde: string, hasta: string): Promise<ConciliacionReporte> {
+  const filas = await repo.getConciliacionDiaria(desde, hasta);
+
+  const dias: ConciliacionFila[] = filas.map((f) => {
+    const total_por_metodo = Number(f.por_metodo_efectivo ?? 0) + Number(f.por_metodo_banco ?? 0);
+    const total_por_tipo = Number(f.insumos ?? 0) + Number(f.con_sentido ?? 0) + Number(f.talleres ?? 0);
+    const diferencia = Math.round((total_por_metodo - total_por_tipo) * 100) / 100;
+    return {
+      fecha: f.fecha,
+      total_por_metodo,
+      total_por_tipo,
+      diferencia,
+      tiene_diferencia: diferencia !== 0,
+    };
+  });
+
+  return { dias };
 }
 
 /**

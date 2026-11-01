@@ -293,6 +293,39 @@ export interface CierreCajaReporte {
 }
 
 /**
+ * Reporte "Conciliación" — verificación cruzada día por día entre el total
+ * por método de pago y el total por línea de negocio (Insumos/Con Sentido/
+ * Talleres), ambos derivados de la MISMA fila de `movimientos_caja` agrupada
+ * de dos formas distintas en una sola consulta (ver
+ * reportes.repository.ts::getConciliacionDiaria /
+ * reportes.service.ts::obtenerConciliacion). Por construcción, `diferencia`
+ * debería ser siempre `0` — es una verificación cruzada contra el propio
+ * sistema (Spec, anti-goals: "Ingresos vs Ingresos por Tipo que no cuadran"),
+ * no un reporte donde se espere encontrar descuadres reales.
+ *
+ * Mismo comportamiento que `VentasPorTipoReporte`: un día sin ninguna fila
+ * que matchee el filtro (`tipo='ingreso'` + 3 líneas de negocio) no aparece
+ * — no se sintetizan días vacíos en `0`.
+ */
+
+/** Una fila por día con datos: ambos totales + la diferencia entre ellos
+ *  (redondeada a 2 decimales antes de comparar — ver nota de punto flotante
+ *  en el service). */
+export interface ConciliacionFila {
+  fecha: string;
+  total_por_metodo: number;
+  total_por_tipo: number;
+  diferencia: number;
+  /** `true` si `diferencia !== 0` después del redondeo — señal de un bug
+   *  real en la consulta (ver doc de arriba), nunca un dato esperado. */
+  tiene_diferencia: boolean;
+}
+
+export interface ConciliacionReporte {
+  dias: ConciliacionFila[];
+}
+
+/**
  * Reporte "Préstamos" — basado en `vales`, tabla independiente de
  * `movimientos_caja` (sin concepto de módulo/alcance de negocio: un vale no
  * está etiquetado por área — ver reportes.repository.ts::getVales). SIN

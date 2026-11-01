@@ -33,6 +33,12 @@ export async function obtenerGastosController(req: Request, res: Response) {
   return ok(res, gastos);
 }
 
+export async function obtenerConciliacionController(req: Request, res: Response) {
+  const { desde, hasta } = reportesRangoSchema.parse(req.query);
+  const conciliacion = await service.obtenerConciliacion(desde, hasta);
+  return ok(res, conciliacion);
+}
+
 export async function obtenerCierreCajaController(req: Request, res: Response) {
   const { mes } = reportesCierreCajaSchema.parse(req.query);
   const cierreCaja = await service.obtenerCierreCaja(mes);

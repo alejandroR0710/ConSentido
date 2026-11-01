@@ -307,10 +307,13 @@ export interface PrestamosFiltros {
 
 /**
  * Fila — un vale no anulado, con `monto`/`estado`/`fecha_resolucion`
- * derivados según `tipo` (ver reportes.service.ts::obtenerPrestamos):
- * - `tipo='deuda'`: `monto = monto_adeudado`, resuelta cuando `cobrado_en`.
- * - `tipo='pago'`: `monto = monto_efectivo + monto_banco`, resuelto cuando
- *   `repuesto_en`.
+ * derivados (ver reportes.service.ts::obtenerPrestamos):
+ * - `monto` depende de `fuente`, NO de `tipo`:
+ *   `monto = fuente ? monto_efectivo + monto_banco : monto_adeudado`.
+ * - `tipo` decide qué columna de fecha se usa para `fecha_resolucion` y qué
+ *   etiquetas de `estado` aplican:
+ *   - `tipo='deuda'`: resuelta cuando `cobrado_en`.
+ *   - `tipo='pago'`: resuelto cuando `repuesto_en`.
  * Las etiquetas de `estado` son intencionalmente distintas por tipo
  * ("Cobrado"/"Pendiente de cobro" vs. "Repuesto"/"Pendiente de reposición")
  * — son dos obligaciones distintas, no una sola genérica.

@@ -57,3 +57,74 @@ export interface ResumenReporte {
   ingresosPorTipo: ResumenIngresoTipo[];
   ventasPorMes: ResumenVentasPorMes;
 }
+
+/**
+ * Reporte "Ventas" — detalle de ventas de mostrador (Con Sentido/Insumos/
+ * Talleres) más los ingresos del alcance de negocio que no tienen línea de
+ * producto propia (abonos de pedidos, ingresos manuales de Caja General...).
+ * Ver reportes.repository.ts/reportes.service.ts.
+ */
+
+/** Filtros opcionales del reporte de Ventas, además de `desde`/`hasta`. */
+export interface VentasFiltros {
+  desde: string;
+  hasta: string;
+  metodo?: "efectivo" | "banco";
+  /** Aceptado por compatibilidad con el filtro del Spec, pero sin efecto en
+   *  la query: `con_sentido_ventas` no guarda ningún dato de cliente (venta
+   *  de mostrador) — ver nota en reportes.service.ts::obtenerVentas. */
+  cliente?: string;
+  producto?: string;
+}
+
+/** Fila con detalle de producto — una línea de `con_sentido_venta_items` de
+ *  una venta completada (Paso 1). */
+export interface VentasFilaDetalle {
+  tipo: "detalle";
+  id: string;
+  fecha: string;
+  producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+  metodo_pago: "efectivo" | "banco" | "mixto" | null;
+  area: string | null;
+  /** `facturas.numero`, o `null` si la venta todavía no tiene factura
+   *  generada (ej. un carrito de mesa completado que nadie ha impreso). */
+  consecutivo: string | null;
+}
+
+/** Fila sin detalle de producto — un ingreso de `movimientos_caja` que no
+ *  corresponde a una venta ya cubierta por el Paso 1 (Paso 2). */
+export interface VentasFilaSinDetalle {
+  tipo: "sin_detalle";
+  id: string;
+  fecha: string;
+  producto: string | null;
+  cantidad: null;
+  precio_unitario: null;
+  subtotal: number;
+  metodo_pago: "efectivo" | "banco";
+  area: string | null;
+  consecutivo: null;
+}
+
+export type VentasFila = VentasFilaDetalle | VentasFilaSinDetalle;
+
+/** Vista agrupada por día del Spec: fecha + total de ese día. */
+export interface VentasPorDia {
+  fecha: string;
+  total: number;
+}
+
+export interface VentasTotalesReporte {
+  total_general: number;
+  total_efectivo: number;
+  total_bancos: number;
+}
+
+export interface VentasReporte {
+  filas: VentasFila[];
+  porDia: VentasPorDia[];
+  totales: VentasTotalesReporte;
+}

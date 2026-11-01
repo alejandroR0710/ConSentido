@@ -9,3 +9,18 @@ export const reportesRangoSchema = z
   })
   .refine((d) => d.desde <= d.hasta, { message: "'desde' no puede ser posterior a 'hasta'", path: ["desde"] });
 export type ReportesRangoInput = z.infer<typeof reportesRangoSchema>;
+
+// `reportesRangoSchema.extend(...)` no compila: `.refine()` envuelve el
+// ZodObject en un ZodEffects, que no tiene `.extend` (ningún otro *.schema.ts
+// del backend hace `.extend()` sobre un esquema ya refinado). `z.intersection`
+// logra lo mismo — valida el rango con su refine tal cual más los 3 filtros
+// propios de Ventas — sin tocar el `reportesRangoSchema` que ya usa Task 2.
+export const reportesVentasFiltrosSchema = z.intersection(
+  reportesRangoSchema,
+  z.object({
+    metodo: z.enum(["efectivo", "banco"]).optional(),
+    cliente: z.string().optional(),
+    producto: z.string().optional(),
+  }),
+);
+export type ReportesVentasFiltrosInput = z.infer<typeof reportesVentasFiltrosSchema>;

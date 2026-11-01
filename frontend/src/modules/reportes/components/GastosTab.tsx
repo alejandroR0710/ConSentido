@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useTheme } from "../../../shared/theme/ThemeContext";
 import { reportesApi, type GastoFila, type GastoProveedorTotal, type GastosReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 interface GastosTabProps {
   desde: string;
@@ -248,6 +249,21 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Task 18: exportar con los mismos filtros/período activos en esta
+       *  pestaña (categoría/proveedor/método) — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel
+          tipo="gastos"
+          filtros={{
+            desde,
+            hasta,
+            categoriaId: categoriaId ? Number(categoriaId) : undefined,
+            proveedorId: proveedorId || undefined,
+            metodo: metodo || undefined,
+          }}
+        />
+      </div>
+
       {/* Paso 1: filtros propios de esta pestaña (además del PeriodoSelector
        *  global) — los 3 son `<select>`, sin debounce (a diferencia de los
        *  inputs de texto de VentasTab.tsx, acá no hay texto libre). */}

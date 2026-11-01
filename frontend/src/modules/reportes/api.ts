@@ -1,4 +1,4 @@
-import { apiFetch } from "../../shared/api/client";
+import { apiFetch, apiFetchBlob } from "../../shared/api/client";
 
 /**
  * Cliente de los 7 endpoints de datos del módulo Reportes (Tasks 2-8,
@@ -12,8 +12,12 @@ import { apiFetch } from "../../shared/api/client";
  * `backend/src/modules/reportes/reportes.types.ts` — mismo criterio que
  * `AnalyticsGeneral`/`AnalyticsInsumos`/etc. en `../general/api.ts`, que
  * tampoco importan los tipos de `backend/.../analytics.types.ts` directo.
- * Las funciones de exportar a Excel (`GET /:tipo/exportar`) las agrega
- * Task 18 — no viven aquí.
+ *
+ * `reportesApi.exportar` (Task 18) usa `apiFetchBlob` en vez de `apiFetch`
+ * — el endpoint `GET /:tipo/exportar` (Task 9 backend) responde el `.xlsx`
+ * binario en el camino feliz (nunca el `ApiEnvelope` JSON de los otros 7
+ * endpoints de este archivo), así que no puede reusar `apiFetch` (que
+ * siempre hace `res.json()` del body exitoso).
  */
 
 /** Reporte "Resumen" — Bloques A-E. */
@@ -256,6 +260,34 @@ export interface PrestamosReporte {
   totales: PrestamosTotales;
 }
 
+/** `tipo` del único endpoint parametrizado de export (Task 9 backend) — mismo
+ *  enum de 7 slugs que `reportesExportarTipoSchema` en
+ *  `backend/src/modules/reportes/reportes.schema.ts`. */
+export type TipoReporteExportar =
+  | "resumen"
+  | "ventas"
+  | "ventas-por-tipo"
+  | "gastos"
+  | "cierre-caja"
+  | "prestamos"
+  | "conciliacion";
+
+/** Filtros que acepta `GET /:tipo/exportar` por cada `tipo` — mismo query
+ *  que el endpoint de datos equivalente de arriba (el export reusa el mismo
+ *  `service.obtener*`, ver `reportes.controller.ts::exportarReporteController`
+ *  en el backend), para que `<BotonExportarExcel>` reciba exactamente los
+ *  filtros/período que la pestaña ya tiene activos — nunca un objeto
+ *  genérico sin tipar que pueda mandar un filtro que ese `tipo` no entiende. */
+export interface FiltrosExportarPorTipo {
+  resumen: { desde: string; hasta: string };
+  ventas: VentasFiltros;
+  "ventas-por-tipo": { desde: string; hasta: string };
+  gastos: GastosFiltros;
+  "cierre-caja": { mes: string };
+  prestamos: { destinatarioUsuarioId?: string };
+  conciliacion: { desde: string; hasta: string };
+}
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -289,4 +321,11 @@ export const reportesApi = {
 
   obtenerConciliacion: (desde: string, hasta: string) =>
     apiFetch<ConciliacionReporte>(`/reportes/conciliacion${buildQuery({ desde, hasta })}`),
+
+  // Task 18 — un único método para los 7 tipos (mismo criterio que el
+  // endpoint parametrizado del backend): `tipo` fija qué forma de `filtros`
+  // es válida vía `FiltrosExportarPorTipo[T]`, así que `exportar("cierre-caja",
+  // { desde, hasta })` no compila (ese `tipo` solo acepta `{ mes }`).
+  exportar: <T extends TipoReporteExportar>(tipo: T, filtros: FiltrosExportarPorTipo[T]) =>
+    apiFetchBlob(`/reportes/${tipo}/exportar${buildQuery({ ...filtros })}`),
 };

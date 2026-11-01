@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { reportesApi, type PrestamoFila, type PrestamosReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 /**
  * `created_at`/`fecha_resolucion` son `DATETIME(6)` con hora+zona (ver
@@ -219,6 +220,12 @@ export function PrestamosTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Task 18: exportar el destinatario seleccionado a Excel — esquina
+       *  superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel tipo="prestamos" filtros={{ destinatarioUsuarioId: destinatarioUsuarioId || undefined }} />
+      </div>
+
       {/* Paso 1: selector de destinatario propio (ver doc arriba) */}
       <label className="flex w-fit flex-col gap-1 text-sm">
         <span className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { reportesApi, type CierreCajaFila, type CierreCajaReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 /** "YYYY-MM" del mes calendario en curso — valor inicial del selector propio
  *  de esta pestaña. Mismo cuidado de construir la fecha con año/mes
@@ -144,6 +145,11 @@ export function CierreCajaTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Task 18: exportar el mes seleccionado a Excel — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel tipo="cierre-caja" filtros={{ mes }} />
+      </div>
+
       {/* Paso 1: selector de mes propio, independiente del PeriodoSelector
        *  global (ver doc del componente arriba). */}
       <label className="flex w-fit flex-col gap-1 text-sm">

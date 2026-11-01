@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { reportesApi, type ConciliacionFila, type ConciliacionReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 interface ConciliacionTabProps {
   desde: string;
@@ -113,6 +114,11 @@ export function ConciliacionTab({ desde, hasta }: ConciliacionTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Task 18: exportar este mismo rango a Excel — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel tipo="conciliacion" filtros={{ desde, hasta }} />
+      </div>
+
       {/* Resumen de una línea: refuerza con texto lo que la tabla ya muestra
        *  con color, sin montar ninguna herramienta de "investigación" extra
        *  (brief: un simple resaltado de fila alcanza para un caso que no

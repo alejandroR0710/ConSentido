@@ -85,6 +85,36 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}, is
   return body.data as T;
 }
 
+/** Descarga un endpoint binario (ej. el `.xlsx` de exportar de Reportes,
+ *  Task 18). No se usa `apiFetch` porque ese SIEMPRE hace `res.json()` del
+ *  body (incluso en el camino feliz) — acá el body exitoso es el buffer
+ *  binario crudo, no JSON. El resto del patrón es idéntico a `apiFetch`:
+ *  mismos headers/`credentials: "include"`, mismo retry-una-vez contra un
+ *  401 con `refreshAccessToken()`, y mismo `ApiError` en el camino de error
+ *  — el `error-handler.ts` del backend responde JSON (`ApiEnvelope`) tanto
+ *  para este endpoint como para cualquier otro, solo el 200 es binario. */
+export async function apiFetchBlob(path: string, isRetry = false): Promise<Blob> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "GET",
+    credentials: "include",
+    headers: currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : undefined,
+  });
+
+  if (res.status === 401 && !isRetry) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return apiFetchBlob(path, true);
+    }
+  }
+
+  if (!res.ok) {
+    const body: ApiEnvelope<never> = await res.json();
+    throw new ApiError(body.error?.code ?? "UNKNOWN", body.error?.message ?? "Error inesperado");
+  }
+
+  return res.blob();
+}
+
 /** Sube un archivo como multipart/form-data. No se usa apiFetch porque este
  *  nunca debe fijar Content-Type: application/json (el navegador arma el
  *  boundary del multipart solo). Reintenta una vez con refresh, igual que apiFetch. */

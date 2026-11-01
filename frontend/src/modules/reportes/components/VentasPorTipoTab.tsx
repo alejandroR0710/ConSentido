@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useTheme } from "../../../shared/theme/ThemeContext";
 import { reportesApi, type VentasPorTipoDiaFila, type VentasPorTipoReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 interface VentasPorTipoTabProps {
   desde: string;
@@ -127,6 +128,11 @@ export function VentasPorTipoTab({ desde, hasta }: VentasPorTipoTabProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Task 18: exportar este mismo rango a Excel — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel tipo="ventas-por-tipo" filtros={{ desde, hasta }} />
+      </div>
+
       {/* Paso 1 + 2: tabla diaria (Fecha/Insumos/Con Sentido/Talleres/Total)
        *  con la fila de totales del rango al pie, dentro del mismo `<table>`
        *  — mismo criterio visual que la fila "total" de ResumenTab.tsx

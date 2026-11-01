@@ -4,6 +4,7 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { useTheme } from "../../../shared/theme/ThemeContext";
 import { reportesApi, type ResumenReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 interface ResumenTabProps {
   desde: string;
@@ -138,6 +139,11 @@ export function ResumenTab({ desde, hasta }: ResumenTabProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Task 18: exportar este mismo rango a Excel — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel tipo="resumen" filtros={{ desde, hasta }} />
+      </div>
+
       {/* Bloque A: KPIs generales del rango */}
       <section className="flex flex-col gap-4">
         <h3 className="text-base font-semibold text-brand-green-700 dark:text-brand-vanilla">Resumen general</h3>

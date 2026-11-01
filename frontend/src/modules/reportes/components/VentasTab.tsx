@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { reportesApi, type VentasFila, type VentasReporte } from "../api";
+import { BotonExportarExcel } from "./BotonExportarExcel";
 
 interface VentasTabProps {
   desde: string;
@@ -239,6 +240,16 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Task 18: exportar con los mismos filtros/período activos en esta
+       *  pestaña (método/cliente/producto ya debounceados, nunca el input
+       *  "en vuelo" sin confirmar) — esquina superior. */}
+      <div className="flex justify-end">
+        <BotonExportarExcel
+          tipo="ventas"
+          filtros={{ desde, hasta, metodo: metodo || undefined, cliente: cliente || undefined, producto: producto || undefined }}
+        />
+      </div>
+
       {/* Filtros propios de esta pestaña (además del PeriodoSelector global) */}
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">

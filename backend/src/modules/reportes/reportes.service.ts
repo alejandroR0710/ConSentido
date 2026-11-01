@@ -104,11 +104,13 @@ export async function obtenerResumen(desde: string, hasta: string): Promise<Resu
  * `metodo_pago` de la VENTA completa (no hay método por item, solo por
  * venta): limpio para `'efectivo'`/`'banco'` (todo el subtotal va a ese
  * balde), prorrateado para `'mixto'` usando el reparto real de la venta
- * (`monto_efectivo`/`monto_banco` sobre `monto`) — nunca un 50/50 a ciegas.
- * `monto === 0` no debería pasar en una venta real completada (columna
- * `NOT NULL`, puesto por `con_sentido.service.ts` al cobrar), pero se cubre
- * sin dividir por cero: ambos baldes en 0 para esa línea (no se pierde del
- * `total_general`, que no usa esta función — ver nota abajo).
+ * (`monto_efectivo`/`monto_banco` sobre `monto_efectivo + monto_banco` —
+ * NO sobre `monto`, ver Round 3 fix dentro de la rama `'mixto'` más abajo)
+ * — nunca un 50/50 a ciegas. `monto_efectivo + monto_banco === 0` no
+ * debería pasar en una venta `'mixto'` real (el `.refine()` de
+ * `con_sentido.schema.ts` ya exige `montoEfectivo + montoBanco > 0`), pero
+ * se cubre sin dividir por cero: ambos baldes en 0 para esa línea (no se
+ * pierde del `total_general`, que no usa esta función — ver nota abajo).
  */
 function repartirPorMetodoPago(
   metodoPago: "efectivo" | "banco" | "mixto" | null,
@@ -120,10 +122,20 @@ function repartirPorMetodoPago(
   if (metodoPago === "efectivo") return { efectivo_share: subtotal, banco_share: 0 };
   if (metodoPago === "banco") return { efectivo_share: 0, banco_share: subtotal };
   if (metodoPago === "mixto") {
-    if (!monto) return { efectivo_share: 0, banco_share: 0 };
+    // Denominador = montoEfectivo + montoBanco, NO cv.monto (Round 3 fix):
+    // con_sentido.schema.ts solo exige montoEfectivo + montoBanco > 0 para
+    // 'mixto', nunca que esa suma sea igual a `monto` — así que una venta
+    // mixta mal digitada (monto !== montoEfectivo + montoBanco, posible hoy
+    // en el flujo "Nueva venta", no bloqueado por el schema) podía dejar
+    // efectivo_share + banco_share !== subtotal si se dividía entre `monto`.
+    // Dividiendo entre la suma real de los dos montos, ambas fracciones
+    // siempre suman exactamente 1 por construcción, sin depender de esa
+    // invariante no garantizada.
+    const base = montoEfectivo + montoBanco;
+    if (!base) return { efectivo_share: 0, banco_share: 0 };
     return {
-      efectivo_share: subtotal * (montoEfectivo / monto),
-      banco_share: subtotal * (montoBanco / monto),
+      efectivo_share: subtotal * (montoEfectivo / base),
+      banco_share: subtotal * (montoBanco / base),
     };
   }
   // `metodo_pago` NULL solo es posible en una venta todavía 'pendiente', que

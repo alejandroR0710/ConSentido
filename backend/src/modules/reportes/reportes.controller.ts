@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import { ok } from "../../shared/utils/response";
-import { reportesGastosFiltrosSchema, reportesRangoSchema, reportesVentasFiltrosSchema } from "./reportes.schema";
+import {
+  reportesCierreCajaSchema,
+  reportesGastosFiltrosSchema,
+  reportesRangoSchema,
+  reportesVentasFiltrosSchema,
+} from "./reportes.schema";
 import * as service from "./reportes.service";
 
 export async function obtenerResumenController(req: Request, res: Response) {
@@ -25,4 +30,10 @@ export async function obtenerGastosController(req: Request, res: Response) {
   const filtros = reportesGastosFiltrosSchema.parse(req.query);
   const gastos = await service.obtenerGastos(filtros);
   return ok(res, gastos);
+}
+
+export async function obtenerCierreCajaController(req: Request, res: Response) {
+  const { mes } = reportesCierreCajaSchema.parse(req.query);
+  const cierreCaja = await service.obtenerCierreCaja(mes);
+  return ok(res, cierreCaja);
 }

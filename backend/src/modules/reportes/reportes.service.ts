@@ -1,5 +1,7 @@
 import * as repo from "./reportes.repository";
 import type {
+  CierreCajaFila,
+  CierreCajaReporte,
   GastoFila,
   GastosFiltros,
   GastosReporte,
@@ -377,4 +379,125 @@ export async function obtenerGastos(filtros: GastosFiltros): Promise<GastosRepor
     gastosPorCategoria: gastosPorCategoria.map((g) => ({ id: g.id, nombre: g.nombre, total: Number(g.total) })),
     totales: { total_general, total_efectivo, total_bancos },
   };
+}
+
+/** Todos los días calendario de `mes` (`YYYY-MM`), como `YYYY-MM-DD`, sin
+ *  pasar por `Date`/`toISOString` (evitaría cualquier corrimiento de zona
+ *  horaria): `new Date(anio, mesIndice1Based, 0).getDate()` es el truco
+ *  estándar para "último día del mes" (día 0 del mes siguiente), evaluado
+ *  en horario local del proceso — nunca se usa esa `Date` para construir
+ *  las fechas de salida, solo para contar cuántos días tiene el mes. */
+function diasDelMes(mes: string): string[] {
+  const [anioStr, mesStr] = mes.split("-");
+  const anio = Number(anioStr);
+  const numMes = Number(mesStr);
+  const totalDias = new Date(anio, numMes, 0).getDate();
+  return Array.from({ length: totalDias }, (_, i) => `${mes}-${String(i + 1).padStart(2, "0")}`);
+}
+
+/**
+ * Reporte "Cierre de caja diario" — ÚNICA excepción de alcance de todo el
+ * módulo (ver reportes.types.ts): ninguna de las 3 queries de este reporte
+ * filtra por `modulo_origen_id`/`MODULOS_ALCANCE_SUBQUERY` — es la caja
+ * física real y única del POS, Migao incluido.
+ *
+ * Construye el saldo corrido día por día sobre TODOS los días calendario
+ * del mes (`diasDelMes`, no solo los días que `getMovimientosDiarios`
+ * trajo con filas reales) — un día sin ningún movimiento todavía necesita
+ * una fila con los 4 montos en `0` que SÍ propaga el saldo corrido del día
+ * anterior (no lo resetea, no lo omite).
+ *
+ * `efectivoCorrido`/`bancoCorrido` arrancan en `saldo_inicial` (Paso 2) —
+ * `?? 0` solo aplica cuando `saldo_inicial` es `null` (no hay ningún turno
+ * registrado hasta este mes): la propagación aritmética sigue funcionando
+ * igual, arrancando en 0, SIN que eso cambie el valor expuesto de
+ * `saldo_inicial` en la respuesta, que se calcula antes y por separado — un
+ * mes sin turno previo sigue devolviendo `saldo_inicial: null` (dato no
+ * disponible) aunque el saldo corrido interno arranque en 0 para poder
+ * calcularse igual.
+ */
+export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte> {
+  const [movimientos, primerTurno, cajerosPorDiaFilas] = await Promise.all([
+    repo.getMovimientosDiarios(mes),
+    repo.getPrimerTurnoDelRango(mes),
+    repo.getCajerosPorDia(mes),
+  ]);
+
+  const movimientosPorFecha = new Map<
+    string,
+    { venta_efectivo: number; venta_banco: number; gastos_efectivo: number; gastos_banco: number }
+  >();
+  for (const m of movimientos) {
+    movimientosPorFecha.set(m.fecha, {
+      venta_efectivo: Number(m.venta_efectivo ?? 0),
+      venta_banco: Number(m.venta_banco ?? 0),
+      gastos_efectivo: Number(m.gastos_efectivo ?? 0),
+      gastos_banco: Number(m.gastos_banco ?? 0),
+    });
+  }
+
+  // Puede haber más de un turno (cambio de cajero) el mismo día calendario.
+  const cajerosPorFecha = new Map<string, string[]>();
+  for (const c of cajerosPorDiaFilas) {
+    const nombres = cajerosPorFecha.get(c.fecha) ?? [];
+    nombres.push(c.nombre);
+    cajerosPorFecha.set(c.fecha, nombres);
+  }
+
+  const saldo_inicial = primerTurno
+    ? { efectivo: Number(primerTurno.monto_inicial_efectivo), banco: Number(primerTurno.monto_inicial_banco) }
+    : null;
+
+  let efectivoCorrido = saldo_inicial?.efectivo ?? 0;
+  let bancoCorrido = saldo_inicial?.banco ?? 0;
+
+  const dias: CierreCajaFila[] = diasDelMes(mes).map((fecha) => {
+    const m = movimientosPorFecha.get(fecha) ?? {
+      venta_efectivo: 0,
+      venta_banco: 0,
+      gastos_efectivo: 0,
+      gastos_banco: 0,
+    };
+
+    efectivoCorrido = efectivoCorrido + m.venta_efectivo - m.gastos_efectivo;
+    bancoCorrido = bancoCorrido + m.venta_banco - m.gastos_banco;
+
+    const responsables = cajerosPorFecha.get(fecha);
+
+    return {
+      fecha,
+      venta_efectivo: m.venta_efectivo,
+      venta_banco: m.venta_banco,
+      venta_dia: m.venta_efectivo + m.venta_banco,
+      gastos_efectivo: m.gastos_efectivo,
+      gastos_banco: m.gastos_banco,
+      efectivo: efectivoCorrido,
+      banco: bancoCorrido,
+      total_dinero: efectivoCorrido + bancoCorrido,
+      notas_responsable: responsables?.length ? responsables.join(", ") : "—",
+    };
+  });
+
+  // Fila TOTAL: los 5 montos de movimiento son la SUMA de los `dias`
+  // (incluido el último — anti-goal del Excel original, Spec); el saldo
+  // corrido (`efectivo`/`banco`/`total_dinero`) es el del ÚLTIMO día, no una
+  // suma de saldos (sumar saldos corridos no tendría sentido aritmético).
+  const ultimoDia = dias[dias.length - 1];
+  const total: CierreCajaFila = {
+    fecha: "TOTAL",
+    venta_efectivo: dias.reduce((acum, d) => acum + d.venta_efectivo, 0),
+    venta_banco: dias.reduce((acum, d) => acum + d.venta_banco, 0),
+    venta_dia: dias.reduce((acum, d) => acum + d.venta_dia, 0),
+    gastos_efectivo: dias.reduce((acum, d) => acum + d.gastos_efectivo, 0),
+    gastos_banco: dias.reduce((acum, d) => acum + d.gastos_banco, 0),
+    efectivo: ultimoDia.efectivo,
+    banco: ultimoDia.banco,
+    total_dinero: ultimoDia.total_dinero,
+    // No hay un único "responsable del mes completo" — a diferencia de
+    // efectivo/banco/total_dinero, copiar el del último día sería engañoso
+    // (ver nota en reportes.types.ts::CierreCajaFila).
+    notas_responsable: "—",
+  };
+
+  return { mes, saldo_inicial, dias, total };
 }

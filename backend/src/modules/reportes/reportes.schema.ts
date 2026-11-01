@@ -36,3 +36,10 @@ export const reportesGastosFiltrosSchema = z.intersection(
   }),
 );
 export type ReportesGastosFiltrosInput = z.infer<typeof reportesGastosFiltrosSchema>;
+
+// Esquema propio (NO `reportesRangoSchema`): este reporte recibe un único
+// `mes` (YYYY-MM), no un rango `desde`/`hasta` — ver reportes.service.ts::obtenerCierreCaja.
+export const reportesCierreCajaSchema = z.object({
+  mes: z.string().regex(/^\d{4}-\d{2}$/, "Formato de mes inválido (YYYY-MM)"),
+});
+export type ReportesCierreCajaInput = z.infer<typeof reportesCierreCajaSchema>;

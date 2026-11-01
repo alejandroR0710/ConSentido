@@ -226,3 +226,68 @@ export interface GastosReporte {
   gastosPorCategoria: ResumenGastoCategoria[];
   totales: GastosTotalesReporte;
 }
+
+/**
+ * Reporte "Cierre de caja diario" — ÚNICA excepción de alcance de todo el
+ * módulo: lee `movimientos_caja`/`turnos_caja` SIN filtrar por
+ * `modulo_origen_id` (Global Constraints/Spec) — es la caja física real y
+ * única del POS completo, Migao incluido, no una vista del negocio Con
+ * Sentido. Ver reportes.repository.ts/reportes.service.ts.
+ */
+
+/** Una fila por día del mes (incluye días sin ningún movimiento, con los 4
+ *  montos de origen en 0) más la fila `TOTAL` (misma forma, ver
+ *  `CierreCajaReporte.total`). */
+export interface CierreCajaFila {
+  /** `YYYY-MM-DD`, o literal `"TOTAL"` para la fila de cierre. */
+  fecha: string;
+  venta_efectivo: number;
+  venta_banco: number;
+  /** = `venta_efectivo + venta_banco` de ese día (columna "venta del día"
+   *  del Excel original, distinta del desglose por método). */
+  venta_dia: number;
+  gastos_efectivo: number;
+  gastos_banco: number;
+  /** Saldo corrido de efectivo: `efectivo` del día anterior + venta − gastos
+   *  de efectivo de este día (arranca desde `saldo_inicial`, NUNCA desde 0 —
+   *  Review Focus). */
+  efectivo: number;
+  /** Mismo saldo corrido, lado banco. */
+  banco: number;
+  /** = `efectivo + banco` de este mismo renglón (no una suma de otra
+   *  columna). */
+  total_dinero: number;
+  /** Nombre(s) del/los cajero(s) cuyo turno abrió ese día calendario,
+   *  separados por coma si hubo más de uno (cambio de turno); `"—"` si
+   *  ningún turno abrió ese día. En la fila `TOTAL` siempre `"—"` (no hay un
+   *  único responsable del mes completo). */
+  notas_responsable: string;
+}
+
+export interface CierreCajaSaldoInicial {
+  efectivo: number;
+  banco: number;
+}
+
+export interface CierreCajaReporte {
+  mes: string;
+  /** `monto_inicial_efectivo`/`monto_inicial_banco` del turno más reciente
+   *  abierto en o antes del mes seleccionado — semilla del saldo corrido del
+   *  día 1. `null` (dato no disponible, NUNCA `0`) si no existe ningún turno
+   *  registrado hasta ese mes — Review Focus/Spec: "0" significaría
+   *  "sabemos que la caja abrió vacía", que es un dato distinto de "no
+   *  sabemos con cuánto abrió". */
+  saldo_inicial: CierreCajaSaldoInicial | null;
+  /** Un renglón por cada día calendario del mes, en orden — nunca se omite
+   *  un día sin movimiento (Spec: "incluye días sin movimiento en 0"). */
+  dias: CierreCajaFila[];
+  /** Fila de cierre del mes completo: los 5 montos de movimiento (incluido
+   *  `venta_dia`) son la SUMA de los `dias` (los 28/29/30/31 completos,
+   *  incluido el último — anti-goal del Excel original); `efectivo`/`banco`/
+   *  `total_dinero` son el saldo corrido del ÚLTIMO día (es un saldo, no una
+   *  suma de saldos). Se expone separado de `dias` (mismo patrón que
+   *  `totales` en `GastosReporte`/`VentasReporte`), no como último elemento
+   *  del array — el consumidor decide si lo renderiza como última fila de
+   *  la tabla. */
+  total: CierreCajaFila;
+}

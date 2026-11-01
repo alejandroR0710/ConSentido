@@ -308,3 +308,69 @@ export async function getTopProveedores(desde: string, hasta: string, limit = 10
   );
   return result.rows;
 }
+
+/**
+ * Reporte "Cierre de caja diario", Paso 1 — movimientos del mes agrupados
+ * por día. A PROPÓSITO sin `JOIN modulos` ni `modulo_origen_id IN
+ * ${MODULOS_ALCANCE_SUBQUERY}` (única excepción de alcance de todo el
+ * módulo, ver reportes.types.ts): es la caja física real y única del POS,
+ * Migao incluido — no una vista acotada al negocio Con Sentido.
+ *
+ * Sin `COALESCE` en las 4 columnas (literal del brief): un día con AL MENOS
+ * un movimiento pero, por ejemplo, ningún ingreso en banco, trae
+ * `venta_banco = NULL` para esa fila — el service lo normaliza a `0` al
+ * armar el saldo corrido. Un día SIN ningún movimiento no genera fila
+ * aquí (no hay nada que agrupar); el service sintetiza esos días en `0` al
+ * iterar el calendario completo del mes (Paso 3).
+ */
+export async function getMovimientosDiarios(mes: string) {
+  const result = await pool.query(
+    `SELECT DATE_FORMAT(mc.created_at, '%Y-%m-%d') AS fecha,
+            SUM(CASE WHEN mc.tipo = 'ingreso' AND mc.metodo_pago = 'efectivo' THEN mc.monto END) AS venta_efectivo,
+            SUM(CASE WHEN mc.tipo = 'ingreso' AND mc.metodo_pago = 'banco' THEN mc.monto END) AS venta_banco,
+            SUM(CASE WHEN mc.tipo = 'egreso' AND mc.metodo_pago = 'efectivo' THEN mc.monto END) AS gastos_efectivo,
+            SUM(CASE WHEN mc.tipo = 'egreso' AND mc.metodo_pago = 'banco' THEN mc.monto END) AS gastos_banco
+       FROM movimientos_caja mc
+      WHERE DATE_FORMAT(mc.created_at, '%Y-%m') = $1
+      GROUP BY fecha`,
+    [mes],
+  );
+  return result.rows;
+}
+
+/**
+ * Reporte "Cierre de caja diario", Paso 2a — semilla del saldo corrido: el
+ * turno más reciente abierto EN o ANTES del mes seleccionado (comparación
+ * de strings `YYYY-MM`, válida porque el formato ya viene cero-rellenado y
+ * ordena igual que una fecha real). Si no existe ninguno (`rows[0] ===
+ * undefined`), el service devuelve `saldo_inicial: null` — dato no
+ * disponible, nunca `0` (Review Focus).
+ */
+export async function getPrimerTurnoDelRango(mes: string) {
+  const result = await pool.query(
+    `SELECT monto_inicial_efectivo, monto_inicial_banco, abierto_en
+       FROM turnos_caja
+      WHERE DATE_FORMAT(abierto_en, '%Y-%m') <= $1
+      ORDER BY abierto_en DESC
+      LIMIT 1`,
+    [mes],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Reporte "Cierre de caja diario", Paso 2b — una fila por CADA turno abierto
+ * dentro del mes (no agrupado): el service junta los nombres por fecha,
+ * porque puede haber más de un turno (cambio de cajero) el mismo día
+ * calendario.
+ */
+export async function getCajerosPorDia(mes: string) {
+  const result = await pool.query(
+    `SELECT DATE_FORMAT(tc.abierto_en, '%Y-%m-%d') AS fecha, u.nombre
+       FROM turnos_caja tc
+       JOIN usuarios u ON u.id = tc.cajero_id
+      WHERE DATE_FORMAT(tc.abierto_en, '%Y-%m') = $1`,
+    [mes],
+  );
+  return result.rows;
+}

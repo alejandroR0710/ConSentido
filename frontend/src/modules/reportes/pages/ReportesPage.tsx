@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CierreCajaTab } from "../components/CierreCajaTab";
 import { GastosTab } from "../components/GastosTab";
 import { PeriodoSelector, periodoInicial, type PeriodoValue } from "../components/PeriodoSelector";
+import { PrestamosTab } from "../components/PrestamosTab";
 import { ResumenTab } from "../components/ResumenTab";
 import { VentasPorTipoTab } from "../components/VentasPorTipoTab";
 import { VentasTab } from "../components/VentasTab";
@@ -13,10 +14,10 @@ type Pestana = "resumen" | "ventas" | "ventas-por-tipo" | "gastos" | "cierre-caj
 // `<input type="month">` interno (ver doc de `CierreCajaTab.tsx`); mostrar el
 // selector compartido ahí no tendría ningún efecto sobre lo que esa pestaña
 // renderiza, así que se oculta en vez de dejarlo como control muerto.
-// "prestamos" (Task 17, Spec) tampoco tiene rango obligatorio
-// (`reportesApi.obtenerPrestamos` solo acepta `destinatarioUsuarioId`) — su
-// implementador probablemente deba agregarse acá también, mismo criterio.
-const PESTANAS_SIN_PERIODO_COMPARTIDO: Pestana[] = ["cierre-caja"];
+// "prestamos" (Task 16) tiene exactamente la misma razón: `reportesApi.
+// obtenerPrestamos` solo acepta `destinatarioUsuarioId`, sin `desde`/`hasta`
+// (Spec/Task 7) — ver doc de `PrestamosTab.tsx`.
+const PESTANAS_SIN_PERIODO_COMPARTIDO: Pestana[] = ["cierre-caja", "prestamos"];
 
 const PESTANAS: { id: Pestana; label: string }[] = [
   { id: "resumen", label: "Resumen" },
@@ -28,12 +29,12 @@ const PESTANAS: { id: Pestana; label: string }[] = [
   { id: "conciliacion", label: "Conciliación" },
 ];
 
-// Placeholder temporal de cada pestaña restante hasta que Tasks 16-17
-// agreguen el componente real (una línea por pestaña se reemplaza con el
-// import real, sin tocar el resto de este archivo — "resumen"/"ventas"/
-// "ventas-por-tipo"/"gastos"/"cierre-caja" ya se reemplazaron así en Tasks
-// 11-15, ver `ResumenTab`/`VentasTab`/`VentasPorTipoTab`/`GastosTab`/
-// `CierreCajaTab`).
+// Placeholder temporal de la pestaña restante hasta que Task 17 agregue el
+// componente real (una línea por pestaña se reemplaza con el import real,
+// sin tocar el resto de este archivo — "resumen"/"ventas"/"ventas-por-tipo"/
+// "gastos"/"cierre-caja"/"prestamos" ya se reemplazaron así en Tasks 11-16,
+// ver `ResumenTab`/`VentasTab`/`VentasPorTipoTab`/`GastosTab`/
+// `CierreCajaTab`/`PrestamosTab`).
 function PlaceholderReporte({ titulo }: { titulo: string }) {
   return (
     <div className="rounded-lg border border-dashed border-brand-vanilla-dark p-8 text-center dark:border-brand-green-700">
@@ -50,10 +51,12 @@ function PlaceholderReporte({ titulo }: { titulo: string }) {
  * "Resumen" (Task 11), "Ventas" (Task 12), "Ventas por tipo" (Task 13) y
  * "Gastos" (Task 14) ya siguen ese patrón.
  *
- * "Cierre de caja" (Task 15) es la excepción: filtra por `mes`, no por
- * `desde`/`hasta`, así que administra su propio selector en vez de leer
- * `periodo` de acá — el `PeriodoSelector` compartido se oculta mientras esa
- * pestaña está activa (ver `PESTANAS_SIN_PERIODO_COMPARTIDO` arriba).
+ * "Cierre de caja" (Task 15) y "Préstamos" (Task 16) son la excepción: ninguna
+ * de las dos usa `desde`/`hasta` (la primera filtra por `mes`, la segunda por
+ * `destinatarioUsuarioId`), así que cada una administra su propio selector en
+ * vez de leer `periodo` de acá — el `PeriodoSelector` compartido se oculta
+ * mientras alguna de esas dos pestañas está activa (ver
+ * `PESTANAS_SIN_PERIODO_COMPARTIDO` arriba).
  */
 export function ReportesPage() {
   const [pestanaActual, setPestanaActual] = useState<Pestana>("resumen");
@@ -96,7 +99,7 @@ export function ReportesPage() {
         )}
         {pestanaActual === "gastos" && <GastosTab desde={periodo.desde} hasta={periodo.hasta} />}
         {pestanaActual === "cierre-caja" && <CierreCajaTab />}
-        {pestanaActual === "prestamos" && <PlaceholderReporte titulo="Préstamos" />}
+        {pestanaActual === "prestamos" && <PrestamosTab />}
         {pestanaActual === "conciliacion" && <PlaceholderReporte titulo="Conciliación" />}
       </div>
     </div>

@@ -115,6 +115,14 @@ export async function getVentasPorMes() {
  * `filtros.cliente` no se usa: `con_sentido_ventas`/`con_sentido_venta_items`
  * no tienen ninguna columna de cliente (venta de mostrador, ver nota en
  * reportes.types.ts::VentasFiltros) — no hay nada real contra qué filtrar.
+ *
+ * También trae `cv.monto`, `cv.monto_efectivo`, `cv.monto_banco` — el total y
+ * el reparto de la venta completa (no del item) — para que el servicio pueda
+ * prorratear el `subtotal` de cada item cuando `metodo_pago = 'mixto'` (ver
+ * fix de review en reportes.service.ts: la versión anterior leía los totales
+ * de `movimientos_caja` con una query independiente que no recibía estos
+ * mismos filtros, rompiendo la consistencia bajo `?producto=`/`?cliente=` y
+ * duplicando el leak de la otra mitad de una venta mixta bajo `?metodo=`).
  */
 export async function getVentasDetalle(
   desde: string,
@@ -135,7 +143,8 @@ export async function getVentasDetalle(
   const result = await pool.query(
     `SELECT cv.id, cv.created_at, DATE_FORMAT(cv.created_at, '%Y-%m-%d') AS fecha,
             cvi.producto, cvi.cantidad, cvi.precio_unitario, cvi.subtotal,
-            cv.metodo_pago, m.slug AS area, f.numero AS consecutivo
+            cv.metodo_pago, m.slug AS area, f.numero AS consecutivo,
+            cv.monto, cv.monto_efectivo, cv.monto_banco
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
        LEFT JOIN modulos m ON m.id = cvi.modulo_origen_id
@@ -194,56 +203,4 @@ export async function getIngresosSinDetalle(
     params,
   );
   return result.rows;
-}
-
-/**
- * Reporte "Ventas" — `total_efectivo`/`total_bancos` del rango (fix de
- * review, finding "Important" del Task 3 report).
- *
- * Por qué NO se calculan sumando `filas.subtotal` agrupadas por el
- * `metodo_pago` de cada fila (como hacía la versión anterior): el
- * `metodo_pago` de `con_sentido_ventas` admite `'mixto'` (schema-enforced;
- * `monto_efectivo`/`monto_banco` existen ahí justo para soportarlo, y
- * `con_sentido.service.ts` sí ejercita ese camino) — una venta mixta caía
- * fuera de ambos conteos aunque sí sumaba a `total_general`, dejando
- * `total_efectivo + total_bancos < total_general`.
- *
- * En cambio, se lee directo de `movimientos_caja`, con el mismo alcance que
- * ya usa `getIngresosSinDetalle` (mismo rango, `MODULOS_ALCANCE_SUBQUERY`,
- * `tipo='ingreso'`) pero SIN su subquery de exclusión de
- * `con_sentido_ventas` — acá se quiere el total exhaustivo del alcance (el
- * mismo universo que ya prueba el invariante `total_general`), no solo el
- * subconjunto "sin detalle". Esto es seguro porque
- * `movimientos_caja.metodo_pago` tiene `CHECK (... IN ('efectivo','banco'))`
- * — nunca `'mixto'` a ese nivel: `con_sentido.service.ts`
- * (`descomponerPorAreaYMetodo`) ya reparte cada venta mixta en movimientos
- * `efectivo`/`banco` separados al escribir en caja. Por eso
- * `SUM(efectivo) + SUM(banco)` en esta tabla es exactamente
- * `total_general`, el mismo invariante que Task 2 ya probó para Resumen
- * (`getResumenTotales` hace la misma cuenta, sin el filtro `metodo`
- * opcional de este reporte).
- */
-export async function getVentasTotalesPorMetodoPago(
-  desde: string,
-  hasta: string,
-  filtros: { metodo?: "efectivo" | "banco" } = {},
-) {
-  const params: unknown[] = [desde, hasta];
-  let condiciones = "";
-  if (filtros.metodo) {
-    params.push(filtros.metodo);
-    condiciones += ` AND mc.metodo_pago = $${params.length}`;
-  }
-
-  const result = await pool.query(
-    `SELECT mc.metodo_pago, COALESCE(SUM(mc.monto), 0) AS total
-       FROM movimientos_caja mc
-      WHERE mc.tipo = 'ingreso'
-        AND mc.modulo_origen_id IN ${MODULOS_ALCANCE_SUBQUERY}
-        AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
-        ${condiciones}
-      GROUP BY mc.metodo_pago`,
-    params,
-  );
-  return result.rows as { metodo_pago: "efectivo" | "banco"; total: string | number }[];
 }

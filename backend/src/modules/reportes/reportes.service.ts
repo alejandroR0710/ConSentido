@@ -100,6 +100,39 @@ export async function obtenerResumen(desde: string, hasta: string): Promise<Resu
 }
 
 /**
+ * Reparte el `subtotal` de una línea (Paso 1) entre efectivo/banco según el
+ * `metodo_pago` de la VENTA completa (no hay método por item, solo por
+ * venta): limpio para `'efectivo'`/`'banco'` (todo el subtotal va a ese
+ * balde), prorrateado para `'mixto'` usando el reparto real de la venta
+ * (`monto_efectivo`/`monto_banco` sobre `monto`) — nunca un 50/50 a ciegas.
+ * `monto === 0` no debería pasar en una venta real completada (columna
+ * `NOT NULL`, puesto por `con_sentido.service.ts` al cobrar), pero se cubre
+ * sin dividir por cero: ambos baldes en 0 para esa línea (no se pierde del
+ * `total_general`, que no usa esta función — ver nota abajo).
+ */
+function repartirPorMetodoPago(
+  metodoPago: "efectivo" | "banco" | "mixto" | null,
+  subtotal: number,
+  monto: number,
+  montoEfectivo: number,
+  montoBanco: number,
+): { efectivo_share: number; banco_share: number } {
+  if (metodoPago === "efectivo") return { efectivo_share: subtotal, banco_share: 0 };
+  if (metodoPago === "banco") return { efectivo_share: 0, banco_share: subtotal };
+  if (metodoPago === "mixto") {
+    if (!monto) return { efectivo_share: 0, banco_share: 0 };
+    return {
+      efectivo_share: subtotal * (montoEfectivo / monto),
+      banco_share: subtotal * (montoBanco / monto),
+    };
+  }
+  // `metodo_pago` NULL solo es posible en una venta todavía 'pendiente', que
+  // Paso 1 ya excluye (`cv.estado = 'completada'`) — defensivo, no debería
+  // alcanzarse en la práctica.
+  return { efectivo_share: 0, banco_share: 0 };
+}
+
+/**
  * Reporte "Ventas" — concatena el detalle de producto (Paso 1) con los
  * ingresos sin línea propia (Paso 2), ordena por fecha, agrupa por día (la
  * "vista agrupada por día" del Spec) y calcula los totales del rango.
@@ -111,52 +144,91 @@ export async function obtenerResumen(desde: string, hasta: string): Promise<Resu
  * sistema"), así que no hay columna real contra la que filtrar. Se deja en
  * el esquema/tipo por si una fuente futura (Task 9 u otra) sí lo necesita.
  *
- * `total_efectivo`/`total_bancos` NO se calculan sumando `filas.subtotal`
- * agrupadas por el `metodo_pago` de cada fila (eso era un bug real, ver
- * finding "Important" del Task 3 report): `con_sentido_ventas.metodo_pago`
- * admite `'mixto'`, así que una venta mixta en el rango quedaba fuera de
- * ambos conteos aunque sí sumaba a `total_general`. En cambio se leen de
- * `repo.getVentasTotalesPorMetodoPago`, que agrupa directo sobre
- * `movimientos_caja` (tabla donde `metodo_pago` NUNCA es `'mixto'` —
- * `con_sentido.service.ts` ya reparte cada venta mixta en movimientos
- * `efectivo`/`banco` separados al escribir en caja) — ver el comentario de
- * esa función en reportes.repository.ts para el detalle del invariante.
- * `total_general` sigue viniendo de `filas` (no cambia: ya era correcto).
+ * `total_efectivo`/`total_bancos` — segundo intento, ver historial completo
+ * en el report de la Task 3 (dos rounds de fix anteriores):
+ * - Round 0 (original): sumaba `filas.subtotal` agrupado por el
+ *   `metodo_pago` de cada fila. Bug: una venta `'mixto'` no cae en ningún
+ *   balde, así que `total_efectivo + total_bancos < total_general`.
+ * - Round 1 (revertido en este fix): leía los totales con una query
+ *   independiente sobre `movimientos_caja`
+ *   (`getVentasTotalesPorMetodoPago`), acotada solo por rango + alcance +
+ *   `metodo` — pero NUNCA recibía `producto`/`cliente`, así que esos filtros
+ *   no movían los totales; y aun con solo `?metodo=`, una venta mixta sigue
+ *   escribiendo AMBAS mitades en `movimientos_caja` (son dos movimientos
+ *   separados, `efectivo` y `banco`, por diseño de
+ *   `con_sentido.service.ts`), así que `?metodo=banco` seguía sumando la
+ *   mitad efectivo... no, sumaba la mitad banco de una venta que la query de
+ *   `filas` ya había excluido por no ser literalmente `'banco'` — doble
+ *   inconsistencia, no solo "sin filtro".
+ * - Round 2 (este fix): sin segunda query. Se prorratea CADA fila de detalle
+ *   con `repartirPorMetodoPago` (arriba) usando el split real de SU propia
+ *   venta (`cv.monto_efectivo`/`cv.monto_banco`/`cv.monto`, agregados en
+ *   `getVentasDetalle`), y se suma sobre las filas que de verdad sobrevivieron
+ *   el filtro — las mismas que ya ve `filas`/`total_general`. Las filas "sin
+ *   detalle" (Paso 2, de `movimientos_caja`) siguen usando igualdad literal:
+ *   esa tabla nunca tiene `'mixto'` (`con_sentido.service.ts` ya reparte cada
+ *   venta mixta en dos movimientos limpios al escribir en caja), así que no
+ *   hace falta prorratear ahí. Como ya no hay una segunda query con su propio
+ *   alcance de filtros, `total_efectivo + total_bancos === total_general` es
+ *   una identidad aritmética sobre el mismo array `filas`, no una coincidencia
+ *   que dos queries separadas tengan que mantener sincronizada — se cumple
+ *   automáticamente bajo cualquier combinación de `metodo`/`producto`/rango.
  */
 export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasReporte> {
   const { desde, hasta, metodo, cliente, producto } = filtros;
 
-  const [detalle, sinDetalle, totalesPorMetodo] = await Promise.all([
+  const [detalle, sinDetalle] = await Promise.all([
     repo.getVentasDetalle(desde, hasta, { metodo, cliente, producto }),
     repo.getIngresosSinDetalle(desde, hasta, { metodo }),
-    repo.getVentasTotalesPorMetodoPago(desde, hasta, { metodo }),
   ]);
 
-  const filasDetalle: VentasFila[] = detalle.map((d) => ({
-    tipo: "detalle",
-    id: String(d.id),
-    fecha: d.fecha,
-    producto: d.producto,
-    cantidad: Number(d.cantidad),
-    precio_unitario: Number(d.precio_unitario),
-    subtotal: Number(d.subtotal),
-    metodo_pago: d.metodo_pago,
-    area: d.area,
-    consecutivo: d.consecutivo,
-  }));
+  let total_efectivo = 0;
+  let total_bancos = 0;
 
-  const filasSinDetalle: VentasFila[] = sinDetalle.map((s) => ({
-    tipo: "sin_detalle",
-    id: String(s.id),
-    fecha: s.fecha,
-    producto: s.motivo,
-    cantidad: null,
-    precio_unitario: null,
-    subtotal: Number(s.monto),
-    metodo_pago: s.metodo_pago,
-    area: s.area,
-    consecutivo: null,
-  }));
+  const filasDetalle: VentasFila[] = detalle.map((d) => {
+    const subtotal = Number(d.subtotal);
+    const { efectivo_share, banco_share } = repartirPorMetodoPago(
+      d.metodo_pago,
+      subtotal,
+      Number(d.monto),
+      Number(d.monto_efectivo),
+      Number(d.monto_banco),
+    );
+    total_efectivo += efectivo_share;
+    total_bancos += banco_share;
+    return {
+      tipo: "detalle",
+      id: String(d.id),
+      fecha: d.fecha,
+      producto: d.producto,
+      cantidad: Number(d.cantidad),
+      precio_unitario: Number(d.precio_unitario),
+      subtotal,
+      metodo_pago: d.metodo_pago,
+      area: d.area,
+      consecutivo: d.consecutivo,
+    };
+  });
+
+  const filasSinDetalle: VentasFila[] = sinDetalle.map((s) => {
+    const subtotal = Number(s.monto);
+    // `movimientos_caja.metodo_pago` nunca es 'mixto' (CHECK constraint) —
+    // igualdad literal es correcta y exacta acá, sin prorrateo.
+    if (s.metodo_pago === "efectivo") total_efectivo += subtotal;
+    else if (s.metodo_pago === "banco") total_bancos += subtotal;
+    return {
+      tipo: "sin_detalle",
+      id: String(s.id),
+      fecha: s.fecha,
+      producto: s.motivo,
+      cantidad: null,
+      precio_unitario: null,
+      subtotal,
+      metodo_pago: s.metodo_pago,
+      area: s.area,
+      consecutivo: null,
+    };
+  });
 
   const filas = [...filasDetalle, ...filasSinDetalle].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -169,12 +241,6 @@ export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasRepor
     .map(([fecha, total]) => ({ fecha, total }));
 
   const total_general = filas.reduce((acc, f) => acc + f.subtotal, 0);
-  const total_efectivo = Number(
-    totalesPorMetodo.find((t) => t.metodo_pago === "efectivo")?.total ?? 0,
-  );
-  const total_bancos = Number(
-    totalesPorMetodo.find((t) => t.metodo_pago === "banco")?.total ?? 0,
-  );
 
   return {
     filas,

@@ -60,3 +60,12 @@ export const reportesPrestamosFiltrosSchema = z.object({
   destinatarioUsuarioId: z.string().optional(),
 });
 export type ReportesPrestamosFiltrosInput = z.infer<typeof reportesPrestamosFiltrosSchema>;
+
+// Task 9 — un único endpoint `GET /reportes/:tipo/exportar` para los 7
+// reportes; `tipo` restringe el param de ruta a exactamente estos 7 valores
+// (mismos slugs que las 7 rutas de datos de arriba, con guión en vez de
+// slash — ej. "ventas-por-tipo", no "ventas/por-tipo").
+export const reportesExportarTipoSchema = z.object({
+  tipo: z.enum(["resumen", "ventas", "ventas-por-tipo", "gastos", "cierre-caja", "prestamos", "conciliacion"]),
+});
+export type ReportesExportarTipoInput = z.infer<typeof reportesExportarTipoSchema>;

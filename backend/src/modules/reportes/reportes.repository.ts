@@ -435,6 +435,15 @@ export async function getCajerosPorDia(mes: string) {
  *
  * `destinatarioUsuarioId` es el único filtro (Spec: selector de
  * destinatario, no de período — por eso no hay `desde`/`hasta` aquí).
+ *
+ * Trae también `fuente` (fix de review) — el service la necesita para decidir
+ * dónde vive el monto real de una fila `tipo='deuda'`: `vales.schema.ts`
+ * permite una deuda CON `fuente` (dinero que sí salió de caja, a cobrar
+ * después — "deuda con préstamo inicial"), y en ese caso
+ * `vales.service.ts::crearVale` deja `monto_adeudado` en `NULL` (el monto
+ * real queda en `monto_efectivo`/`monto_banco`, igual que un `tipo='pago'`).
+ * Mismo criterio que ya usa `vales.service.ts::cobrarVale` para esa misma
+ * distinción.
  */
 export async function getVales(destinatarioUsuarioId?: string) {
   const params: unknown[] = [];
@@ -445,7 +454,7 @@ export async function getVales(destinatarioUsuarioId?: string) {
   }
 
   const result = await pool.query(
-    `SELECT id, numero, tipo, pagado_a, destinatario_usuario_id, concepto,
+    `SELECT id, numero, tipo, fuente, pagado_a, destinatario_usuario_id, concepto,
             monto_efectivo, monto_banco, monto_adeudado, cobrado_en,
             monto_cobrado_efectivo, monto_cobrado_banco, repuesto_en, created_at
        FROM vales

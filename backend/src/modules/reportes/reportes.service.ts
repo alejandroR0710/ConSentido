@@ -535,16 +535,27 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
  * vale no está etiquetado por área), así que no se reutiliza ningún query
  * builder del resto del módulo.
  *
- * Por cada vale (ya filtrado sin anulados por `getVales`), `monto`/`estado`/
+ * Por cada vale (ya filtrado sin anulados por `getVales`), `estado`/
  * `fecha_resolucion` se derivan según `tipo` — dos obligaciones distintas,
- * con sus propias columnas de "cuánto"/"cuándo se resolvió":
- * - `tipo='deuda'`: `monto = monto_adeudado`; se resuelve cuando se cobra
- *   (`cobrado_en`) → `estado: 'Cobrado'` / `'Pendiente de cobro'`.
- * - `tipo='pago'`: `monto = monto_efectivo + monto_banco`; se resuelve
- *   cuando se repone al dueño (`repuesto_en`) → `estado: 'Repuesto'` /
- *   `'Pendiente de reposición'`.
+ * con sus propias columnas de "cuándo se resolvió":
+ * - `tipo='deuda'`: se resuelve cuando se cobra (`cobrado_en`) →
+ *   `estado: 'Cobrado'` / `'Pendiente de cobro'`.
+ * - `tipo='pago'`: se resuelve cuando se repone al dueño (`repuesto_en`) →
+ *   `estado: 'Repuesto'` / `'Pendiente de reposición'`.
  * Las etiquetas NUNCA se comparten entre los dos tipos (a propósito, para no
  * mezclar "cobrar una deuda" con "reponerle a un dueño") — ver brief, Paso 2.
+ *
+ * `monto` — fix de review (Finding del Task 7 report): NO se deriva de
+ * `tipo`, sino de `fuente` (`monto = fuente ? monto_efectivo + monto_banco :
+ * monto_adeudado`), exactamente igual que `vales.service.ts::cobrarVale`
+ * (línea ~230). El brief original mapeaba `monto` 1:1 con `tipo`
+ * (`'deuda' → monto_adeudado`), pero `vales.schema.ts` permite una deuda CON
+ * `fuente` ("deuda con préstamo inicial": dinero que sí salió de caja) —
+ * para esa forma, `crearVale` deja `monto_adeudado` en `NULL` y el monto real
+ * vive en `monto_efectivo`/`monto_banco`, igual que un `tipo='pago'`. Bajo el
+ * mapeo original esa fila reportaba `monto: 0`, ocultando el préstamo real.
+ * `tipo` sigue decidiendo exactamente lo mismo que antes (y SOLO eso): qué
+ * columna de fecha usar y qué etiquetas de estado mostrar.
  *
  * `total_pendiente`/`total_resuelto` suman `monto` según si la fila tiene
  * `fecha_resolucion` o no, sobre el mismo array `filas` que se devuelve (no
@@ -562,12 +573,15 @@ export async function obtenerPrestamos(destinatarioUsuarioId?: string): Promise<
     let estado: string;
     let fecha_resolucion: string | null;
 
+    // `monto` se deriva de `fuente`, NO de `tipo` (fix de review — ver
+    // comentario del reporte arriba): mismo criterio que
+    // `vales.service.ts::cobrarVale`.
+    monto = v.fuente ? Number(v.monto_efectivo) + Number(v.monto_banco) : Number(v.monto_adeudado);
+
     if (v.tipo === "deuda") {
-      monto = Number(v.monto_adeudado);
       estado = v.cobrado_en ? "Cobrado" : "Pendiente de cobro";
       fecha_resolucion = v.cobrado_en;
     } else {
-      monto = Number(v.monto_efectivo) + Number(v.monto_banco);
       estado = v.repuesto_en ? "Repuesto" : "Pendiente de reposición";
       fecha_resolucion = v.repuesto_en;
     }

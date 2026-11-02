@@ -13,14 +13,12 @@ type Seccion = "general" | "migao" | "consentido" | "insumos" | "talleres" | "pe
 
 const SECCIONES: { id: Seccion; label: string; icon: string }[] = [
   { id: "general", label: "Resumen General", icon: "📊" },
+  { id: "reportes", label: "Reportes", icon: "🧾" },
   { id: "migao", label: "Migao (POS)", icon: "🍽️" },
   { id: "consentido", label: "Con Sentido", icon: "🎨" },
   { id: "insumos", label: "Insumos", icon: "📦" },
   { id: "talleres", label: "Talleres", icon: "🔧" },
   { id: "pedidos", label: "Pedidos", icon: "🚚" },
-  // Icono distinto a "general" (🧾 en vez del 📊 sugerido en el brief) para
-  // no repetir el mismo ícono dos veces en la misma barra de pestañas.
-  { id: "reportes", label: "Reportes", icon: "🧾" },
 ];
 
 export function DashboardPage() {

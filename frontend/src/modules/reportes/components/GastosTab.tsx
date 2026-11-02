@@ -5,6 +5,8 @@ import { formatMoney } from "../../../shared/format/money";
 import { useTheme } from "../../../shared/theme/ThemeContext";
 import { reportesApi, type GastoFila, type GastoProveedorTotal, type GastosReporte } from "../api";
 import { BotonExportarExcel } from "./BotonExportarExcel";
+import { resolverRangoSemana } from "../semana";
+import { SemanaSelector } from "./SemanaSelector";
 
 interface GastosTabProps {
   desde: string;
@@ -210,8 +212,12 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
   const [categoriaId, setCategoriaId] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [metodo, setMetodo] = useState<MetodoFiltro>("");
+  const [semana, setSemana] = useState("");
   const [datos, setDatos] = useState<GastosReporte | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const rangoSemana = resolverRangoSemana(desde, hasta, semana);
+  const desdeConsulta = rangoSemana?.desde ?? desde;
+  const hastaConsulta = rangoSemana?.hasta ?? hasta;
 
   useEffect(() => {
     let cancelado = false;
@@ -219,8 +225,8 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
     setDatos(null);
     reportesApi
       .obtenerGastos({
-        desde,
-        hasta,
+        desde: desdeConsulta,
+        hasta: hastaConsulta,
         categoriaId: categoriaId ? Number(categoriaId) : undefined,
         proveedorId: proveedorId || undefined,
         metodo: metodo || undefined,
@@ -234,7 +240,7 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
     return () => {
       cancelado = true;
     };
-  }, [desde, hasta, categoriaId, proveedorId, metodo]);
+  }, [desdeConsulta, hastaConsulta, categoriaId, proveedorId, metodo]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
@@ -255,8 +261,8 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
         <BotonExportarExcel
           tipo="gastos"
           filtros={{
-            desde,
-            hasta,
+            desde: desdeConsulta,
+            hasta: hastaConsulta,
             categoriaId: categoriaId ? Number(categoriaId) : undefined,
             proveedorId: proveedorId || undefined,
             metodo: metodo || undefined,
@@ -285,6 +291,8 @@ export function GastosTab({ desde, hasta }: GastosTabProps) {
             ))}
           </select>
         </label>
+
+        <SemanaSelector desde={desde} hasta={hasta} value={semana} onChange={setSemana} />
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">

@@ -3,6 +3,8 @@ import { ApiError } from "../../../shared/api/client";
 import { formatMoney } from "../../../shared/format/money";
 import { reportesApi, type VentasFila, type VentasReporte } from "../api";
 import { BotonExportarExcel } from "./BotonExportarExcel";
+import { resolverRangoSemana } from "../semana";
+import { SemanaSelector } from "./SemanaSelector";
 
 interface VentasTabProps {
   desde: string;
@@ -187,8 +189,12 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
   const [cliente, setCliente] = useState("");
   const [producto, setProducto] = useState("");
   const [vista, setVista] = useState<VistaTabla>("plana");
+  const [semana, setSemana] = useState("");
   const [datos, setDatos] = useState<VentasReporte | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const rangoSemana = resolverRangoSemana(desde, hasta, semana);
+  const desdeConsulta = rangoSemana?.desde ?? desde;
+  const hastaConsulta = rangoSemana?.hasta ?? hasta;
 
   useEffect(() => {
     const t = setTimeout(() => setCliente(clienteInput.trim()), 400);
@@ -206,8 +212,8 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
     setDatos(null);
     reportesApi
       .obtenerVentas({
-        desde,
-        hasta,
+        desde: desdeConsulta,
+        hasta: hastaConsulta,
         metodo: metodo || undefined,
         cliente: cliente || undefined,
         producto: producto || undefined,
@@ -221,7 +227,7 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
     return () => {
       cancelado = true;
     };
-  }, [desde, hasta, metodo, cliente, producto]);
+  }, [desdeConsulta, hastaConsulta, metodo, cliente, producto]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-center text-brand-ink/60 dark:text-brand-vanilla/60">Cargando...</p>;
@@ -246,7 +252,7 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
       <div className="flex justify-end">
         <BotonExportarExcel
           tipo="ventas"
-          filtros={{ desde, hasta, metodo: metodo || undefined, cliente: cliente || undefined, producto: producto || undefined }}
+          filtros={{ desde: desdeConsulta, hasta: hastaConsulta, metodo: metodo || undefined, cliente: cliente || undefined, producto: producto || undefined }}
         />
       </div>
 
@@ -292,6 +298,14 @@ export function VentasTab({ desde, hasta }: VentasTabProps) {
             className="rounded-md border border-brand-vanilla-dark bg-transparent px-2 py-1.5 text-brand-ink placeholder:text-brand-ink/40 dark:border-brand-green-700 dark:text-brand-vanilla dark:placeholder:text-brand-vanilla/40"
           />
         </label>
+
+        <SemanaSelector
+          desde={desde}
+          hasta={hasta}
+          value={semana}
+          onChange={setSemana}
+          incluirSemanaIso
+        />
 
         <div className="ml-auto flex rounded-lg border border-brand-vanilla-dark p-1 dark:border-brand-green-700">
           {(["plana", "agrupada"] as const).map((v) => (

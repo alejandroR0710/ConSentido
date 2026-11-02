@@ -138,7 +138,8 @@ Cada `git push` a la rama `main` hace esto solo:
 1. Compila el sistema en GitHub.
 2. Lo sube por SSH/rsync a `~/sistemapos`.
 3. Si cambió `package-lock.json` o faltan dependencias instaladas, ejecuta
-   `npm install --omit=dev` en la carpeta de la app del servidor.
+   `npm install --omit=dev` en la carpeta de la app del servidor, activando
+   primero el entorno Node.js configurado para Passenger.
 4. Reinicia Passenger y comprueba que `/health` responda.
 
 Es el mismo método de EComerceConsentido. El archivo que lo hace es

@@ -94,7 +94,7 @@ jobs:
           # Sin --delete. -i lista lo que cambió: si cambió package-lock.json
           # hay dependencias nuevas que instalar en el servidor.
           CAMBIOS=$(rsync -az -i -e "$SSH" package.json package-lock.json "$REMOTE:$APP_DIR/")
-          if echo "$CAMBIOS" | grep -q "package-lock.json" || ! $SSH "$REMOTE" "cd $APP_DIR && npm ls --omit=dev --depth=0 >/dev/null 2>&1"; then
+          if echo "$CAMBIOS" | grep -q "package-lock.json" || ! $SSH "$REMOTE" "ACTIVATE=\$(find \"\$HOME/nodevenv/$APP_DIR\" -type f -path '*/bin/activate' -print -quit); [ -z \"\$ACTIVATE\" ] || . \"\$ACTIVATE\"; cd \"\$HOME/$APP_DIR\" && npm ls --omit=dev --depth=0 >/dev/null 2>&1"; then
             echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
@@ -106,7 +106,8 @@ jobs:
         env:
           SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}
           REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
-        run: $SSH "$REMOTE" "cd $APP_DIR && npm install --omit=dev --no-audit --no-fund"
+        run: |
+          $SSH "$REMOTE" "ACTIVATE=\$(find \"\$HOME/nodevenv/$APP_DIR\" -type f -path '*/bin/activate' -print -quit); [ -z \"\$ACTIVATE\" ] || . \"\$ACTIVATE\"; cd \"\$HOME/$APP_DIR\" && npm install --omit=dev --no-audit --no-fund"
 
       - name: Reiniciar la app (Passenger)
         env:

@@ -134,12 +134,12 @@ en cada reinicio, así que puede que no quede ninguna.
 
 ## Despliegue automático (GitHub Actions)
 
-Cada `git push` a la rama `hosting-mysql` hace esto solo:
+Cada `git push` a la rama `main` hace esto solo:
 1. Compila el sistema en GitHub.
 2. Lo sube por SSH/rsync a `~/sistemapos`.
-3. Si cambiaron las dependencias, avisa en amarillo en GitHub. Esas se
-   instalan a mano: DirectAdmin → Setup Node.js App → **Run NPM Install**.
-4. Reinicia la app y comprueba que `/health` responda.
+3. Si cambió `package-lock.json` o faltan dependencias instaladas, ejecuta
+   `npm install --omit=dev` en la carpeta de la app del servidor.
+4. Reinicia Passenger y comprueba que `/health` responda.
 
 Es el mismo método de EComerceConsentido. El archivo que lo hace es
 `.github/workflows/desplegar-hosting.yml`.

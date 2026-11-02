@@ -26,8 +26,8 @@ name: Desplegar al hosting (InterServer / DirectAdmin)
 # Lo que este workflow NO hace, a propósito:
 #   - No aplica cambios de base de datos: se corren a mano en phpMyAdmin/SSH.
 #   - No sube .env ni secretos del backend: viven en el servidor / panel.
-#   - No corre npm install en el servidor: si cambió package-lock.json deja un
-#     aviso y se instala a mano (Setup Node.js App -> Run NPM Install -> Restart).
+#   - Solo corre npm install --omit=dev en el servidor cuando cambió
+#     package-lock.json o faltan dependencias instaladas; nunca compila allí.
 
 on:
   push:
@@ -79,6 +79,7 @@ jobs:
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Subir al servidor
+        id: upload
         env:
           SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}
           REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
@@ -91,11 +92,21 @@ jobs:
           rsync -az --delete -e "$SSH" dist/ "$REMOTE:$APP_DIR/dist/"
           rsync -az --delete -e "$SSH" public/ "$REMOTE:$APP_DIR/public/"
           # Sin --delete. -i lista lo que cambió: si cambió package-lock.json
-          # hay dependencias nuevas que instalar a mano.
+          # hay dependencias nuevas que instalar en el servidor.
           CAMBIOS=$(rsync -az -i -e "$SSH" package.json package-lock.json "$REMOTE:$APP_DIR/")
-          if echo "$CAMBIOS" | grep -q "package-lock.json"; then
-            echo "::warning::Cambiaron las dependencias: en DirectAdmin → Setup Node.js App → Run NPM Install → Restart"
+          if echo "$CAMBIOS" | grep -q "package-lock.json" || ! $SSH "$REMOTE" "cd $APP_DIR && npm ls --omit=dev --depth=0 >/dev/null 2>&1"; then
+            echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Instalar dependencias de producción en el servidor
+        if: steps.upload.outputs.dependencies_changed == 'true'
+        timeout-minutes: 15
+        env:
+          SSH: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}
+          REMOTE: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: $SSH "$REMOTE" "cd $APP_DIR && npm install --omit=dev --no-audit --no-fund"
 
       - name: Reiniciar la app (Passenger)
         env:

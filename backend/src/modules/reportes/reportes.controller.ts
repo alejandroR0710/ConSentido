@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ok } from "../../shared/utils/response";
-import { ColumnaExcel, FORMATO_MONTO, generarExcel } from "./reportes.excel";
+import { CLAVE_NUMFMT_POR_CELDA, ColumnaExcel, FORMATO_MONTO, FORMATO_PORCENTAJE, generarExcel } from "./reportes.excel";
 import {
   reportesCierreCajaSchema,
   reportesExportarTipoSchema,
@@ -168,9 +168,10 @@ function mapearVentas(ventas: VentasReporte) {
 /** Ventas por tipo — `porDia` ya es la tabla diaria Insumos/Con
  *  Sentido/Talleres/Total del Spec, mapeo 1:1. Se agregan la fila TOTAL del
  *  rango y una fila de % de participación (mismas columnas, valores en
- *  escala 0-100 — la celda queda en número plano, sin formato `%` de Excel,
- *  para no complicar `generarExcel` con un numFmt por fila en vez de por
- *  columna). */
+ *  escala 0-100). Fix de revisión final (Finding 2) — esa fila no es dinero,
+ *  así que no puede quedar bajo el `FORMATO_MONTO` de columna (regresión del
+ *  fix de moneda real, commit a141535): se le pide `FORMATO_PORCENTAJE` por
+ *  celda vía `CLAVE_NUMFMT_POR_CELDA` (ver `reportes.excel.ts`). */
 function mapearVentasPorTipo(reporte: VentasPorTipoReporte) {
   const columnas: ColumnaExcel[] = [
     { header: "Fecha", key: "fecha" },
@@ -201,6 +202,11 @@ function mapearVentasPorTipo(reporte: VentasPorTipoReporte) {
     con_sentido: reporte.participacion.con_sentido,
     talleres: reporte.participacion.talleres,
     total: null,
+    [CLAVE_NUMFMT_POR_CELDA]: {
+      insumos: FORMATO_PORCENTAJE,
+      con_sentido: FORMATO_PORCENTAJE,
+      talleres: FORMATO_PORCENTAJE,
+    },
   });
 
   return { nombreHoja: "Ventas por tipo", columnas, filas };
@@ -263,6 +269,10 @@ function mapearCierreCaja(reporte: CierreCajaReporte) {
     { header: "Notas/Responsable", key: "notas_responsable" },
   ];
 
+  // `efectivo`/`banco`/`total_dinero` llegan en `null` (fix de revisión
+  // final I4) cuando `saldo_inicial` es `null` — se exportan como
+  // "No disponible", mismo literal que ya usa `filaSaldoInicial` abajo para
+  // ese mismo dato faltante, nunca como `0`.
   const filaACelda = (f: CierreCajaFila): Record<string, unknown> => ({
     fecha: f.fecha,
     venta_efectivo: f.venta_efectivo,
@@ -270,9 +280,9 @@ function mapearCierreCaja(reporte: CierreCajaReporte) {
     venta_dia: f.venta_dia,
     gastos_efectivo: f.gastos_efectivo,
     gastos_banco: f.gastos_banco,
-    efectivo: f.efectivo,
-    banco: f.banco,
-    total_dinero: f.total_dinero,
+    efectivo: f.efectivo ?? "No disponible",
+    banco: f.banco ?? "No disponible",
+    total_dinero: f.total_dinero ?? "No disponible",
     notas_responsable: f.notas_responsable,
   });
 

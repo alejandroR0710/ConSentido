@@ -188,6 +188,32 @@ export async function getVentasPorMes() {
  * de `movimientos_caja` con una query independiente que no recibía estos
  * mismos filtros, rompiendo la consistencia bajo `?producto=`/`?cliente=` y
  * duplicando el leak de la otra mitad de una venta mixta bajo `?metodo=`).
+ *
+ * Fix de revisión final (Finding I1) — `AND cv.metodo_pago = $n` se cambió a
+ * `AND cv.metodo_pago IN ($n, 'mixto')`: filtrar por igualdad estricta contra
+ * `'efectivo'`/`'banco'` excluía POR COMPLETO cualquier venta `'mixto'` bajo
+ * `?metodo=`, perdiendo del todo la mitad de esa venta que sí correspondía al
+ * método pedido (ej. `?metodo=banco` con una venta mixta de $4.000
+ * efectivo/$6.000 banco perdía esos $6.000 reales). Con el `IN`, una venta
+ * mixta vuelve a aparecer bajo cualquier filtro de método — el service
+ * (`obtenerVentas`) es quien decide, con `repartirPorMetodoPago`, que su
+ * aporte a esta vista filtrada sea solo SU PARTE del método pedido (no las
+ * dos mitades, no el subtotal completo).
+ *
+ * Fix de revisión final (Finding I2, parte 1) — `AND cv.pago_administrativo
+ * = 0` excluye los carritos de mesa cerrados sin pago real (ver
+ * `con_sentido.repository.ts` línea ~610: quedan `estado = 'completada'` pero
+ * NUNCA generan ninguna fila en `movimientos_caja`, ningún dinero real se
+ * movió). Sin este filtro, Ventas contaba su subtotal completo como venta
+ * real mientras Resumen (que sí lee `movimientos_caja`) no contaba nada para
+ * esa misma venta — descuadre entre los dos reportes.
+ *
+ * Se agrega `cv.descuento` al SELECT (Finding I2, parte 2) — el service la
+ * necesita para escalar el subtotal bruto de cada item (`cvi.subtotal =
+ * cantidad * precio_unitario`, generado SIN descontar) al neto real que sí
+ * llegó a `movimientos_caja` en un carrito de mesa con descuento aplicado
+ * (`cv.monto` ya es NETO del descuento — confirmado en
+ * `con_sentido.service.ts` línea ~339).
  */
 export async function getVentasDetalle(
   desde: string,
@@ -198,7 +224,7 @@ export async function getVentasDetalle(
   let condiciones = "";
   if (filtros.metodo) {
     params.push(filtros.metodo);
-    condiciones += ` AND cv.metodo_pago = $${params.length}`;
+    condiciones += ` AND cv.metodo_pago IN ($${params.length}, 'mixto')`;
   }
   if (filtros.producto) {
     params.push(`%${filtros.producto}%`);
@@ -209,12 +235,13 @@ export async function getVentasDetalle(
     `SELECT cv.id, cv.created_at, DATE_FORMAT(cv.created_at, '%Y-%m-%d') AS fecha,
             cvi.producto, cvi.cantidad, cvi.precio_unitario, cvi.subtotal,
             cv.metodo_pago, m.slug AS area, f.numero AS consecutivo,
-            cv.monto, cv.monto_efectivo, cv.monto_banco
+            cv.monto, cv.monto_efectivo, cv.monto_banco, cv.descuento
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
        LEFT JOIN modulos m ON m.id = cvi.modulo_origen_id
        LEFT JOIN facturas f ON f.con_sentido_venta_id = cv.id
       WHERE cv.estado = 'completada'
+        AND cv.pago_administrativo = 0
         AND DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         ${condiciones}
       ORDER BY cv.created_at ASC, cvi.id ASC`,
@@ -238,6 +265,22 @@ export async function getVentasDetalle(
  * `'pendiente'` no debe desaparecer de ningún lado — como sus items todavía
  * no cuentan en el Paso 1, su ingreso tampoco se excluye acá (cae en este
  * Paso 2 en vez de perderse).
+ *
+ * Fix de revisión final — se agrega `AND pago_administrativo = 0` a esa
+ * misma subquery de exclusión (regresión introducida junto con el Finding
+ * I2, parte 1, de `getVentasDetalle`). Un carrito cerrado administrativamente
+ * (`pago_administrativo = 1`, ver `migao.service.ts::cerrarCobroAdministrativo`
+ * / `con_sentido.repository.ts::marcarCarritoAdministrativo`) puede tener
+ * abonos REALES previos en `movimientos_caja` — "lo ya abonado de verdad
+ * queda tal cual en Caja" (comentario de `cerrarCobroAdministrativo`) — solo
+ * el remanente se cierra sin dinero real. `getVentasDetalle` excluye TODA la
+ * venta administrativa del Paso 1 (correcto: sus líneas de producto no
+ * representan dinero real completo), así que esos abonos reales ya no
+ * pueden darse por "cubiertos por el Paso 1" acá — sin `pago_administrativo
+ * = 0` en esta subquery, quedaban excluidos de los dos pasos a la vez y
+ * desaparecían del todo de Ventas, subcontando dinero real. Una venta normal
+ * (`pago_administrativo = 0`) sigue excluida acá tal cual, porque sus items
+ * sí la representan por completo en el Paso 1.
  */
 export async function getIngresosSinDetalle(
   desde: string,
@@ -261,7 +304,9 @@ export async function getIngresosSinDetalle(
         AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         AND NOT (
           mc.referencia_entidad = 'con_sentido_ventas'
-          AND mc.referencia_id IN (SELECT id FROM con_sentido_ventas WHERE estado = 'completada')
+          AND mc.referencia_id IN (
+            SELECT id FROM con_sentido_ventas WHERE estado = 'completada' AND pago_administrativo = 0
+          )
         )
         ${condiciones}
       ORDER BY mc.created_at ASC`,
@@ -383,11 +428,23 @@ export async function getMovimientosDiarios(mes: string) {
 
 /**
  * Reporte "Cierre de caja diario", Paso 2a — semilla del saldo corrido: el
- * turno más reciente abierto EN o ANTES del mes seleccionado (comparación
- * de strings `YYYY-MM`, válida porque el formato ya viene cero-rellenado y
- * ordena igual que una fecha real). Si no existe ninguno (`rows[0] ===
- * undefined`), el service devuelve `saldo_inicial: null` — dato no
- * disponible, nunca `0` (Review Focus).
+ * turno más reciente abierto ANTES del mes seleccionado. Si no existe
+ * ninguno (`rows[0] === undefined`), el service devuelve `saldo_inicial:
+ * null` — dato no disponible, nunca `0` (Review Focus).
+ *
+ * Fix de revisión final (Finding C1) — el filtro anterior,
+ * `DATE_FORMAT(abierto_en, '%Y-%m') <= $1`, comparaba STRINGS de mes
+ * (`'YYYY-MM'`), no fechas: eso incluye cualquier turno abierto DURANTE el
+ * propio mes solicitado (ej. pedir `mes=2026-10` con turnos abiertos el 1 y
+ * el 31 de octubre devolvía el del 31, el turno MÁS RECIENTE *de* octubre,
+ * en vez de "el turno más reciente antes de que octubre empezara" — que es
+ * lo que `ORDER BY abierto_en DESC LIMIT 1` necesita para que
+ * `getFlujoEntreFechas` (ver abajo) cubra exactamente la ventana correcta.
+ * `abierto_en < CONCAT($1, '-01')` es una comparación real `DATETIME <
+ * DATETIME` contra el primer instante del mes pedido (`'2026-10-01'` se
+ * interpreta como `'2026-10-01 00:00:00'`) — ya no cuela ningún turno
+ * abierto dentro del propio mes solicitado, solo turnos estrictamente
+ * anteriores a él.
  *
  * `abierto_en` se trae (además de los dos montos iniciales) porque el
  * service lo necesita como límite inferior de `getFlujoEntreFechas` — ver
@@ -401,7 +458,7 @@ export async function getPrimerTurnoDelRango(mes: string) {
   const result = await pool.query(
     `SELECT monto_inicial_efectivo, monto_inicial_banco, abierto_en
        FROM turnos_caja
-      WHERE DATE_FORMAT(abierto_en, '%Y-%m') <= $1
+      WHERE abierto_en < CONCAT($1, '-01')
       ORDER BY abierto_en DESC
       LIMIT 1`,
     [mes],

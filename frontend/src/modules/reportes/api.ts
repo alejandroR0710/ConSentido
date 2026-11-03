@@ -201,9 +201,13 @@ export interface CierreCajaFila {
   venta_dia: number;
   gastos_efectivo: number;
   gastos_banco: number;
-  efectivo: number;
-  banco: number;
-  total_dinero: number;
+  /** `null` cuando `CierreCajaReporte.saldo_inicial` es `null` (sin turno
+   *  previo del que partir) — mismo contrato que el backend
+   *  (`reportes.types.ts::CierreCajaFila`); `CierreCajaTab.tsx` ya lo
+   *  maneja en runtime vía `formatMoneyONulo`. */
+  efectivo: number | null;
+  banco: number | null;
+  total_dinero: number | null;
   notas_responsable: string;
 }
 

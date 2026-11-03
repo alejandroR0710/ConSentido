@@ -250,13 +250,20 @@ export interface CierreCajaFila {
   gastos_banco: number;
   /** Saldo corrido de efectivo: `efectivo` del día anterior + venta − gastos
    *  de efectivo de este día (arranca desde `saldo_inicial`, NUNCA desde 0 —
-   *  Review Focus). */
-  efectivo: number;
-  /** Mismo saldo corrido, lado banco. */
-  banco: number;
+   *  Review Focus). `null` (dato no disponible, NUNCA un número calculado
+   *  desde una semilla de 0 — fix de revisión final I4) cuando
+   *  `CierreCajaReporte.saldo_inicial` es `null`: sin un saldo inicial real
+   *  del que partir, cualquier saldo corrido que se mostrara sería dinero
+   *  inventado, no uno real. Las columnas de FLUJO del día
+   *  (`venta_efectivo`/`venta_banco`/`venta_dia`/`gastos_efectivo`/
+   *  `gastos_banco`) NO se ven afectadas: son movimientos reales e
+   *  independientes del saldo inicial. */
+  efectivo: number | null;
+  /** Mismo saldo corrido, lado banco — mismo criterio de `null` que `efectivo`. */
+  banco: number | null;
   /** = `efectivo + banco` de este mismo renglón (no una suma de otra
-   *  columna). */
-  total_dinero: number;
+   *  columna) — `null` si cualquiera de los dos lo es (mismo criterio). */
+  total_dinero: number | null;
   /** Nombre(s) del/los cajero(s) cuyo turno abrió ese día calendario,
    *  separados por coma si hubo más de uno (cambio de turno); `"—"` si
    *  ningún turno abrió ese día. En la fila `TOTAL` siempre `"—"` (no hay un

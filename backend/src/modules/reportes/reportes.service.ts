@@ -514,6 +514,15 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
     };
   }
 
+  // Arranca en 0 SOLO para poder seguir acumulando el flujo aritméticamente
+  // día a día (`efectivoCorrido`/`bancoCorrido` son variables internas, no
+  // el valor expuesto) — cuando `saldo_inicial` es `null` (ningún turno
+  // registrado hasta este mes), ese cómputo interno sigue corriendo sobre
+  // una base de 0, pero NUNCA se expone como si fuera dinero real: cada
+  // fila de `dias`/`total` abajo pisa `efectivo`/`banco`/`total_dinero` con
+  // `null` en ese caso (fix de revisión final, Finding I4) — mostrar un
+  // saldo corrido fabricado desde una semilla de 0 es exactamente el "nunca
+  // asumas 0 para un dato faltante" que este módulo existe para evitar.
   let efectivoCorrido = saldo_inicial?.efectivo ?? 0;
   let bancoCorrido = saldo_inicial?.banco ?? 0;
 
@@ -537,9 +546,9 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
       venta_dia: m.venta_efectivo + m.venta_banco,
       gastos_efectivo: m.gastos_efectivo,
       gastos_banco: m.gastos_banco,
-      efectivo: efectivoCorrido,
-      banco: bancoCorrido,
-      total_dinero: efectivoCorrido + bancoCorrido,
+      efectivo: saldo_inicial ? efectivoCorrido : null,
+      banco: saldo_inicial ? bancoCorrido : null,
+      total_dinero: saldo_inicial ? efectivoCorrido + bancoCorrido : null,
       notas_responsable: responsables?.length ? responsables.join(", ") : "—",
     };
   });
@@ -547,7 +556,9 @@ export async function obtenerCierreCaja(mes: string): Promise<CierreCajaReporte>
   // Fila TOTAL: los 5 montos de movimiento son la SUMA de los `dias`
   // (incluido el último — anti-goal del Excel original, Spec); el saldo
   // corrido (`efectivo`/`banco`/`total_dinero`) es el del ÚLTIMO día, no una
-  // suma de saldos (sumar saldos corridos no tendría sentido aritmético).
+  // suma de saldos (sumar saldos corridos no tendría sentido aritmético) —
+  // ya viene en `null` desde `ultimoDia` cuando `saldo_inicial` es `null`,
+  // se propaga tal cual sin necesitar su propio chequeo acá.
   const ultimoDia = dias[dias.length - 1];
   const total: CierreCajaFila = {
     fecha: "TOTAL",

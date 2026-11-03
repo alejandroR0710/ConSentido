@@ -263,6 +263,10 @@ function mapearCierreCaja(reporte: CierreCajaReporte) {
     { header: "Notas/Responsable", key: "notas_responsable" },
   ];
 
+  // `efectivo`/`banco`/`total_dinero` llegan en `null` (fix de revisión
+  // final I4) cuando `saldo_inicial` es `null` — se exportan como
+  // "No disponible", mismo literal que ya usa `filaSaldoInicial` abajo para
+  // ese mismo dato faltante, nunca como `0`.
   const filaACelda = (f: CierreCajaFila): Record<string, unknown> => ({
     fecha: f.fecha,
     venta_efectivo: f.venta_efectivo,
@@ -270,9 +274,9 @@ function mapearCierreCaja(reporte: CierreCajaReporte) {
     venta_dia: f.venta_dia,
     gastos_efectivo: f.gastos_efectivo,
     gastos_banco: f.gastos_banco,
-    efectivo: f.efectivo,
-    banco: f.banco,
-    total_dinero: f.total_dinero,
+    efectivo: f.efectivo ?? "No disponible",
+    banco: f.banco ?? "No disponible",
+    total_dinero: f.total_dinero ?? "No disponible",
     notas_responsable: f.notas_responsable,
   });
 

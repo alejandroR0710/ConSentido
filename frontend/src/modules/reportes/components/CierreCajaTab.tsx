@@ -35,7 +35,17 @@ function formatFechaCorta(fecha: string): string {
  * solo imprime los 9 campos de `CierreCajaFila` tal cual llegan, nunca los
  * recalcula ni los re-suma, así que esa diferencia de semántica por columna
  * queda resuelta enteramente del lado del backend (Review Focus del brief).
+ *
+ * `efectivo`/`banco`/`total_dinero` llegan en `null` (fix de revisión final
+ * I4) cuando `saldo_inicial` es `null` — ningún turno registrado antes de
+ * este mes, así que no hay semilla real de la que partir el saldo corrido.
+ * Se renderizan como "—" (mismo signo que ya usa `FilaSaldoInicial` para las
+ * columnas de movimiento que no aplican), nunca como "$0" fabricado.
  */
+function formatMoneyONulo(valor: number | null): string {
+  return valor === null ? "—" : formatMoney(valor);
+}
+
 function FilaCierreCaja({ fila, esTotal }: { fila: CierreCajaFila; esTotal: boolean }) {
   return (
     <tr
@@ -56,9 +66,9 @@ function FilaCierreCaja({ fila, esTotal }: { fila: CierreCajaFila; esTotal: bool
       <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoney(fila.venta_banco)}</td>
       <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoney(fila.gastos_efectivo)}</td>
       <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoney(fila.gastos_banco)}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoney(fila.efectivo)}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoney(fila.banco)}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-right font-medium">{formatMoney(fila.total_dinero)}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoneyONulo(fila.efectivo)}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-right">{formatMoneyONulo(fila.banco)}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-right font-medium">{formatMoneyONulo(fila.total_dinero)}</td>
       <td className="px-3 py-2">{fila.notas_responsable}</td>
     </tr>
   );

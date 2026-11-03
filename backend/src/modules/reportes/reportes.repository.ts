@@ -383,11 +383,23 @@ export async function getMovimientosDiarios(mes: string) {
 
 /**
  * Reporte "Cierre de caja diario", Paso 2a — semilla del saldo corrido: el
- * turno más reciente abierto EN o ANTES del mes seleccionado (comparación
- * de strings `YYYY-MM`, válida porque el formato ya viene cero-rellenado y
- * ordena igual que una fecha real). Si no existe ninguno (`rows[0] ===
- * undefined`), el service devuelve `saldo_inicial: null` — dato no
- * disponible, nunca `0` (Review Focus).
+ * turno más reciente abierto ANTES del mes seleccionado. Si no existe
+ * ninguno (`rows[0] === undefined`), el service devuelve `saldo_inicial:
+ * null` — dato no disponible, nunca `0` (Review Focus).
+ *
+ * Fix de revisión final (Finding C1) — el filtro anterior,
+ * `DATE_FORMAT(abierto_en, '%Y-%m') <= $1`, comparaba STRINGS de mes
+ * (`'YYYY-MM'`), no fechas: eso incluye cualquier turno abierto DURANTE el
+ * propio mes solicitado (ej. pedir `mes=2026-10` con turnos abiertos el 1 y
+ * el 31 de octubre devolvía el del 31, el turno MÁS RECIENTE *de* octubre,
+ * en vez de "el turno más reciente antes de que octubre empezara" — que es
+ * lo que `ORDER BY abierto_en DESC LIMIT 1` necesita para que
+ * `getFlujoEntreFechas` (ver abajo) cubra exactamente la ventana correcta.
+ * `abierto_en < CONCAT($1, '-01')` es una comparación real `DATETIME <
+ * DATETIME` contra el primer instante del mes pedido (`'2026-10-01'` se
+ * interpreta como `'2026-10-01 00:00:00'`) — ya no cuela ningún turno
+ * abierto dentro del propio mes solicitado, solo turnos estrictamente
+ * anteriores a él.
  *
  * `abierto_en` se trae (además de los dos montos iniciales) porque el
  * service lo necesita como límite inferior de `getFlujoEntreFechas` — ver
@@ -401,7 +413,7 @@ export async function getPrimerTurnoDelRango(mes: string) {
   const result = await pool.query(
     `SELECT monto_inicial_efectivo, monto_inicial_banco, abierto_en
        FROM turnos_caja
-      WHERE DATE_FORMAT(abierto_en, '%Y-%m') <= $1
+      WHERE abierto_en < CONCAT($1, '-01')
       ORDER BY abierto_en DESC
       LIMIT 1`,
     [mes],

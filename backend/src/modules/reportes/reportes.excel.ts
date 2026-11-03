@@ -7,6 +7,23 @@ import ExcelJS from "exceljs";
  *  solo el número plano. */
 export const FORMATO_MONTO = '"$"#,##0';
 
+/** Formato numérico para porcentajes en escala 0-100 (ej. `33.33` →
+ *  `"33.33%"`) — NO moneda. Ver `CLAVE_NUMFMT_POR_CELDA`: una fila como "%
+ *  Participación" de Ventas por tipo comparte columnas con `FORMATO_MONTO`
+ *  pero sus valores no son dinero (fix de revisión final, Finding 2: ese
+ *  renglón se exportaba con el `$` de la columna por quedar bajo el mismo
+ *  `numFmt` de columna que las filas de monto reales). */
+export const FORMATO_PORCENTAJE = '0.00"%"';
+
+/** Clave reservada que una fila puede llevar para pedir, SOLO para sus
+ *  propias celdas, un `numFmt` distinto al de la columna (ej. la fila "%
+ *  Participación" de Ventas por tipo, que no es dinero aunque comparta
+ *  columnas con `FORMATO_MONTO`) — ver Finding 2 de la revisión final. Valor
+ *  esperado: `Record<key de columna, numFmt>`. No es una columna real: se
+ *  retira de la fila antes de escribirla y se consume aparte, después de
+ *  `addRows`, para sobreescribir la celda puntual. */
+export const CLAVE_NUMFMT_POR_CELDA = "__numFmtPorCelda";
+
 export interface ColumnaExcel {
   header: string;
   key: string;
@@ -62,12 +79,27 @@ export async function generarExcel(
   const filasRedondeadas = filas.map((fila) => {
     const copia: Record<string, unknown> = {};
     for (const [clave, valor] of Object.entries(fila)) {
+      if (clave === CLAVE_NUMFMT_POR_CELDA) continue;
       copia[clave] = typeof valor === "number" ? Math.round(valor * 100) / 100 : valor;
     }
     return copia;
   });
 
   hoja.addRows(filasRedondeadas);
+
+  // Overrides de numFmt por celda (Finding 2, revisión final) — se aplican
+  // DESPUÉS de `addRows`, sobre la celda puntual de esa fila, para no
+  // arrastrar el numFmt de la columna (ej. `FORMATO_MONTO`) a una fila que
+  // ahí comparte columna pero no es dinero (ej. "% Participación" en Ventas
+  // por tipo).
+  filas.forEach((fila, indice) => {
+    const overrides = fila[CLAVE_NUMFMT_POR_CELDA] as Record<string, string> | undefined;
+    if (!overrides) return;
+    const filaExcel = hoja.getRow(indice + 2); // +1 por índice 1-based, +1 por la fila de encabezado
+    for (const [key, numFmt] of Object.entries(overrides)) {
+      filaExcel.getCell(key).numFmt = numFmt;
+    }
+  });
 
   // `workbook.xlsx.writeBuffer()` devuelve un Node `Buffer` real en runtime,
   // pero el .d.ts de exceljs declara su propio tipo local `Buffer` (un alias

@@ -265,6 +265,22 @@ export async function getVentasDetalle(
  * `'pendiente'` no debe desaparecer de ningún lado — como sus items todavía
  * no cuentan en el Paso 1, su ingreso tampoco se excluye acá (cae en este
  * Paso 2 en vez de perderse).
+ *
+ * Fix de revisión final — se agrega `AND pago_administrativo = 0` a esa
+ * misma subquery de exclusión (regresión introducida junto con el Finding
+ * I2, parte 1, de `getVentasDetalle`). Un carrito cerrado administrativamente
+ * (`pago_administrativo = 1`, ver `migao.service.ts::cerrarCobroAdministrativo`
+ * / `con_sentido.repository.ts::marcarCarritoAdministrativo`) puede tener
+ * abonos REALES previos en `movimientos_caja` — "lo ya abonado de verdad
+ * queda tal cual en Caja" (comentario de `cerrarCobroAdministrativo`) — solo
+ * el remanente se cierra sin dinero real. `getVentasDetalle` excluye TODA la
+ * venta administrativa del Paso 1 (correcto: sus líneas de producto no
+ * representan dinero real completo), así que esos abonos reales ya no
+ * pueden darse por "cubiertos por el Paso 1" acá — sin `pago_administrativo
+ * = 0` en esta subquery, quedaban excluidos de los dos pasos a la vez y
+ * desaparecían del todo de Ventas, subcontando dinero real. Una venta normal
+ * (`pago_administrativo = 0`) sigue excluida acá tal cual, porque sus items
+ * sí la representan por completo en el Paso 1.
  */
 export async function getIngresosSinDetalle(
   desde: string,
@@ -288,7 +304,9 @@ export async function getIngresosSinDetalle(
         AND DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         AND NOT (
           mc.referencia_entidad = 'con_sentido_ventas'
-          AND mc.referencia_id IN (SELECT id FROM con_sentido_ventas WHERE estado = 'completada')
+          AND mc.referencia_id IN (
+            SELECT id FROM con_sentido_ventas WHERE estado = 'completada' AND pago_administrativo = 0
+          )
         )
         ${condiciones}
       ORDER BY mc.created_at ASC`,

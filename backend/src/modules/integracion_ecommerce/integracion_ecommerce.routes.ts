@@ -37,6 +37,9 @@ const itemSchema = z.object({
   // acá y 1 allá); una nota válida allá haría fallar el snapshot entero y el producto dejaría de
   // sincronizarse. recepcion.ts la recorta a 120 al guardar.
   wholesaleNote: z.string().nullable().optional(),
+  // Imagen propia de la variante (opcional: un e-commerce viejo no la manda, o el ítem no tiene
+  // variante con imagen propia) — si falta, recepcion.ts cae a la imagen del producto (snap.imageUrl).
+  imageUrl: z.string().nullable().optional(),
   stock: z.number().int(),
 });
 

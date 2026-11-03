@@ -68,6 +68,8 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
     const clave = claveItem(item.productId, item.variantId);
     claves.push(clave);
     const nombre = item.name.slice(0, 150);
+    // Imagen propia del ítem/variante si vino; si no (o es un aviso viejo sin el campo), la del producto.
+    const imagenUrl = item.imageUrl ?? snap.imageUrl;
 
     let productoId: string;
     const existente = await client.query(`SELECT id FROM productos WHERE ecommerce_item_key = $1`, [clave]);
@@ -79,7 +81,7 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
                 ecommerce_publicado = $7, activo = true,
                 precio_mayorista = $8, mayorista_desde = $9, nota_mayorista = $10
           WHERE id = $1`,
-        [productoId, nombre, item.sku, item.price, categoriaId, snap.imageUrl, snap.published, ...mayorista(item)],
+        [productoId, nombre, item.sku, item.price, categoriaId, imagenUrl, snap.published, ...mayorista(item)],
       );
       // El stock de un ítem que ya existe solo lo mueven los STOCK_DELTA, salvo
       // en la carga inicial / resincronización.
@@ -92,7 +94,7 @@ async function aplicarSnapshot(client: PoolClient, snap: SnapshotProducto): Prom
          VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM modulos WHERE slug = 'con_sentido'), $7, $8, $9, true,
                  $10, $11, $12)
          RETURNING id`,
-        [nombre, item.sku, clave, item.productId, item.variantId, snap.published, categoriaId, item.price, snap.imageUrl,
+        [nombre, item.sku, clave, item.productId, item.variantId, snap.published, categoriaId, item.price, imagenUrl,
           ...mayorista(item)],
       );
       productoId = creado.rows[0].id;

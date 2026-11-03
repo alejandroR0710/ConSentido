@@ -18,6 +18,8 @@ export interface ItemEcommerce {
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   wholesaleNote?: string | null;
+  // Imagen propia del ítem (opcional) — si falta, se usa snap.imageUrl (ver recepcion.ts).
+  imageUrl?: string | null;
   stock: number;
 }
 

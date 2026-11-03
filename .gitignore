@@ -38,6 +38,9 @@ backend/public/
 # Mockups temporales del asistente (superpowers:brainstorming)
 .superpowers/
 
+# Worktrees aislados para desarrollo (superpowers:using-git-worktrees)
+.worktrees/
+
 # Cache incremental de `tsc -b`
 *.tsbuildinfo
 

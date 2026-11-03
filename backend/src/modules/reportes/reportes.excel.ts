@@ -2,8 +2,10 @@ import ExcelJS from "exceljs";
 
 /** Formato numérico estándar para montos en COP dentro de este módulo: sin
  *  decimales (la moneda del sistema no usa centavos en ningún otro reporte/
- *  factura) y con separador de miles. */
-export const FORMATO_MONTO = "#,##0";
+ *  factura), con separador de miles y el símbolo `$` literal en la celda —
+ *  mismo estilo visual que `formatMoney` en el frontend (`$1.264.900`), no
+ *  solo el número plano. */
+export const FORMATO_MONTO = '"$"#,##0';
 
 export interface ColumnaExcel {
   header: string;
@@ -32,11 +34,40 @@ export async function generarExcel(
     header: columna.header,
     key: columna.key,
     width: columna.width ?? Math.max(columna.header.length + 2, 12),
-    numFmt: columna.numFmt,
   }));
   hoja.getRow(1).font = { bold: true };
 
-  hoja.addRows(filas);
+  // Fix de revisión final (Finding I3) — `Column.defn`, el setter que usa la
+  // asignación `hoja.columns = [...]` de arriba, solo lee
+  // `key`/`width`/`outlineLevel`/`style`/`header`/`hidden`: un `numFmt`
+  // dentro de ese mismo objeto de definición se descarta en silencio
+  // (confirmado por el revisor con un script de prueba directo contra
+  // ExcelJS) — de ahí que todo monto se exportara como número crudo sin
+  // formato. Se aplica en un paso separado, DESPUÉS de la asignación, sobre
+  // la columna ya creada (`hoja.getColumn(key).numFmt = ...`), que sí
+  // respeta el formato.
+  for (const columna of columnas) {
+    if (columna.numFmt) {
+      hoja.getColumn(columna.key).numFmt = columna.numFmt;
+    }
+  }
+
+  // Redondeo a 2 decimales (Finding I3) — los valores prorrateados de
+  // Ventas (Findings I1/I2: repartos `efectivo_share`/`banco_share`, escalado
+  // por descuento) y el saldo corrido de Cierre de caja pueden dejar un
+  // residuo de punto flotante del tipo `3333.3333333333335` al llegar hasta
+  // acá; se redondea CUALQUIER valor numérico de cualquier reporte (no solo
+  // los de estos dos findings) antes de escribirlo en la celda — inocuo para
+  // los montos ya enteros del resto de los reportes, que no cambian.
+  const filasRedondeadas = filas.map((fila) => {
+    const copia: Record<string, unknown> = {};
+    for (const [clave, valor] of Object.entries(fila)) {
+      copia[clave] = typeof valor === "number" ? Math.round(valor * 100) / 100 : valor;
+    }
+    return copia;
+  });
+
+  hoja.addRows(filasRedondeadas);
 
   // `workbook.xlsx.writeBuffer()` devuelve un Node `Buffer` real en runtime,
   // pero el .d.ts de exceljs declara su propio tipo local `Buffer` (un alias

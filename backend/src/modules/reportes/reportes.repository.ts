@@ -188,6 +188,32 @@ export async function getVentasPorMes() {
  * de `movimientos_caja` con una query independiente que no recibía estos
  * mismos filtros, rompiendo la consistencia bajo `?producto=`/`?cliente=` y
  * duplicando el leak de la otra mitad de una venta mixta bajo `?metodo=`).
+ *
+ * Fix de revisión final (Finding I1) — `AND cv.metodo_pago = $n` se cambió a
+ * `AND cv.metodo_pago IN ($n, 'mixto')`: filtrar por igualdad estricta contra
+ * `'efectivo'`/`'banco'` excluía POR COMPLETO cualquier venta `'mixto'` bajo
+ * `?metodo=`, perdiendo del todo la mitad de esa venta que sí correspondía al
+ * método pedido (ej. `?metodo=banco` con una venta mixta de $4.000
+ * efectivo/$6.000 banco perdía esos $6.000 reales). Con el `IN`, una venta
+ * mixta vuelve a aparecer bajo cualquier filtro de método — el service
+ * (`obtenerVentas`) es quien decide, con `repartirPorMetodoPago`, que su
+ * aporte a esta vista filtrada sea solo SU PARTE del método pedido (no las
+ * dos mitades, no el subtotal completo).
+ *
+ * Fix de revisión final (Finding I2, parte 1) — `AND cv.pago_administrativo
+ * = 0` excluye los carritos de mesa cerrados sin pago real (ver
+ * `con_sentido.repository.ts` línea ~610: quedan `estado = 'completada'` pero
+ * NUNCA generan ninguna fila en `movimientos_caja`, ningún dinero real se
+ * movió). Sin este filtro, Ventas contaba su subtotal completo como venta
+ * real mientras Resumen (que sí lee `movimientos_caja`) no contaba nada para
+ * esa misma venta — descuadre entre los dos reportes.
+ *
+ * Se agrega `cv.descuento` al SELECT (Finding I2, parte 2) — el service la
+ * necesita para escalar el subtotal bruto de cada item (`cvi.subtotal =
+ * cantidad * precio_unitario`, generado SIN descontar) al neto real que sí
+ * llegó a `movimientos_caja` en un carrito de mesa con descuento aplicado
+ * (`cv.monto` ya es NETO del descuento — confirmado en
+ * `con_sentido.service.ts` línea ~339).
  */
 export async function getVentasDetalle(
   desde: string,
@@ -198,7 +224,7 @@ export async function getVentasDetalle(
   let condiciones = "";
   if (filtros.metodo) {
     params.push(filtros.metodo);
-    condiciones += ` AND cv.metodo_pago = $${params.length}`;
+    condiciones += ` AND cv.metodo_pago IN ($${params.length}, 'mixto')`;
   }
   if (filtros.producto) {
     params.push(`%${filtros.producto}%`);
@@ -209,12 +235,13 @@ export async function getVentasDetalle(
     `SELECT cv.id, cv.created_at, DATE_FORMAT(cv.created_at, '%Y-%m-%d') AS fecha,
             cvi.producto, cvi.cantidad, cvi.precio_unitario, cvi.subtotal,
             cv.metodo_pago, m.slug AS area, f.numero AS consecutivo,
-            cv.monto, cv.monto_efectivo, cv.monto_banco
+            cv.monto, cv.monto_efectivo, cv.monto_banco, cv.descuento
        FROM con_sentido_venta_items cvi
        JOIN con_sentido_ventas cv ON cv.id = cvi.venta_id
        LEFT JOIN modulos m ON m.id = cvi.modulo_origen_id
        LEFT JOIN facturas f ON f.con_sentido_venta_id = cv.id
       WHERE cv.estado = 'completada'
+        AND cv.pago_administrativo = 0
         AND DATE_FORMAT(cv.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
         ${condiciones}
       ORDER BY cv.created_at ASC, cvi.id ASC`,

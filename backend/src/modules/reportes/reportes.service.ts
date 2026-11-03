@@ -184,7 +184,7 @@ function repartirPorMetodoPago(
  *   mitad efectivo... no, sumaba la mitad banco de una venta que la query de
  *   `filas` ya había excluido por no ser literalmente `'banco'` — doble
  *   inconsistencia, no solo "sin filtro".
- * - Round 2 (este fix): sin segunda query. Se prorratea CADA fila de detalle
+ * - Round 2: sin segunda query. Se prorratea CADA fila de detalle
  *   con `repartirPorMetodoPago` (arriba) usando el split real de SU propia
  *   venta (`cv.monto_efectivo`/`cv.monto_banco`/`cv.monto`, agregados en
  *   `getVentasDetalle`), y se suma sobre las filas que de verdad sobrevivieron
@@ -197,6 +197,18 @@ function repartirPorMetodoPago(
  *   una identidad aritmética sobre el mismo array `filas`, no una coincidencia
  *   que dos queries separadas tengan que mantener sincronizada — se cumple
  *   automáticamente bajo cualquier combinación de `metodo`/`producto`/rango.
+ * - Round 3 (fix de revisión final, Finding I1) — Round 2 seguía con un bug:
+ *   `getVentasDetalle` filtraba con igualdad estricta (`cv.metodo_pago =
+ *   $n`), así que una venta `'mixto'` desaparecía POR COMPLETO bajo
+ *   `?metodo=`, perdiendo del todo la mitad que sí correspondía al método
+ *   pedido. El fix tiene dos partes: (1) el repository ahora trae también
+ *   las ventas `'mixto'` bajo un filtro de método (`IN ($n, 'mixto')`); (2)
+ *   acá, cuando `metodo` está activo y la fila es `'mixto'`, su `subtotal`
+ *   (el que se muestra Y el que se suma a los totales) se recorta a SOLO su
+ *   `efectivo_share`/`banco_share` del método filtrado — ni las dos mitades,
+ *   ni el subtotal completo. Sin filtro de método, nada cambia: se sigue
+ *   mostrando/sumando el subtotal completo repartido en ambos baldes, como
+ *   en Round 2.
  */
 export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasReporte> {
   const { desde, hasta, metodo, cliente, producto } = filtros;
@@ -210,16 +222,45 @@ export async function obtenerVentas(filtros: VentasFiltros): Promise<VentasRepor
   let total_bancos = 0;
 
   const filasDetalle: VentasFila[] = detalle.map((d) => {
-    const subtotal = Number(d.subtotal);
+    const montoVenta = Number(d.monto);
+    const descuentoVenta = Number(d.descuento ?? 0);
+    const subtotalBruto = Number(d.subtotal);
+    // Fix de revisión final (Finding I2, parte 2) — `cvi.subtotal` es
+    // `cantidad * precio_unitario`, generado SIN descontar; para una venta
+    // de mesa con descuento (`cv.descuento > 0`), el dinero que de verdad
+    // llegó a `movimientos_caja` es `cv.monto` (NETO). Se escala el subtotal
+    // bruto de cada item por el mismo factor `monto / (monto + descuento)`
+    // para que la suma de items de esta venta dé exactamente `monto`, no el
+    // bruto pre-descuento. Para una venta sin descuento (la gran mayoría),
+    // `descuentoVenta === 0` y el factor es exactamente 1 — sin cambios.
+    const factorDescuento = descuentoVenta > 0 ? montoVenta / (montoVenta + descuentoVenta) : 1;
+    const subtotalNeto = subtotalBruto * factorDescuento;
+
     const { efectivo_share, banco_share } = repartirPorMetodoPago(
       d.metodo_pago,
-      subtotal,
-      Number(d.monto),
+      subtotalNeto,
+      montoVenta,
       Number(d.monto_efectivo),
       Number(d.monto_banco),
     );
-    total_efectivo += efectivo_share;
-    total_bancos += banco_share;
+
+    // Fix de revisión final (Finding I1) — bajo un filtro de método activo,
+    // una venta `'mixto'` solo debe aportar SU PARTE del método pedido (al
+    // subtotal que se muestra Y a los totales), nunca las dos mitades (ese
+    // era el comportamiento sin filtro, correcto) ni el subtotal completo
+    // (eso contaría también la mitad que no corresponde al método pedido).
+    let subtotal = subtotalNeto;
+    let efectivoContrib = efectivo_share;
+    let bancoContrib = banco_share;
+    if (metodo && d.metodo_pago === "mixto") {
+      const share = metodo === "efectivo" ? efectivo_share : banco_share;
+      subtotal = share;
+      efectivoContrib = metodo === "efectivo" ? share : 0;
+      bancoContrib = metodo === "banco" ? share : 0;
+    }
+
+    total_efectivo += efectivoContrib;
+    total_bancos += bancoContrib;
     return {
       tipo: "detalle",
       id: String(d.id),

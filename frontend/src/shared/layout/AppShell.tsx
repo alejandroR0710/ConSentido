@@ -51,10 +51,12 @@ function BotonTema() {
 }
 
 /**
- * Layout responsive único para todos los roles: en desktop prioriza un sidebar
- * con navegación completa; en mobile la navegación vive detrás de un botón
- * hamburguesa (menú deslizable) — un rol como Super Root ve más de 10 pantallas,
- * y una barra horizontal fija no alcanza a mostrarlas todas ni se puede hacer
+ * Layout responsive único para todos los roles: solo desde `lg` (≈1024px, ya
+ * no `md`/768px — una tablet entraba ahí y perdía espacio de pantalla con el
+ * sidebar fijo) se muestra un sidebar con navegación completa; por debajo de
+ * eso (mobile y tablet) la navegación vive detrás de un botón hamburguesa
+ * (menú deslizable) — un rol como Super Root ve más de 10 pantallas, y una
+ * barra horizontal fija no alcanza a mostrarlas todas ni se puede hacer
  * scroll para ver el resto.
  */
 export function AppShell() {
@@ -83,7 +85,7 @@ export function AppShell() {
             <button
               onClick={() => setMenuAbierto(true)}
               aria-label="Abrir menú"
-              className="-ml-1 rounded-md p-1.5 text-xl text-brand-green-700 hover:bg-brand-green-50 md:hidden dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+              className="-ml-1 rounded-md p-1.5 text-xl text-brand-green-700 hover:bg-brand-green-50 lg:hidden dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
             >
               ☰
             </button>
@@ -117,7 +119,7 @@ export function AppShell() {
         </header>
 
         <div className="mx-auto flex max-w-6xl">
-          <aside className="sticky top-0 hidden h-[calc(100svh-57px)] w-56 shrink-0 border-r border-brand-vanilla-dark p-3 md:block dark:border-brand-green-700">
+          <aside className="sticky top-0 hidden h-[calc(100svh-57px)] w-56 shrink-0 border-r border-brand-vanilla-dark p-3 lg:block dark:border-brand-green-700">
             <RoleNav modulosPermitidos={usuario.modulos} rol={usuario.rol} />
           </aside>
 
@@ -138,7 +140,12 @@ export function AppShell() {
         </div>
 
         {menuAbierto && (
-          <Modal titulo="Menú" onCerrar={() => setMenuAbierto(false)}>
+          <Modal titulo="Menú" onCerrar={() => setMenuAbierto(false)} ancho="sm:w-72">
+            {/* Ancho fijo a propósito: sin esto el menú se autoajusta al
+                contenido de RoleNav, que cambia según qué acordeón esté
+                abierto y qué ítems ve cada rol — un rol con pocas opciones
+                cortas en el grupo abierto (ej. Cocina en el grupo Migao)
+                hacía que el menú entero se achicara de ancho. */}
             <RoleNav
               modulosPermitidos={usuario.modulos}
               rol={usuario.rol}

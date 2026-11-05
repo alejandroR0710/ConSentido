@@ -131,7 +131,7 @@ export function PlantillaForm({ plantilla, roles, usuarios, onCerrar, onGuardado
   }
 
   return (
-    <Modal titulo={esEdicion ? "Editar plantilla" : "Nueva plantilla"} onCerrar={onCerrar} maxWidth="sm:max-w-lg">
+    <Modal titulo={esEdicion ? "Editar plantilla" : "Nueva plantilla"} onCerrar={onCerrar} ancho="sm:w-[32rem]">
       <div className={seccionClase}>
         <p className={tituloSeccionClase}>
           <span aria-hidden>📋</span> Datos

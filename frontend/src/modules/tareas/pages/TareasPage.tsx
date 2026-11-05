@@ -83,6 +83,7 @@ export function TareasPage() {
         <input
           type="date"
           value={fecha}
+          max={fechaISOHoy()}
           onChange={(e) => setFecha(e.target.value)}
           className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
         />

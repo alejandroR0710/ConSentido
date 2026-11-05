@@ -69,6 +69,11 @@ const COLUMNAS_INSTANCIA = `i.id, i.plantilla_id, i.usuario_id, i.fecha, i.estad
  * `fecha`: coincide por rol o por asignación directa al usuario, y dentro de
  * eso, por el criterio de recurrencia de cada plantilla (semanal → el día de
  * semana de `fecha` está en `dias_semana`; única → `fecha_unica = fecha`).
+ *
+ * `DATE(created_at) <= $1` excluye plantillas creadas DESPUÉS de `fecha`: sin
+ * esto, generar instancias para una fecha pasada anterior a la creación de la
+ * plantilla fabricaría historial falso (una tarea "pendiente" en un día en
+ * que esa plantilla ni existía) — ver Review Focus del plan.
  */
 export async function listarPlantillasAplicables(
   fecha: string,
@@ -79,6 +84,7 @@ export async function listarPlantillasAplicables(
     `SELECT ${COLUMNAS_PLANTILLA}
        FROM tareas_plantilla
       WHERE activo = true
+        AND DATE(created_at) <= $1
         AND (
           (rol_id = $2 OR usuario_id = $3)
           AND (
@@ -90,6 +96,17 @@ export async function listarPlantillasAplicables(
     [fecha, rolId, usuarioId],
   );
   return result.rows.map(mapPlantilla);
+}
+
+/**
+ * "Hoy" resuelto contra la sesión MySQL (fija en -05:00, ver pool.ts), nunca
+ * con `new Date()` de Node — misma convención que `resolverFecha` en
+ * tareas.routes.ts. Usado por el service para no generar instancias
+ * perezosas de un día que todavía no llegó (ver Review Focus del plan).
+ */
+export async function obtenerFechaHoy(): Promise<string> {
+  const result = await pool.query<{ hoy: string }>("SELECT CURDATE() AS hoy");
+  return result.rows[0].hoy;
 }
 
 /**

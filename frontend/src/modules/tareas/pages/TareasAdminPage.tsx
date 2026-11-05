@@ -82,6 +82,14 @@ function etiquetaDestino(p: PlantillaTarea, roles: Rol[], usuarios: Usuario[]): 
   return `Usuario: ${usuarios.find((u) => u.id === p.usuarioId)?.nombre ?? p.usuarioId}`;
 }
 
+/** Quién hizo el último cambio de estado de una instancia y cuándo, para la
+ *  columna "Actualizado" de la vista cruzada — "—" si nunca se cambió. */
+function etiquetaActualizado(i: InstanciaTareaVista, usuarios: Usuario[]): string {
+  if (!i.actualizadoEn) return "—";
+  const nombre = usuarios.find((u) => u.id === i.actualizadoPorId)?.nombre ?? i.actualizadoPorId ?? "—";
+  return `${nombre} · ${new Date(i.actualizadoEn).toLocaleString()}`;
+}
+
 function etiquetaRecurrencia(p: PlantillaTarea): string {
   if (p.tipoRecurrencia === "semanal") {
     const dias = (p.diasSemana ?? []).map((d) => DIA_ETIQUETA[d] ?? d).join(", ");
@@ -308,6 +316,7 @@ export function TareasAdminPage() {
                   <th className="px-3 py-2">Usuario</th>
                   <th className="px-3 py-2">Tarea</th>
                   <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">Actualizado</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,6 +342,9 @@ export function TareasAdminPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                      {etiquetaActualizado(i, usuarios)}
                     </td>
                   </tr>
                 ))}

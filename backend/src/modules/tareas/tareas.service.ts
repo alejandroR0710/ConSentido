@@ -9,14 +9,27 @@ import type { EstadoTarea, InstanciaTarea, PlantillaTarea } from "./tareas.types
  * instancias que todavía no existan. Compartido por obtenerTareasDelDia
  * (un usuario viendo su propio día) y obtenerVistaCruzada (Root/Super Root
  * viendo el día de varios usuarios a la vez) para no duplicar el camino.
+ *
+ * `hoy` (YYYY-MM-DD, resuelto por el caller con repo.obtenerFechaHoy) corta
+ * la generación para una fecha futura: si `fecha > hoy` todavía no llegó ese
+ * día, así que no hay nada que generar (lo contrario fabricaría filas reales
+ * para un día que aún no pasó — ver Review Focus del plan). La comparación
+ * lexicográfica de strings ISO ordena igual que la cronológica.
  */
-async function generarInstanciasParaUsuario(usuarioId: string, rolId: number, fecha: string): Promise<void> {
+async function generarInstanciasParaUsuario(
+  usuarioId: string,
+  rolId: number,
+  fecha: string,
+  hoy: string,
+): Promise<void> {
+  if (fecha > hoy) return;
   const plantillas = await repo.listarPlantillasAplicables(fecha, usuarioId, rolId);
   await repo.generarInstanciasFaltantes(plantillas, usuarioId, fecha);
 }
 
 export async function obtenerTareasDelDia(usuarioId: string, rolId: number, fecha: string): Promise<InstanciaTarea[]> {
-  await generarInstanciasParaUsuario(usuarioId, rolId, fecha);
+  const hoy = await repo.obtenerFechaHoy();
+  await generarInstanciasParaUsuario(usuarioId, rolId, fecha, hoy);
   // Ya vienen ordenadas por `orden` (JOIN a la plantilla) — ver
   // tareas.repository.ts::listarInstanciasDeUsuario.
   return repo.listarInstanciasDeUsuario(usuarioId, fecha);
@@ -36,6 +49,17 @@ export async function cambiarEstado(params: {
   // cualquiera (Spec §2/§3).
   if (!params.llamadorPuedeGestionar && instancia.usuarioId !== params.llamadorId) {
     throw Errors.forbidden("No tiene permiso para cambiar el estado de esta tarea");
+  }
+
+  // Sin tareas.gestionar, solo se puede tocar el estado del día de HOY — ni
+  // pasado (marcar retroactivamente) ni futuro. Con tareas.gestionar, el
+  // guard de dueño de arriba ya deja sobreescribir cualquier día, así que
+  // esta restricción no le aplica.
+  if (!params.llamadorPuedeGestionar) {
+    const hoy = await repo.obtenerFechaHoy();
+    if (instancia.fecha !== hoy) {
+      throw Errors.forbidden("Solo se puede cambiar el estado de las tareas del día de hoy");
+    }
   }
 
   // actualizado_por_id siempre es quien hizo el cambio (puede ser el dueño o
@@ -158,8 +182,11 @@ export async function obtenerVistaCruzada(
     return true;
   });
 
+  // Resuelto una sola vez antes del loop (no una consulta por usuario, que
+  // serían N consultas redundantes para el mismo valor).
+  const hoy = await repo.obtenerFechaHoy();
   for (const usuario of afectados) {
-    await generarInstanciasParaUsuario(usuario.id, usuario.rol_id, fecha);
+    await generarInstanciasParaUsuario(usuario.id, usuario.rol_id, fecha, hoy);
   }
 
   return repo.listarInstanciasVista(fecha, filtros);

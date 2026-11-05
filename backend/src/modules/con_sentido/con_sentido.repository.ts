@@ -304,15 +304,33 @@ export async function crearVenta(
     metodoPago: "efectivo" | "banco" | "mixto";
     montoEfectivo?: number;
     montoBanco?: number;
+    // 'ecommerce' = venta pagada en la tienda en línea (ver integracion_ecommerce/ventas_ecommerce.ts).
+    origen?: "ecommerce";
+    ecommerceNumero?: string;
   },
 ) {
   const result = await executor.query(
-    `INSERT INTO con_sentido_ventas (usuario_id, monto, metodo_pago, monto_efectivo, monto_banco)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO con_sentido_ventas (usuario_id, monto, metodo_pago, monto_efectivo, monto_banco, origen, ecommerce_numero)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, created_at`,
-    [params.usuarioId, params.monto, params.metodoPago, params.montoEfectivo ?? null, params.montoBanco ?? null],
+    [
+      params.usuarioId,
+      params.monto,
+      params.metodoPago,
+      params.montoEfectivo ?? null,
+      params.montoBanco ?? null,
+      params.origen ?? null,
+      params.ecommerceNumero ?? null,
+    ],
   );
   return result.rows[0];
+}
+
+/** Producto del POS sincronizado con un ítem del e-commerce ("productId:variantId"), con su área
+ *  por defecto — para ubicar el área de una venta de la tienda (ver ventas_ecommerce.ts). */
+export async function getProductoPorClaveEcommerce(executor: Executor, clave: string) {
+  const result = await executor.query(`${SELECT_PRODUCTO} WHERE p.ecommerce_item_key = $1`, [clave]);
+  return result.rows[0] ? normalizarProducto(result.rows[0]) : null;
 }
 
 export async function crearVentaItem(

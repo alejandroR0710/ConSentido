@@ -6,6 +6,7 @@ import { Errors } from "../../shared/utils/app-error";
 import { configSincronizacion } from "./config";
 import { aplicarEvento } from "./recepcion";
 import { enviarPendientes, estadoSalida } from "./salida";
+import { aplicarPendientes } from "./ventas_ecommerce";
 import type { EventoEntrante } from "./tipos";
 
 // Rutas que llama el e-commerce (servidor a servidor) y un cron del hosting —
@@ -78,6 +79,46 @@ const eventoSchema = z.discriminatedUnion("type", [
       occurredAt: z.string(),
     }),
   }),
+  // Ventas pagadas en la tienda → historial/Caja (ver ventas_ecommerce.ts).
+  z.object({
+    eventId: z.string().min(1).max(191),
+    type: z.literal("SALE_RECORDED"),
+    createdAt: z.string().optional(),
+    payload: z.object({
+      source: z.enum(["ORDER", "BOOKING"]),
+      sourceId: z.string().min(1).max(64),
+      number: z.string().min(1).max(40),
+      total: z.number().positive(),
+      paidAt: z.string(),
+      paymentMethod: z.enum(["WOMPI", "MANUAL"]),
+      wompiTransactionId: z.string().nullable(),
+      customerName: z.string().nullable(),
+      items: z.array(
+        z.object({
+          productId: z.string().nullable(),
+          variantId: z.string().nullable(),
+          sku: z.string().nullable(),
+          name: z.string().min(1),
+          quantity: z.number().positive(),
+          unitPrice: z.number(),
+        }),
+      ),
+      shipping: z.number().nonnegative(),
+      discount: z.number().nonnegative(),
+    }),
+  }),
+  z.object({
+    eventId: z.string().min(1).max(191),
+    type: z.literal("SALE_REVERSED"),
+    createdAt: z.string().optional(),
+    payload: z.object({
+      source: z.enum(["ORDER", "BOOKING"]),
+      sourceId: z.string().min(1).max(64),
+      number: z.string().min(1).max(40),
+      reason: z.enum(["CANCELLED", "REFUNDED"]),
+      occurredAt: z.string(),
+    }),
+  }),
 ]);
 
 export const integracionEcommerceRouter = Router();
@@ -96,7 +137,8 @@ integracionEcommerceRouter.post(
 integracionEcommerceRouter.post(
   "/flush",
   asyncHandler(async (_req: Request, res: Response) => {
-    res.json({ entregados: await enviarPendientes() });
+    // También aplica las ventas del e-commerce que esperaban turno (respaldo de abrirTurno).
+    res.json({ entregados: await enviarPendientes(), ventasEcommerce: await aplicarPendientes() });
   }),
 );
 

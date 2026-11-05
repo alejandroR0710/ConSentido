@@ -1,5 +1,6 @@
 import { PoolClient, pool } from "../../shared/db/pool";
 import { claveItem, type DeltaStockEcommerce, type EventoEntrante, type ItemEcommerce, type SnapshotProducto } from "./tipos";
+import { guardarVentaEcommerce, revertirVentaEcommerce } from "./ventas_ecommerce";
 
 export type ResultadoRecepcion =
   | { status: "APPLIED" }
@@ -28,7 +29,11 @@ export async function aplicarEvento(evento: EventoEntrante): Promise<ResultadoRe
     const resultado =
       evento.type === "PRODUCT_SNAPSHOT"
         ? await aplicarSnapshot(client, evento.payload)
-        : await aplicarDelta(client, evento.payload);
+        : evento.type === "STOCK_DELTA"
+          ? await aplicarDelta(client, evento.payload)
+          : evento.type === "SALE_RECORDED"
+            ? await guardarVentaEcommerce(client, evento.payload)
+            : await revertirVentaEcommerce(client, evento.payload);
 
     await client.query(
       `INSERT INTO ecommerce_sync_recibidos (event_id, tipo, resultado, detalle) VALUES ($1, $2, $3, $4)`,

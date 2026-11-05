@@ -1,4 +1,5 @@
 import { Pool, PoolClient, pool } from "../../../shared/db/pool";
+import { aplicarPendientes } from "../../integracion_ecommerce/ventas_ecommerce";
 import { Errors } from "../../../shared/utils/app-error";
 import { deltaEcommerce, getProductoParaVenta, reponerStock } from "../../con_sentido/con_sentido.repository";
 import { descontarParaVenta, motivoVenta } from "../../con_sentido/stock-venta";
@@ -34,7 +35,16 @@ export async function abrirTurno(cajeroId: string, input: AbrirTurnoInput) {
     throw Errors.conflict("Ya hay un turno de caja abierto. Ciérralo antes de abrir uno nuevo.");
   }
 
-  return repo.crearTurno(cajeroId, input.montoInicialEfectivo ?? 0, input.montoInicialBanco ?? 0);
+  const turno = await repo.crearTurno(cajeroId, input.montoInicialEfectivo ?? 0, input.montoInicialBanco ?? 0);
+  // Ventas del e-commerce que llegaron sin turno abierto entran a este. Un error no impide abrir
+  // el turno (ya quedó abierto): queda en el log y el cron reintenta. (ventas_ecommerce también
+  // importa este servicio: el ciclo es seguro porque solo se usan las funciones al llamarlas.)
+  try {
+    await aplicarPendientes();
+  } catch (err) {
+    console.error("[ventas e-commerce] No se pudieron aplicar las pendientes al abrir el turno", err);
+  }
+  return turno;
 }
 
 export async function cerrarTurno(turnoId: string, input: CerrarTurnoInput) {

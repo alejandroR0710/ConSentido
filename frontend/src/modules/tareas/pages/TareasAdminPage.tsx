@@ -67,7 +67,9 @@ function SelectorFiltro({
         ))}
       </optgroup>
       <optgroup label="Por usuario">
-        {usuarios.map((u) => (
+        {usuarios
+          .filter((u) => u.activo && !u.deleted_at)
+          .map((u) => (
           <option key={`usuario-${u.id}`} value={`usuario-${u.id}`}>
             {u.nombre}
           </option>

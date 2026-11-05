@@ -142,11 +142,13 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
             <label className="mb-1 block text-xs font-medium">Responsable (opcional)</label>
             <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)} className={INPUT_CLASE}>
               <option value="">Sin asignar</option>
-              {usuarios.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.nombre}
-                </option>
-              ))}
+              {usuarios
+                .filter((u) => u.activo && !u.deleted_at)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nombre}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="sm:col-span-2">

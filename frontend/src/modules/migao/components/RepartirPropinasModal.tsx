@@ -146,8 +146,9 @@ export function RepartirPropinasModal({ onCerrar, onRepartido }: RepartirPropina
         setPendientesDia(dias);
         setDiasSeleccionados(new Set(dias.map((d) => d.fecha)));
         // Super Root queda afuera: la propina se reparte entre el equipo, no
-        // tiene sentido ofrecerlo como destinatario.
-        setUsuarios(listaUsuarios.filter((u) => u.rol_nombre !== "Super Root"));
+        // tiene sentido ofrecerlo como destinatario. Los usuarios eliminados
+        // o desactivados tampoco deben aparecer como destinatarios posibles.
+        setUsuarios(listaUsuarios.filter((u) => u.rol_nombre !== "Super Root" && u.activo && !u.deleted_at));
       } catch (err) {
         if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudieron cargar los días pendientes");
       } finally {

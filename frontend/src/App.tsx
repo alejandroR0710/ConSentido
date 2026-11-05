@@ -26,6 +26,8 @@ import { MigaoPage } from "./modules/migao/pages/MigaoPage";
 import { DetallePedidoPage } from "./modules/pedidos/pages/DetallePedidoPage";
 import { PedidosPage } from "./modules/pedidos/pages/PedidosPage";
 import { UsuariosPage } from "./modules/general/pages/UsuariosPage";
+import { TareasAdminPage } from "./modules/tareas/pages/TareasAdminPage";
+import { TareasPage } from "./modules/tareas/pages/TareasPage";
 import { RecetaDetallePage } from "./modules/recetario/pages/RecetaDetallePage";
 import { RecetarioAdminPage } from "./modules/recetario/pages/RecetarioAdminPage";
 import { RecetarioVerPage } from "./modules/recetario/pages/RecetarioVerPage";
@@ -78,6 +80,8 @@ export default function App() {
         <Route path="/recetario/ver" element={<RecetarioVerPage />} />
         <Route path="/recetario/ver/:id" element={<RecetaDetallePage />} />
         <Route path="/menu" element={<MenuPage />} />
+        <Route path="/tareas" element={<TareasPage />} />
+        <Route path="/tareas/administrar" element={<TareasAdminPage />} />
         <Route path="/usuarios" element={<UsuariosPage />} />
       </Route>
 

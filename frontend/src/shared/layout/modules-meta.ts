@@ -82,6 +82,10 @@ export const MODULES_META: ModuloMeta[] = [
   // pantalla aparte, pensada para leerse mientras se cocina.
   { slug: "recetario", label: "Recetario", path: "/recetario", icon: "📖", roles: ["Super Root", "Root"] },
   { slug: "recetario", label: "Recetas", path: "/recetario/ver", icon: "🍲", roles: ["Super Root", "Root", "Cocina"] },
+  // Tareas/Rutina diaria: sin filtro de roles, visible para los 6 roles.
+  // Administrar plantillas: solo Root/Super Root (el backend valida el permiso).
+  { slug: "tareas", label: "Tareas", path: "/tareas", icon: "✅" },
+  { slug: "tareas", label: "Administrar tareas", path: "/tareas/administrar", icon: "🗂️", roles: ["Super Root", "Root"] },
   // Gestor de usuarios: exclusivo de Root/Super Root, se ancla al final del
   // sidebar (ver MODULO_FINAL_PATH en RoleNav.tsx) en vez de mezclarse con el
   // resto de módulos operativos del día a día.

@@ -53,9 +53,45 @@ export interface DeltaStockEcommerce {
   occurredAt: string;
 }
 
+// Venta pagada en la tienda (pedido o reserva de taller) — espejo de SaleRecordedPayload del
+// e-commerce. Se registra como venta de Con Sentido + ingreso por banco del turno abierto, SIN
+// mover inventario (ver ventas_ecommerce.ts).
+export interface ItemVentaEcommerce {
+  productId: string | null;
+  variantId: string | null;
+  sku: string | null;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface VentaEcommerce {
+  source: "ORDER" | "BOOKING";
+  sourceId: string;
+  number: string;
+  total: number;
+  paidAt: string;
+  paymentMethod: "WOMPI" | "MANUAL";
+  wompiTransactionId: string | null;
+  customerName: string | null;
+  items: ItemVentaEcommerce[];
+  shipping: number;
+  discount: number;
+}
+
+export interface AnulacionVentaEcommerce {
+  source: "ORDER" | "BOOKING";
+  sourceId: string;
+  number: string;
+  reason: "CANCELLED" | "REFUNDED";
+  occurredAt: string;
+}
+
 export type EventoEntrante =
   | { eventId: string; type: "PRODUCT_SNAPSHOT"; payload: SnapshotProducto; createdAt?: string }
-  | { eventId: string; type: "STOCK_DELTA"; payload: DeltaStockEcommerce; createdAt?: string };
+  | { eventId: string; type: "STOCK_DELTA"; payload: DeltaStockEcommerce; createdAt?: string }
+  | { eventId: string; type: "SALE_RECORDED"; payload: VentaEcommerce; createdAt?: string }
+  | { eventId: string; type: "SALE_REVERSED"; payload: AnulacionVentaEcommerce; createdAt?: string };
 
 // Lo que el POS le manda al e-commerce.
 export interface DeltaStockPos {

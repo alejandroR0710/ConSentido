@@ -260,3 +260,6 @@ SELECT u.id, m.id
 FROM usuarios u
 CROSS JOIN modulos m
 WHERE u.email IN ('alejandra@sistemapos.local', 'julian@sistemapos.local');
+
+-- Egresos por reembolsos de ventas del e-commerce cuyo turno ya cerró (migración 2026-11-05).
+INSERT INTO categorias_gasto (nombre) VALUES ('Devoluciones e-commerce');

@@ -19,7 +19,7 @@ import { claveItem, type AnulacionVentaEcommerce, type VentaEcommerce } from "./
 //   anularVenta de Caja no acepta: solo se anulan desde el e-commerce.
 // ---------------------------------------------------------------------------
 
-export type ResultadoVenta = { status: "APPLIED" } | { status: "DUPLICATE" };
+export type ResultadoVenta = { status: "APPLIED" } | { status: "DUPLICATE" } | { status: "IGNORED"; detail: string };
 
 const ENTIDAD = "ecommerce_ventas";
 const CATEGORIA_DEVOLUCIONES = "Devoluciones e-commerce";
@@ -61,6 +61,9 @@ export function repartirPorArea(lineas: { area: Area; bruto: number }[], total: 
 
 /** SALE_RECORDED: guarda la pendiente (una sola vez por origen+id) y la aplica si hay turno. */
 export async function guardarVentaEcommerce(client: PoolClient, v: VentaEcommerce): Promise<ResultadoVenta> {
+  // Un pedido de $0 (p. ej. cupón del 100 %) no mueve dinero: se ignora y se confirma igual, para
+  // no frenar los avisos siguientes (el e-commerce entrega en orden).
+  if (!(Number(v.total) > 0)) return { status: "IGNORED", detail: `Venta ${v.number} de total 0` };
   const existente = await client.query(
     `SELECT id FROM ecommerce_ventas_pendientes WHERE origen = $1 AND origen_id = $2 FOR UPDATE`,
     [v.source, v.sourceId],
@@ -73,13 +76,30 @@ export async function guardarVentaEcommerce(client: PoolClient, v: VentaEcommerc
     [v.source, v.sourceId, v.number, JSON.stringify(v)],
   );
   const turno = await cajaRepo.findTurnoAbierto(client);
-  if (turno) await aplicarVenta(client, fila.rows[0].id, v, turno);
+  if (turno) {
+    // Si aplicarla falla, el aviso igual se confirma (queda pendiente con el error y el cron o el
+    // próximo turno la reintentan): un rechazo aquí frenaría todos los avisos siguientes.
+    await client.query("SAVEPOINT aplicar_venta");
+    try {
+      await aplicarVenta(client, fila.rows[0].id, v, turno);
+    } catch (err) {
+      await client.query("ROLLBACK TO SAVEPOINT aplicar_venta");
+      const mensaje = ((err as Error).message ?? String(err)).slice(0, 280);
+      console.error(`[ventas e-commerce] No se pudo aplicar ${v.number} al llegar:`, err);
+      await client.query(`UPDATE ecommerce_ventas_pendientes SET detalle = $2 WHERE id = $1`, [
+        fila.rows[0].id,
+        `Error: ${mensaje}`,
+      ]);
+    }
+  }
   return { status: "APPLIED" };
 }
 
 async function aplicarVenta(client: PoolClient, filaId: string, v: VentaEcommerce, turno: Turno) {
+  // Sin usuario: la vendió la tienda en línea, no el cajero del turno (el historial muestra
+  // "Tienda en línea"). Los movimientos de Caja sí llevan al cajero del turno (exigido allá).
   const venta = await csRepo.crearVenta(client, {
-    usuarioId: turno.cajeroId,
+    usuarioId: null,
     monto: v.total,
     metodoPago: "banco",
     origen: "ecommerce",

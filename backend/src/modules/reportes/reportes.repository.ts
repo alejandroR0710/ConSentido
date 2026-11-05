@@ -308,6 +308,12 @@ export async function getIngresosSinDetalle(
             SELECT id FROM con_sentido_ventas WHERE estado = 'completada' AND pago_administrativo = 0
           )
         )
+        -- Ventas del e-commerce (ver integracion_ecommerce/ventas_ecommerce.ts): mismo criterio,
+        -- sus ítems ya las cuentan en el Paso 1.
+        AND NOT (
+          mc.referencia_entidad = 'ecommerce_ventas'
+          AND mc.referencia_id IN (SELECT id FROM con_sentido_ventas WHERE estado = 'completada')
+        )
         ${condiciones}
       ORDER BY mc.created_at ASC`,
     params,

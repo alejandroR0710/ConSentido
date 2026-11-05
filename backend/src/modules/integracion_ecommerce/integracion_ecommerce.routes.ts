@@ -88,7 +88,7 @@ const eventoSchema = z.discriminatedUnion("type", [
       source: z.enum(["ORDER", "BOOKING"]),
       sourceId: z.string().min(1).max(64),
       number: z.string().min(1).max(40),
-      total: z.number().positive(),
+      total: z.number().nonnegative(), // 0 se ignora en ventas_ecommerce.ts
       paidAt: z.string(),
       paymentMethod: z.enum(["WOMPI", "MANUAL"]),
       wompiTransactionId: z.string().nullable(),

@@ -22,8 +22,9 @@ CREATE TABLE ecommerce_ventas_pendientes (
   aplicado_en         DATETIME(6) NULL,
   UNIQUE KEY uq_ecommerce_venta_origen (origen, origen_id),
   INDEX idx_ecommerce_ventas_estado (estado, recibido_en),
-  FOREIGN KEY (turno_id) REFERENCES turnos_caja(id),
-  FOREIGN KEY (venta_id) REFERENCES con_sentido_ventas(id)
+  -- SET NULL: borrar un turno o reiniciar Caja no debe chocar con esta tabla.
+  FOREIGN KEY (turno_id) REFERENCES turnos_caja(id) ON DELETE SET NULL,
+  FOREIGN KEY (venta_id) REFERENCES con_sentido_ventas(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 
 -- NULL = venta hecha en el POS; 'ecommerce' = venta de la tienda en línea.

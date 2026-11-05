@@ -376,6 +376,8 @@ const SELECT_VENTA_CON_ITEMS = `
   SELECT
     cv.id, cv.created_at, cv.monto, cv.metodo_pago, cv.monto_efectivo, cv.monto_banco, cv.estado,
     cv.parte_id, cv.descuento_porcentaje, cv.descuento,
+    -- 'ecommerce' = venta pagada en la tienda en línea (ver integracion_ecommerce/ventas_ecommerce.ts).
+    cv.origen, cv.ecommerce_numero,
     MAX(f.numero) AS numero_factura,
     -- GROUP_CONCAT (no JSON_ARRAYAGG) porque es el único agregado de MySQL
     -- que respeta ORDER BY; sin ítems queda NULL y cae en el [] del COALESCE.

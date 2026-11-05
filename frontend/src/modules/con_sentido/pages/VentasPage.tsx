@@ -111,6 +111,9 @@ export function VentasPage() {
         montoEfectivo: parseFloat(v.monto_efectivo || 0),
         montoBanco: parseFloat(v.monto_banco || 0),
         numeroFactura: v.numero_factura ?? null,
+        // Venta pagada en la tienda en línea: llega sola del e-commerce y solo se anula desde allá.
+        esEcommerce: v.origen === "ecommerce",
+        ecommerceNumero: v.ecommerce_numero ?? null,
       }));
       setVentas(ventasMapeadas);
       setError(null);
@@ -241,8 +244,20 @@ export function VentasPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-brand-green-700 dark:text-brand-vanilla">
-                        {venta.tipo === "ingreso_manual" ? "Ingreso manual" : `Venta #${venta.id.toString().slice(-6)}`}
+                        {venta.tipo === "ingreso_manual"
+                          ? "Ingreso manual"
+                          : venta.esEcommerce
+                            ? `E-commerce · ${venta.ecommerceNumero ?? ""}`
+                            : `Venta #${venta.id.toString().slice(-6)}`}
                       </span>
+                      {venta.esEcommerce && (
+                        <span
+                          title="Venta pagada en la tienda en línea. Se anula solo desde el e-commerce."
+                          className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950/30 dark:text-sky-300"
+                        >
+                          Tienda en línea
+                        </span>
+                      )}
                       {venta.tipo === "ingreso_manual" && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
                           Caja General

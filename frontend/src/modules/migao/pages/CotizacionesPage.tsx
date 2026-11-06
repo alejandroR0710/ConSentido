@@ -11,6 +11,7 @@ import {
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type ProductoCotizable } from "../api";
 import { BotonFactura } from "../components/BotonFactura";
+import { SelectorProductoCotizableModal } from "../components/SelectorProductoCotizableModal";
 
 interface LineaCotizacion {
   key: number;
@@ -73,6 +74,10 @@ export function CotizacionesPage() {
   const [clienteTelefono, setClienteTelefono] = useState("");
   const [nota, setNota] = useState("");
   const [lineas, setLineas] = useState<LineaCotizacion[]>([lineaVacia()]);
+  // Línea para la que está abierto el buscador modal (Migao + Con Sentido +
+  // Insumos) — null = cerrado. Alternativa al campo de texto con
+  // autocompletar nativo, que en algunos dispositivos no despliega sugerencias.
+  const [buscandoLineaKey, setBuscandoLineaKey] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
@@ -342,6 +347,14 @@ export function CotizacionesPage() {
                 placeholder="Producto o servicio"
                 className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
               />
+              <button
+                type="button"
+                onClick={() => setBuscandoLineaKey(linea.key)}
+                title="Buscar en inventario"
+                className="rounded-md border border-brand-vanilla-dark px-2 py-2 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+              >
+                🔍
+              </button>
               <input
                 type="number"
                 min={1}
@@ -497,6 +510,16 @@ export function CotizacionesPage() {
       </div>
 
       {recibo && <ModalImprimir {...recibo} onCerrar={() => setRecibo(null)} />}
+
+      {buscandoLineaKey !== null && (
+        <SelectorProductoCotizableModal
+          productos={catalogo}
+          onCerrar={() => setBuscandoLineaKey(null)}
+          onSeleccionar={(producto) =>
+            actualizarLinea(buscandoLineaKey, { nombre: producto.nombre, precioUnitario: producto.precio })
+          }
+        />
+      )}
 
       {(facturandoCotizacion || snapshotIngresoRestaurado) && (
         <IngresoModal

@@ -5,7 +5,7 @@ type Executor = Pool | PoolClient;
 
 export async function listMesas() {
   const result = await pool.query(
-    `SELECT id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo
+    `SELECT id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo, administrativa
        FROM mesas ORDER BY piso ASC, numero ASC`,
   );
   return result.rows;
@@ -23,15 +23,17 @@ export async function crearMesaConLayout(params: {
   posY: number;
   ancho: number;
   alto: number;
+  administrativa: boolean;
 }) {
   const result = await pool.query(
-    `INSERT INTO mesas (numero, piso, capacidad, pos_x, pos_y, ancho, alto, activo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+    `INSERT INTO mesas (numero, piso, capacidad, pos_x, pos_y, ancho, alto, activo, administrativa)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
      ON CONFLICT (numero, piso) WHERE zona_id IS NULL
      DO UPDATE SET capacidad = EXCLUDED.capacidad, pos_x = EXCLUDED.pos_x, pos_y = EXCLUDED.pos_y,
-                   ancho = EXCLUDED.ancho, alto = EXCLUDED.alto, activo = true
-     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
-    [params.numero, params.piso, params.capacidad, params.posX, params.posY, params.ancho, params.alto],
+                   ancho = EXCLUDED.ancho, alto = EXCLUDED.alto, activo = true,
+                   administrativa = EXCLUDED.administrativa
+     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo, administrativa`,
+    [params.numero, params.piso, params.capacidad, params.posX, params.posY, params.ancho, params.alto, params.administrativa],
   );
   return result.rows[0];
 }
@@ -42,7 +44,7 @@ export async function actualizarPosicionMesa(
 ) {
   const result = await pool.query(
     `UPDATE mesas SET pos_x = $2, pos_y = $3, ancho = $4, alto = $5 WHERE id = $1
-     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
+     RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo, administrativa`,
     [id, params.posX, params.posY, params.ancho, params.alto],
   );
   return result.rowCount ? result.rows[0] : null;
@@ -50,17 +52,18 @@ export async function actualizarPosicionMesa(
 
 export async function actualizarDetalleMesa(
   id: number,
-  params: { numero?: string; piso?: number; capacidad?: number; activo?: boolean },
+  params: { numero?: string; piso?: number; capacidad?: number; activo?: boolean; administrativa?: boolean },
 ) {
   const result = await pool.query(
     `UPDATE mesas
         SET numero = COALESCE($2, numero),
             piso = COALESCE($3, piso),
             capacidad = COALESCE($4, capacidad),
-            activo = COALESCE($5, activo)
+            activo = COALESCE($5, activo),
+            administrativa = COALESCE($6, administrativa)
       WHERE id = $1
-      RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo`,
-    [id, params.numero ?? null, params.piso ?? null, params.capacidad ?? null, params.activo ?? null],
+      RETURNING id, zona_id, numero, piso, capacidad, estado, pos_x, pos_y, ancho, alto, activo, administrativa`,
+    [id, params.numero ?? null, params.piso ?? null, params.capacidad ?? null, params.activo ?? null, params.administrativa ?? null],
   );
   return result.rowCount ? result.rows[0] : null;
 }
@@ -82,7 +85,7 @@ export async function getOrCreateMesaPorNumero(numero: string, piso = 1) {
     [numero, piso],
   );
   const result = await pool.query(
-    `SELECT id, numero, piso FROM mesas WHERE numero = $1 AND piso = $2 AND zona_id IS NULL LIMIT 1`,
+    `SELECT id, numero, piso, administrativa FROM mesas WHERE numero = $1 AND piso = $2 AND zona_id IS NULL LIMIT 1`,
     [numero, piso],
   );
   return result.rows[0];

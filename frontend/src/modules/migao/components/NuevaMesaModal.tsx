@@ -3,7 +3,7 @@ import { Modal } from "../../../shared/components/Modal";
 
 interface NuevaMesaModalProps {
   onCerrar: () => void;
-  onGuardar: (numero: string, capacidad: number) => Promise<void>;
+  onGuardar: (numero: string, capacidad: number, administrativa: boolean) => Promise<void>;
 }
 
 /** Crea una mesa con un rectángulo por defecto en el área activa — Root la
@@ -11,6 +11,7 @@ interface NuevaMesaModalProps {
 export function NuevaMesaModal({ onCerrar, onGuardar }: NuevaMesaModalProps) {
   const [numero, setNumero] = useState("");
   const [capacidad, setCapacidad] = useState("4");
+  const [administrativa, setAdministrativa] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +20,7 @@ export function NuevaMesaModal({ onCerrar, onGuardar }: NuevaMesaModalProps) {
     setGuardando(true);
     setError(null);
     try {
-      await onGuardar(numero.trim(), Number(capacidad) || 4);
+      await onGuardar(numero.trim(), Number(capacidad) || 4, administrativa);
       onCerrar();
     } catch {
       setError("No se pudo crear la mesa");
@@ -47,6 +48,11 @@ export function NuevaMesaModal({ onCerrar, onGuardar }: NuevaMesaModalProps) {
         onChange={(e) => setCapacidad(e.target.value.replace(/\D/g, ""))}
         className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <label className="mb-4 flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+        <input type="checkbox" checked={administrativa} onChange={(e) => setAdministrativa(e.target.checked)} />
+        Mesa administrativa (solo Root/Super Root pueden abrir o mover una cuenta hacia ella)
+      </label>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

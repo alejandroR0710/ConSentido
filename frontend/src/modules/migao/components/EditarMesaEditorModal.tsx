@@ -5,7 +5,7 @@ import type { Mesa } from "../api";
 interface EditarMesaEditorModalProps {
   mesa: Mesa;
   onCerrar: () => void;
-  onGuardar: (input: { numero?: string; capacidad?: number }) => Promise<void>;
+  onGuardar: (input: { numero?: string; capacidad?: number; administrativa?: boolean }) => Promise<void>;
   onEliminar: () => Promise<void>;
   onCambiarActivo: (activo: boolean) => Promise<void>;
 }
@@ -17,6 +17,7 @@ interface EditarMesaEditorModalProps {
 export function EditarMesaEditorModal({ mesa, onCerrar, onGuardar, onEliminar, onCambiarActivo }: EditarMesaEditorModalProps) {
   const [numero, setNumero] = useState(mesa.numero);
   const [capacidad, setCapacidad] = useState(String(mesa.capacidad));
+  const [administrativa, setAdministrativa] = useState(mesa.administrativa);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function EditarMesaEditorModal({ mesa, onCerrar, onGuardar, onEliminar, o
     setGuardando(true);
     setError(null);
     try {
-      await onGuardar({ numero: numero.trim(), capacidad: Number(capacidad) || 4 });
+      await onGuardar({ numero: numero.trim(), capacidad: Number(capacidad) || 4, administrativa });
       onCerrar();
     } catch {
       setError("No se pudo guardar la mesa (¿ya existe otra con ese número en esta área?)");
@@ -69,6 +70,11 @@ export function EditarMesaEditorModal({ mesa, onCerrar, onGuardar, onEliminar, o
         onChange={(e) => setCapacidad(e.target.value.replace(/\D/g, ""))}
         className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-lg text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
+
+      <label className="mb-4 flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+        <input type="checkbox" checked={administrativa} onChange={(e) => setAdministrativa(e.target.checked)} />
+        Mesa administrativa (solo Root/Super Root pueden abrir o mover una cuenta hacia ella)
+      </label>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

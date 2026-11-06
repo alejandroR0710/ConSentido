@@ -342,6 +342,9 @@ export const crearMesaSchema = z
     posY: coordenadaMesaSchema,
     ancho: tamanoMesaSchema,
     alto: tamanoMesaSchema,
+    // Solo Root/Super Root pueden abrir una orden o mover una existente hacia
+    // esta mesa (migao.mesas.usar_administrativa) — ver crearOrden/cambiarMesaOrden.
+    administrativa: z.boolean().default(false),
   })
   .refine((d) => d.posX + d.ancho <= 100.01, { message: "La mesa se sale del plano horizontalmente", path: ["ancho"] })
   .refine((d) => d.posY + d.alto <= 100.01, { message: "La mesa se sale del plano verticalmente", path: ["alto"] });
@@ -365,6 +368,7 @@ export const editarMesaSchema = z.object({
   piso: z.number().int().min(1).max(3).optional(),
   capacidad: z.number().int().positive().max(50).optional(),
   activo: z.boolean().optional(),
+  administrativa: z.boolean().optional(),
 });
 export type EditarMesaInput = z.infer<typeof editarMesaSchema>;
 

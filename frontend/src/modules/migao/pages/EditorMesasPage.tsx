@@ -58,7 +58,7 @@ export function EditorMesasPage() {
   // pero FloorPlanCanvas espera el shape MesaConOcupacion.
   const mesasParaPlano: MesaConOcupacion[] = mesasDelArea.map((m) => ({ ...m, ordenes: [] }));
 
-  async function crearMesa(numero: string, capacidad: number) {
+  async function crearMesa(numero: string, capacidad: number, administrativa: boolean) {
     // Apila mesas nuevas en diagonal para que no queden todas exactamente
     // superpuestas al crear varias seguidas — Root las reacomoda arrastrando.
     const offset = (mesasDelArea.length % 5) * 8;
@@ -71,6 +71,7 @@ export function EditorMesasPage() {
       posY: 5 + offset,
       ancho,
       alto,
+      administrativa,
     });
     await cargar();
   }

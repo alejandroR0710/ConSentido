@@ -37,6 +37,9 @@ export interface Mesa {
   ancho: string | null;
   alto: string | null;
   activo: boolean;
+  // Solo Root/Super Root pueden abrir o mover una orden hacia esta mesa
+  // (migao.mesas.usar_administrativa) — Mesero no debe verla como opción.
+  administrativa: boolean;
 }
 
 export interface OrdenHistorialResumen extends OrdenResumen {
@@ -963,11 +966,11 @@ export const migaoApi = {
   // listarMesas(); crear/mover/editar/eliminar es exclusivo del editor
   // (Root/Super Root, migao.mesas.administrar).
   listarMesas: () => apiFetch<Mesa[]>("/migao/mesas"),
-  crearMesa: (input: { numero: string; piso: number; capacidad: number; posX: number; posY: number; ancho: number; alto: number }) =>
+  crearMesa: (input: { numero: string; piso: number; capacidad: number; posX: number; posY: number; ancho: number; alto: number; administrativa?: boolean }) =>
     apiFetch<Mesa>("/migao/mesas", { method: "POST", body: input }),
   moverMesa: (id: number, input: { posX: number; posY: number; ancho: number; alto: number }) =>
     apiFetch<Mesa>(`/migao/mesas/${id}/posicion`, { method: "PATCH", body: input }),
-  editarMesa: (id: number, input: { numero?: string; piso?: number; capacidad?: number; activo?: boolean }) =>
+  editarMesa: (id: number, input: { numero?: string; piso?: number; capacidad?: number; activo?: boolean; administrativa?: boolean }) =>
     apiFetch<Mesa>(`/migao/mesas/${id}`, { method: "PATCH", body: input }),
   eliminarMesa: (id: number) => apiFetch<{ eliminada: boolean }>(`/migao/mesas/${id}`, { method: "DELETE" }),
 

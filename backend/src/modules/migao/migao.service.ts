@@ -330,9 +330,16 @@ export async function actualizarImagenProducto(id: string, imagenUrl: string) {
  * El mesero arma todo el pedido (mesa + productos) antes de que exista nada en
  * la base: la orden y todos sus ítems se crean juntos, en una sola transacción,
  * recién cuando confirma. La mesa se resuelve/crea por número.
+ *
+ * Si la mesa ya existe marcada `administrativa` (Editor de mesas), solo quien
+ * tenga `migao.mesas.usar_administrativa` (Root/Super Root) puede abrir una
+ * orden en ella — Mesero/Cajero no, aunque escriban su número a mano.
  */
-export async function crearOrden(meseroId: string, input: CrearOrdenInput) {
+export async function crearOrden(meseroId: string, rolId: number, input: CrearOrdenInput) {
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
+  if (mesa.administrativa && !(await tienePermiso(rolId, "migao.mesas.usar_administrativa"))) {
+    throw Errors.forbidden("Esta mesa es exclusiva de Root/Super Root");
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -572,14 +579,18 @@ export async function editarItem(itemId: string, input: EditarItemInput, usuario
 
 /** El mesero cambia la mesa de una orden ya abierta (ej. los comensales se
  *  cambiaron de mesa). Igual que al crear la orden, la mesa se resuelve/crea
- *  por número — no hace falta que ya exista. */
-export async function cambiarMesaOrden(ordenId: string, input: CambiarMesaInput) {
+ *  por número — no hace falta que ya exista. Misma restricción de mesa
+ *  `administrativa` que `crearOrden` — ver ahí. */
+export async function cambiarMesaOrden(ordenId: string, rolId: number, input: CambiarMesaInput) {
   const orden = await repo.getOrdenById(ordenId);
   if (!orden) throw Errors.notFound("Orden no encontrada");
   if (orden.estado === "cerrada" || orden.estado === "cancelada") {
     throw Errors.conflict("No se puede cambiar la mesa de una orden cerrada o cancelada");
   }
   const mesa = await repo.getOrCreateMesaPorNumero(input.mesaNumero, input.piso);
+  if (mesa.administrativa && !(await tienePermiso(rolId, "migao.mesas.usar_administrativa"))) {
+    throw Errors.forbidden("Esta mesa es exclusiva de Root/Super Root");
+  }
   return repo.actualizarMesaOrden(ordenId, mesa.id, input.nombre);
 }
 

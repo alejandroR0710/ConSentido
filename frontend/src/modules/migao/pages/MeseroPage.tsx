@@ -474,7 +474,10 @@ export function MeseroPage() {
 
           <FloorPlanCanvas
             mesas={combinarMesasConOrdenes(
-              mesasLayout.filter((m) => m.piso === borradorPiso && m.activo),
+              // `administrativa`: exclusiva de Root/Super Root (el backend la
+              // vuelve a validar al crear/mover una orden, esto solo evita
+              // ofrecerla como opción en el plano).
+              mesasLayout.filter((m) => m.piso === borradorPiso && m.activo && !m.administrativa),
               ordenes,
             )}
             modo="seleccionar"

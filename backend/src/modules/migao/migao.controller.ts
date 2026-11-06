@@ -141,7 +141,7 @@ export async function obtenerResumenDiarioIngresosController(_req: Request, res:
 
 export async function crearOrdenController(req: Request, res: Response) {
   const data = crearOrdenSchema.parse(req.body);
-  const orden = await service.crearOrden(req.auth!.usuarioId, data);
+  const orden = await service.crearOrden(req.auth!.usuarioId, req.auth!.rolId, data);
   return created(res, orden);
 }
 
@@ -170,7 +170,7 @@ export async function editarItemController(req: Request, res: Response) {
 
 export async function cambiarMesaController(req: Request, res: Response) {
   const data = cambiarMesaSchema.parse(req.body);
-  const orden = await service.cambiarMesaOrden(req.params.id, data);
+  const orden = await service.cambiarMesaOrden(req.params.id, req.auth!.rolId, data);
   return ok(res, orden);
 }
 

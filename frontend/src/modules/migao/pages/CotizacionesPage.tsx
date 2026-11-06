@@ -11,7 +11,7 @@ import {
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type ProductoCotizable } from "../api";
 import { BotonFactura } from "../components/BotonFactura";
-import { SelectorProductoCotizableModal } from "../components/SelectorProductoCotizableModal";
+import { SugerenciasProductoCotizable } from "../components/SugerenciasProductoCotizable";
 
 interface LineaCotizacion {
   key: number;
@@ -74,10 +74,10 @@ export function CotizacionesPage() {
   const [clienteTelefono, setClienteTelefono] = useState("");
   const [nota, setNota] = useState("");
   const [lineas, setLineas] = useState<LineaCotizacion[]>([lineaVacia()]);
-  // Línea para la que está abierto el buscador modal (Migao + Con Sentido +
-  // Insumos) — null = cerrado. Alternativa al campo de texto con
-  // autocompletar nativo, que en algunos dispositivos no despliega sugerencias.
-  const [buscandoLineaKey, setBuscandoLineaKey] = useState<number | null>(null);
+  // Misma mecánica que IngresoModal (Caja → Registrar ingreso): dropdown de
+  // sugerencias anclado al input mientras tiene foco, en vez de un datalist
+  // nativo (poco confiable en algunos dispositivos).
+  const [filaEnfocada, setFilaEnfocada] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
@@ -146,15 +146,6 @@ export function CotizacionesPage() {
 
   function actualizarLinea(key: number, cambios: Partial<LineaCotizacion>) {
     setLineas((actual) => actual.map((l) => (l.key === key ? { ...l, ...cambios } : l)));
-  }
-
-  function elegirDelCatalogo(key: number, nombreProducto: string) {
-    const producto = catalogo.find((p) => p.nombre === nombreProducto);
-    if (!producto) {
-      actualizarLinea(key, { nombre: nombreProducto });
-      return;
-    }
-    actualizarLinea(key, { nombre: producto.nombre, precioUnitario: producto.precio });
   }
 
   // Mismo criterio que IngresoModal: si es la única línea, la ✕ la deja en blanco en vez de quitarla.
@@ -328,33 +319,33 @@ export function CotizacionesPage() {
           </div>
         </div>
 
-        <datalist id="catalogo-cotizacion">
-          {catalogo.map((p) => (
-            <option key={p.id} value={p.nombre} />
-          ))}
-        </datalist>
-
         <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
           Productos o servicios
         </h3>
         <div className="mb-2 flex flex-col gap-2">
           {lineas.map((linea) => (
             <div key={linea.key} className="flex flex-wrap items-center gap-2">
-              <input
-                value={linea.nombre}
-                onChange={(e) => elegirDelCatalogo(linea.key, e.target.value)}
-                list="catalogo-cotizacion"
-                placeholder="Producto o servicio"
-                className="min-w-0 flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-              />
-              <button
-                type="button"
-                onClick={() => setBuscandoLineaKey(linea.key)}
-                title="Buscar en inventario"
-                className="rounded-md border border-brand-vanilla-dark px-2 py-2 text-sm text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
-              >
-                🔍
-              </button>
+              <div className="relative min-w-0 flex-1">
+                <input
+                  value={linea.nombre}
+                  onChange={(e) => actualizarLinea(linea.key, { nombre: e.target.value })}
+                  onFocus={() => setFilaEnfocada(linea.key)}
+                  onBlur={() => setFilaEnfocada((actual) => (actual === linea.key ? null : actual))}
+                  placeholder="Producto o servicio"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-2 text-sm text-brand-ink outline-none focus:border-brand-green-600 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+                />
+                {filaEnfocada === linea.key && (
+                  <SugerenciasProductoCotizable
+                    productos={catalogo}
+                    texto={linea.nombre}
+                    onSeleccionar={(producto) => {
+                      actualizarLinea(linea.key, { nombre: producto.nombre, precioUnitario: producto.precio });
+                      setFilaEnfocada(null);
+                    }}
+                  />
+                )}
+              </div>
               <input
                 type="number"
                 min={1}
@@ -510,16 +501,6 @@ export function CotizacionesPage() {
       </div>
 
       {recibo && <ModalImprimir {...recibo} onCerrar={() => setRecibo(null)} />}
-
-      {buscandoLineaKey !== null && (
-        <SelectorProductoCotizableModal
-          productos={catalogo}
-          onCerrar={() => setBuscandoLineaKey(null)}
-          onSeleccionar={(producto) =>
-            actualizarLinea(buscandoLineaKey, { nombre: producto.nombre, precioUnitario: producto.precio })
-          }
-        />
-      )}
 
       {(facturandoCotizacion || snapshotIngresoRestaurado) && (
         <IngresoModal

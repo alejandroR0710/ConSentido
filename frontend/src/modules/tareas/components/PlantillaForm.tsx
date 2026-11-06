@@ -61,7 +61,10 @@ export function PlantillaForm({ plantilla, roles, usuarios, onCerrar, onGuardado
     plantilla ? (plantilla.rolId !== null ? "rol" : "usuario") : "rol",
   );
   const [rolId, setRolId] = useState<number | "">(plantilla?.rolId ?? "");
-  const [usuarioId, setUsuarioId] = useState<string>(plantilla?.usuarioId ?? "");
+  // En creación se puede elegir varios usuarios puntuales a la vez (crea una
+  // plantilla por cada uno, mismo título/recurrencia) — en edición el destino
+  // ya es fijo a un solo usuario (plantilla!.usuarioId), no pasa por este estado.
+  const [usuarioIds, setUsuarioIds] = useState<string[]>(plantilla?.usuarioId ? [plantilla.usuarioId] : []);
   // Solo relevante en creación — en edición el tipo queda fijo al que ya
   // tenía la plantilla (tipoEfectivo abajo lo resuelve sin pasar por este
   // estado).
@@ -88,7 +91,11 @@ export function PlantillaForm({ plantilla, roles, usuarios, onCerrar, onGuardado
     );
   }
 
-  const destinoValido = esEdicion || (destino === "rol" ? rolId !== "" : usuarioId !== "");
+  function toggleUsuario(id: string) {
+    setUsuarioIds((actual) => (actual.includes(id) ? actual.filter((u) => u !== id) : [...actual, id]));
+  }
+
+  const destinoValido = esEdicion || (destino === "rol" ? rolId !== "" : usuarioIds.length > 0);
   const recurrenciaValida = tipoEfectivo === "semanal" ? diasSemana.length > 0 : fechaUnica.trim().length > 0;
   const puedeGuardar = titulo.trim().length > 0 && destinoValido && recurrenciaValida;
 
@@ -110,21 +117,45 @@ export function PlantillaForm({ plantilla, roles, usuarios, onCerrar, onGuardado
           diasSemana: tipoEfectivo === "semanal" ? diasSemana : undefined,
           fechaUnica: tipoEfectivo === "unica" ? fechaUnica : undefined,
         });
-      } else {
+      } else if (destino === "rol") {
         await crearPlantilla({
           titulo: titulo.trim(),
           descripcion: descripcion.trim() || undefined,
-          rolId: destino === "rol" ? Number(rolId) : undefined,
-          usuarioId: destino === "usuario" ? usuarioId : undefined,
+          rolId: Number(rolId),
+          usuarioId: undefined,
           tipoRecurrencia: tipoEfectivo,
           diasSemana: tipoEfectivo === "semanal" ? diasSemana : undefined,
           fechaUnica: tipoEfectivo === "unica" ? fechaUnica : undefined,
         });
+      } else {
+        // Una plantilla por cada usuario puntual elegido — mismo título,
+        // descripción y recurrencia para todos; cada una queda como una
+        // plantilla propia (se puede pausar/editar por separado después).
+        // Secuencial (no Promise.all): si una falla a mitad de camino, las
+        // ya creadas antes de esa quedan creadas igual — el error dice
+        // exactamente dónde se detuvo.
+        for (const id of usuarioIds) {
+          try {
+            await crearPlantilla({
+              titulo: titulo.trim(),
+              descripcion: descripcion.trim() || undefined,
+              rolId: undefined,
+              usuarioId: id,
+              tipoRecurrencia: tipoEfectivo,
+              diasSemana: tipoEfectivo === "semanal" ? diasSemana : undefined,
+              fechaUnica: tipoEfectivo === "unica" ? fechaUnica : undefined,
+            });
+          } catch (err) {
+            const nombre = usuariosAsignables.find((u) => u.id === id)?.nombre ?? id;
+            const mensaje = err instanceof ApiError ? err.message : "error desconocido";
+            throw new Error(`No se pudo crear para ${nombre} (${mensaje}). Los anteriores ya se crearon.`);
+          }
+        }
       }
       await onGuardado();
       onCerrar();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar la plantilla");
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "No se pudo guardar la plantilla");
     } finally {
       setGuardando(false);
     }
@@ -193,14 +224,22 @@ export function PlantillaForm({ plantilla, roles, usuarios, onCerrar, onGuardado
                 ))}
               </select>
             ) : (
-              <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)} className={campoClase}>
-                <option value="">Selecciona un usuario...</option>
-                {usuariosAsignables.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.nombre}
-                  </option>
-                ))}
-              </select>
+              <>
+                <p className="mb-1 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+                  Puedes elegir varios — se crea una plantilla igual para cada uno.
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-brand-vanilla-dark dark:border-brand-green-700">
+                  {usuariosAsignables.map((u) => (
+                    <label
+                      key={u.id}
+                      className="flex items-center gap-2 border-b border-brand-vanilla-dark px-3 py-2 text-sm text-brand-ink last:border-b-0 dark:border-brand-green-700 dark:text-brand-vanilla"
+                    >
+                      <input type="checkbox" checked={usuarioIds.includes(u.id)} onChange={() => toggleUsuario(u.id)} />
+                      {u.nombre}
+                    </label>
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}

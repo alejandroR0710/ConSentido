@@ -10,8 +10,6 @@ interface SugerenciasProductoProps {
   onSeleccionar: (producto: ProductoConSentido) => void;
 }
 
-const MAX_SUGERENCIAS = 6;
-
 /**
  * Dropdown de sugerencias bajo el input "Producto o servicio" de un ingreso
  * manual — filtra el catálogo de Con Sentido por nombre o SKU a medida que
@@ -24,7 +22,10 @@ const MAX_SUGERENCIAS = 6;
  * bajo el input: antes iba `absolute` dentro del formulario y el contenedor
  * con scroll del cobro de la mesa ("Agregar productos de la tienda") la
  * recortaba y obligaba a desplazarse para ver las opciones (hallazgo real
- * 2026-10-25). Si no cabe abajo, se abre hacia arriba.
+ * 2026-10-25). Si no cabe abajo, se abre hacia arriba. Sin tope de resultados
+ * (antes 6): la lista completa que matchea el texto, el contenedor ya
+ * scrollea solo con `maxHeight` — un tope silencioso escondía productos
+ * reales del inventario (hallazgo real 2026-11-06).
  */
 const MARGEN = 8;
 const ALTO_MINIMO = 160;
@@ -42,9 +43,7 @@ export function SugerenciasProducto({ productos, texto, onSeleccionar }: Sugeren
   const coincidencias =
     termino.length === 0
       ? []
-      : productos
-          .filter((p) => p.nombre.toLowerCase().includes(termino) || p.sku?.toLowerCase().includes(termino))
-          .slice(0, MAX_SUGERENCIAS);
+      : productos.filter((p) => p.nombre.toLowerCase().includes(termino) || p.sku?.toLowerCase().includes(termino));
   const hayLista = coincidencias.length > 0;
 
   useLayoutEffect(() => {

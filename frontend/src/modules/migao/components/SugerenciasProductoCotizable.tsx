@@ -15,7 +15,6 @@ const ETIQUETA_ORIGEN: Record<ProductoCotizable["origen"], string> = {
   insumos: "Insumos",
 };
 
-const MAX_SUGERENCIAS = 6;
 const MARGEN = 8;
 const ALTO_MINIMO = 160;
 
@@ -30,14 +29,16 @@ type Posicion = { left: number; width: number; top?: number; bottom?: number; ma
  * (Migao/Con Sentido/Insumos) — a diferencia de esa otra, que es solo de Con
  * Sentido — así que cada sugerencia muestra de dónde viene. Elegir una
  * precarga nombre+precio; nunca toca inventario ni stock, es solo texto para
- * la cotización (no hay productoId enganchado, a propósito).
+ * la cotización (no hay productoId enganchado, a propósito). Sin tope de
+ * resultados: muestra todo lo que matchea, el contenedor ya scrollea solo
+ * con `maxHeight`.
  */
 export function SugerenciasProductoCotizable({ productos, texto, onSeleccionar }: SugerenciasProductoCotizableProps) {
   const anclaRef = useRef<HTMLSpanElement>(null);
   const [posicion, setPosicion] = useState<Posicion | null>(null);
   const termino = texto.trim().toLowerCase();
 
-  const coincidencias = termino.length === 0 ? [] : productos.filter((p) => p.nombre.toLowerCase().includes(termino)).slice(0, MAX_SUGERENCIAS);
+  const coincidencias = termino.length === 0 ? [] : productos.filter((p) => p.nombre.toLowerCase().includes(termino));
   const hayLista = coincidencias.length > 0;
 
   useLayoutEffect(() => {

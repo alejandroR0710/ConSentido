@@ -53,6 +53,7 @@ import {
   listarPendientesPropinasPorDiaController,
   listarProductosAdminController,
   listarProductosController,
+  listarProductosCotizablesController,
   listarProductosParaLlevarController,
   listarPropinasController,
   marcarCheckItemController,
@@ -367,6 +368,14 @@ migaoRouter.post(
 
 // Cotizaciones: presupuesto para un cliente ANTES de una orden real — vive
 // aparte de ordenes/ventas, propios permisos (también los tiene Cajero).
+// Buscador de producto/servicio: combina Migao + Con Sentido + Insumos (a
+// diferencia de /productos, que es solo el menú de Migao) — mismo permiso
+// que ver cotizaciones, es exclusivo de esa pantalla.
+migaoRouter.get(
+  "/productos-cotizables",
+  requirePermission("migao.cotizaciones.ver"),
+  asyncHandler(listarProductosCotizablesController),
+);
 migaoRouter.get(
   "/cotizaciones",
   requirePermission("migao.cotizaciones.ver"),

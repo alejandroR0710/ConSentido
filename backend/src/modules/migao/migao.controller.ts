@@ -185,6 +185,11 @@ export async function listarProductosController(_req: Request, res: Response) {
   return ok(res, productos);
 }
 
+export async function listarProductosCotizablesController(_req: Request, res: Response) {
+  const productos = await service.listarProductosCotizables();
+  return ok(res, productos);
+}
+
 export async function crearProductoController(req: Request, res: Response) {
   const data = crearProductoSchema.parse(req.body);
   const producto = await service.crearProducto(data);

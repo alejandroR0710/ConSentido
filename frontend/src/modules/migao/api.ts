@@ -255,6 +255,15 @@ export interface Producto {
   ingredientes_limitantes: IngredienteLimitante[] | null;
 }
 
+/** Fila del buscador combinado de Cotizaciones (Migao + Con Sentido +
+ *  Insumos) — ver migao.service.ts::listarProductosCotizables. */
+export interface ProductoCotizable {
+  id: string;
+  nombre: string;
+  precio: number;
+  origen: "migao" | "con_sentido" | "insumos";
+}
+
 export interface ProductoAdmin extends Producto {
   costo: string;
   unidad_medida: string;
@@ -813,6 +822,7 @@ export const migaoApi = {
     }),
 
   listarProductos: () => apiFetch<Producto[]>("/migao/productos"),
+  listarProductosCotizables: () => apiFetch<ProductoCotizable[]>("/migao/productos-cotizables"),
   // Solo los productos marcados "para llevar" — es lo único que ve el Cajero
   // del catálogo, para cobrar envases/cargos adicionales (no tiene acceso al
   // menú completo).

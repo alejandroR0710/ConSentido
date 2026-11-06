@@ -5,6 +5,7 @@ import { descomponerPago, exigirMontoRecibidoEfectivo } from "../../shared/utils
 import { distribuirIgual } from "../../shared/utils/distribuir";
 import * as cajaService from "../general/caja/caja.service";
 import * as conSentidoRepo from "../con_sentido/con_sentido.repository";
+import * as insumosRepo from "../insumos/insumos.repository";
 import { programarEnvio as programarEnvioEcommerce } from "../integracion_ecommerce/salida";
 import * as notificacionesService from "../general/notificaciones/notificaciones.service";
 import * as inventarioService from "./inventario.service";
@@ -297,6 +298,37 @@ export async function obtenerResumenDiarioIngresos() {
 
 export async function listarProductos() {
   return repo.listProductosMigao();
+}
+
+export interface ProductoCotizable {
+  id: string;
+  nombre: string;
+  precio: number;
+  origen: "migao" | "con_sentido" | "insumos";
+}
+
+/**
+ * Buscador de "producto o servicio" para una línea de Cotización: combina
+ * los 3 catálogos de la plataforma (Migao, Con Sentido, Insumos) en una sola
+ * lista — a diferencia de `listarProductos` (solo el menú de Migao), que es
+ * lo que usan las órdenes reales. Los insumos no tienen precio de venta
+ * (solo costo); se usa su costo como punto de partida, el campo sigue
+ * siendo editable a mano en la línea de la cotización.
+ */
+export async function listarProductosCotizables(): Promise<ProductoCotizable[]> {
+  const [migao, conSentido, insumos] = await Promise.all([
+    repo.listProductosMigao(),
+    conSentidoRepo.listProductos(),
+    insumosRepo.listInsumos(),
+  ]);
+
+  const combinados: ProductoCotizable[] = [
+    ...migao.map((p): ProductoCotizable => ({ id: p.id, nombre: p.nombre, precio: Number(p.precio), origen: "migao" })),
+    ...conSentido.map((p): ProductoCotizable => ({ id: p.id, nombre: p.nombre, precio: Number(p.precio), origen: "con_sentido" })),
+    ...insumos.map((i): ProductoCotizable => ({ id: i.id, nombre: i.nombre, precio: Number(i.costoUnitario), origen: "insumos" })),
+  ];
+
+  return combinados.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
 /** Solo los productos marcados como cargo de "para llevar" — lo que ve el

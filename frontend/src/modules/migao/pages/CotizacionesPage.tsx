@@ -9,7 +9,7 @@ import {
   useIngresosMinimizados,
   type IngresoMinimizado,
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
-import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type Producto } from "../api";
+import { migaoApi, type CotizacionDetalle, type CotizacionResumen, type ProductoCotizable } from "../api";
 import { BotonFactura } from "../components/BotonFactura";
 
 interface LineaCotizacion {
@@ -64,7 +64,7 @@ function cotizacionAReciboProps(cotizacion: CotizacionDetalle) {
  * campo sigue funcionando como texto libre normal).
  */
 export function CotizacionesPage() {
-  const [catalogo, setCatalogo] = useState<Producto[]>([]);
+  const [catalogo, setCatalogo] = useState<ProductoCotizable[]>([]);
   const [cotizaciones, setCotizaciones] = useState<CotizacionResumen[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   const [errorLista, setErrorLista] = useState<string | null>(null);
@@ -127,10 +127,10 @@ export function CotizacionesPage() {
 
   useEffect(() => {
     cargarCotizaciones();
-    // El catálogo es solo un atajo de autocompletar — si el rol no tiene
-    // acceso (ej. Cajero no ve el menú completo), la línea sigue siendo texto libre.
+    // El catálogo es solo un atajo de autocompletar (combina Migao + Con
+    // Sentido + Insumos) — si falla, la línea sigue siendo texto libre.
     migaoApi
-      .listarProductos()
+      .listarProductosCotizables()
       .then(setCatalogo)
       .catch(() => setCatalogo([]));
   }, []);
@@ -149,7 +149,7 @@ export function CotizacionesPage() {
       actualizarLinea(key, { nombre: nombreProducto });
       return;
     }
-    actualizarLinea(key, { nombre: producto.nombre, precioUnitario: Number(producto.precio) });
+    actualizarLinea(key, { nombre: producto.nombre, precioUnitario: producto.precio });
   }
 
   // Mismo criterio que IngresoModal: si es la única línea, la ✕ la deja en blanco en vez de quitarla.
@@ -329,6 +329,9 @@ export function CotizacionesPage() {
           ))}
         </datalist>
 
+        <h3 className="mb-2 text-sm font-semibold text-brand-green-700 dark:text-brand-vanilla">
+          Productos o servicios
+        </h3>
         <div className="mb-2 flex flex-col gap-2">
           {lineas.map((linea) => (
             <div key={linea.key} className="flex flex-wrap items-center gap-2">

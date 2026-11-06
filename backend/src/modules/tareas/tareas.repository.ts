@@ -1,5 +1,5 @@
 import { pool } from "../../shared/db/pool";
-import type { EstadoTarea, InstanciaTarea, PlantillaTarea } from "./tareas.types";
+import type { EstadoTarea, InstanciaTarea, InstanciaVistaCruzada, PlantillaTarea } from "./tareas.types";
 
 // ---------------------------------------------------------------------------
 // dias_semana es un CSV libre en la columna (ej. '1,2,3'); acá vive la única
@@ -249,7 +249,7 @@ export async function actualizarPlantilla(
 export async function listarInstanciasVista(
   fecha: string,
   filtros: { rolId?: number; usuarioId?: string },
-): Promise<(InstanciaTarea & { usuarioNombre: string })[]> {
+): Promise<InstanciaVistaCruzada[]> {
   const condiciones: string[] = ["i.fecha = $1"];
   const values: unknown[] = [fecha];
 

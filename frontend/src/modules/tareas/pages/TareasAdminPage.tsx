@@ -302,6 +302,13 @@ export function TareasAdminPage() {
           <SelectorFiltro valor={filtroVistaValor} onChange={setFiltroVistaValor} roles={roles} usuarios={usuarios} />
         </div>
 
+        {fechaVista > fechaISOHoy() && (
+          <p className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+            Es un día futuro: esto es una vista previa de quién recibiría qué tarea, todavía no existe de verdad —
+            se genera sola cuando llegue ese día.
+          </p>
+        )}
+
         {errorVista && <p className="text-sm text-red-600">{errorVista}</p>}
 
         {loadingVista ? (
@@ -332,21 +339,30 @@ export function TareasAdminPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <select
-                        value={i.estado}
-                        disabled={guardandoInstanciaId === i.id}
-                        onChange={(e) => onCambiarEstadoVista(i.id, e.target.value as EstadoTarea)}
-                        className={`rounded-md border px-2 py-1 text-xs text-brand-ink disabled:opacity-60 dark:text-brand-vanilla ${ESTILO_SELECT_ESTADO[i.estado]}`}
-                      >
-                        {OPCIONES_ESTADO.map((e) => (
-                          <option key={e} value={e}>
-                            {ETIQUETA_ESTADO[e]}
-                          </option>
-                        ))}
-                      </select>
+                      {i.vistaPrevia ? (
+                        <span
+                          title="Vista previa: esta tarea todavía no existe como tal, se generará cuando llegue el día"
+                          className="rounded-md border border-dashed border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
+                        >
+                          Se generará ese día
+                        </span>
+                      ) : (
+                        <select
+                          value={i.estado}
+                          disabled={guardandoInstanciaId === i.id}
+                          onChange={(e) => onCambiarEstadoVista(i.id, e.target.value as EstadoTarea)}
+                          className={`rounded-md border px-2 py-1 text-xs text-brand-ink disabled:opacity-60 dark:text-brand-vanilla ${ESTILO_SELECT_ESTADO[i.estado]}`}
+                        >
+                          {OPCIONES_ESTADO.map((e) => (
+                            <option key={e} value={e}>
+                              {ETIQUETA_ESTADO[e]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-                      {etiquetaActualizado(i, usuarios)}
+                      {i.vistaPrevia ? "—" : etiquetaActualizado(i, usuarios)}
                     </td>
                   </tr>
                 ))}

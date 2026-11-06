@@ -1,7 +1,7 @@
 import { Errors } from "../../shared/utils/app-error";
 import * as usuariosRepo from "../general/usuarios/usuarios.repository";
 import * as repo from "./tareas.repository";
-import type { EstadoTarea, InstanciaTarea, PlantillaTarea } from "./tareas.types";
+import type { EstadoTarea, InstanciaTarea, InstanciaVistaCruzada, PlantillaTarea } from "./tareas.types";
 
 /**
  * Resuelve las plantillas aplicables para `usuarioId`/`rolId` en `fecha` y
@@ -169,11 +169,19 @@ export async function listarPlantillas(filtros: { rolId?: number; usuarioId?: st
  * fue desactivado deja de generar instancias nuevas de inmediato"). Sus
  * instancias ya generadas antes de desactivarse siguen apareciendo igual,
  * porque `listarInstanciasVista` no filtra por `activo` del usuario.
+ *
+ * Si `fecha` es futura, no se genera nada todavía (ver Review Focus: nunca
+ * fabricar historial de un día que no ha llegado) — en vez de devolver una
+ * lista vacía (confuso para el admin verificando si una plantilla quedó
+ * bien armada antes de que llegue el día), se calcula una VISTA PREVIA leyendo
+ * directo las plantillas aplicables, sin escribir ninguna fila. Cada fila
+ * trae `vistaPrevia: true` para que el frontend no intente cambiarle el
+ * estado (no hay una instancia real todavía).
  */
 export async function obtenerVistaCruzada(
   fecha: string,
   filtros: { rolId?: number; usuarioId?: string },
-): Promise<(InstanciaTarea & { usuarioNombre: string })[]> {
+): Promise<InstanciaVistaCruzada[]> {
   const usuarios = await usuariosRepo.listUsuarios();
   const afectados = usuarios.filter((usuario) => {
     if (!usuario.activo || usuario.deleted_at) return false;
@@ -185,6 +193,33 @@ export async function obtenerVistaCruzada(
   // Resuelto una sola vez antes del loop (no una consulta por usuario, que
   // serían N consultas redundantes para el mismo valor).
   const hoy = await repo.obtenerFechaHoy();
+
+  if (fecha > hoy) {
+    const vistaPrevia: InstanciaVistaCruzada[] = [];
+    for (const usuario of afectados) {
+      const plantillas = await repo.listarPlantillasAplicables(fecha, usuario.id, usuario.rol_id);
+      for (const plantilla of plantillas) {
+        vistaPrevia.push({
+          id: `preview:${plantilla.id}:${usuario.id}`,
+          plantillaId: plantilla.id,
+          usuarioId: usuario.id,
+          fecha,
+          estado: "pendiente",
+          titulo: plantilla.titulo,
+          descripcion: plantilla.descripcion,
+          actualizadoPorId: null,
+          actualizadoEn: null,
+          usuarioNombre: usuario.nombre,
+          vistaPrevia: true,
+        });
+      }
+    }
+    vistaPrevia.sort(
+      (a, b) => a.usuarioNombre.localeCompare(b.usuarioNombre) || a.plantillaId.localeCompare(b.plantillaId),
+    );
+    return vistaPrevia;
+  }
+
   for (const usuario of afectados) {
     await generarInstanciasParaUsuario(usuario.id, usuario.rol_id, fecha, hoy);
   }

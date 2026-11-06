@@ -50,6 +50,10 @@ export interface InstanciaTarea {
  *  `obtenerVistaCruzada` en `tareas.service.ts`. */
 export interface InstanciaTareaVista extends InstanciaTarea {
   usuarioNombre: string;
+  /** true si la fecha es futura: es una vista previa calculada desde las
+   *  plantillas, no una instancia real todavía — no se puede cambiar su
+   *  estado (no hay nada en la base a lo que escribirle). */
+  vistaPrevia?: boolean;
 }
 
 /** Body de `POST /plantillas` (ver `crearPlantillaSchema` en tareas.routes.ts). */

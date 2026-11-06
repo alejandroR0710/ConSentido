@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { migaoApi, type ItemActivo, type Mesa, type OrdenDetalle, type OrdenItem, type OrdenResumen, type Producto } from "../api";
 import { AREAS_MESA, areaDeMesa, labelArea } from "../areas";
 import { reproducirBeep, reproducirNotificacionSuave } from "../beep";
@@ -37,6 +39,12 @@ interface ItemBorrador {
 type Vista = "lista" | "detalle" | "nueva";
 
 export function MeseroPage() {
+  const { usuario } = useAuth();
+  // Root/Super Root también pueden pasar por esta pantalla (ven todas las
+  // pantallas de Migao) y sí deben ver/elegir mesas "administrativa" — la
+  // restricción es solo para quien no tiene migao.mesas.usar_administrativa
+  // (Mesero real). El backend vuelve a validar esto de todas formas.
+  const puedeVerAdministrativas = tieneAccesoTotal(usuario?.rol);
   const [ordenes, setOrdenes] = useState<OrdenResumen[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [mesasLayout, setMesasLayout] = useState<Mesa[]>([]);
@@ -474,10 +482,13 @@ export function MeseroPage() {
 
           <FloorPlanCanvas
             mesas={combinarMesasConOrdenes(
-              // `administrativa`: exclusiva de Root/Super Root (el backend la
-              // vuelve a validar al crear/mover una orden, esto solo evita
-              // ofrecerla como opción en el plano).
-              mesasLayout.filter((m) => m.piso === borradorPiso && m.activo && !m.administrativa),
+              // `administrativa`: oculta solo para quien no tiene
+              // migao.mesas.usar_administrativa (Mesero real) — Root/Super
+              // Root también usan esta pantalla y sí deben verlas. El backend
+              // vuelve a validar esto de todas formas al crear/mover la orden.
+              mesasLayout.filter(
+                (m) => m.piso === borradorPiso && m.activo && (puedeVerAdministrativas || !m.administrativa),
+              ),
               ordenes,
             )}
             modo="seleccionar"
@@ -690,7 +701,7 @@ export function MeseroPage() {
           mesaActual={ordenActual?.mesa_numero ?? null}
           pisoActual={ordenActual?.mesa_piso ?? null}
           nombreActual={ordenActual?.nombre ?? null}
-          mesasLayout={mesasLayout}
+          mesasLayout={mesasLayout.filter((m) => puedeVerAdministrativas || !m.administrativa)}
           ordenes={ordenes}
           onCerrar={() => setCambiarMesaAbierto(false)}
           onGuardar={guardarNuevaMesa}

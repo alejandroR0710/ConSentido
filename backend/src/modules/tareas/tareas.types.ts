@@ -36,17 +36,17 @@ export interface InstanciaTarea {
   descripcion: string | null;
   actualizadoPorId: string | null;
   actualizadoEn: string | null;
-}
-
-export interface InstanciaVistaCruzada extends InstanciaTarea {
-  usuarioNombre: string;
   /**
    * true cuando la fila es una PREVISUALIZACIÓN (fecha futura): se calculó a
    * partir de las plantillas aplicables, pero no existe todavía como fila
    * real en `tareas_instancia` — se genera recién cuando llegue ese día (ver
-   * obtenerVistaCruzada en tareas.service.ts). El frontend no debe permitir
-   * cambiar el estado de una fila con esta bandera, no hay una instancia real
-   * a la que escribirle.
+   * obtenerTareasDelDia/obtenerVistaCruzada en tareas.service.ts). El
+   * frontend no debe permitir cambiar el estado de una fila con esta
+   * bandera, no hay una instancia real a la que escribirle.
    */
   vistaPrevia?: boolean;
+}
+
+export interface InstanciaVistaCruzada extends InstanciaTarea {
+  usuarioNombre: string;
 }

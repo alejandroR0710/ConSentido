@@ -48,18 +48,27 @@ export function TareaCard({ tarea, guardando = false, onCambiarEstado }: TareaCa
           <p className="text-xs text-brand-ink/70 dark:text-brand-vanilla/70">{tarea.descripcion}</p>
         )}
       </div>
-      <select
-        value={tarea.estado}
-        disabled={guardando}
-        onChange={(e) => onCambiarEstado(e.target.value as EstadoTarea)}
-        className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-xs text-brand-ink disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      >
-        {OPCIONES_ESTADO.map((e) => (
-          <option key={e} value={e}>
-            {ETIQUETA_ESTADO[e]}
-          </option>
-        ))}
-      </select>
+      {tarea.vistaPrevia ? (
+        <span
+          title="Vista previa: todavía no puedes marcarla, se habilita cuando llegue el día"
+          className="rounded-md border border-dashed border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/60 dark:border-brand-green-700 dark:text-brand-vanilla/60"
+        >
+          Se habilitará ese día
+        </span>
+      ) : (
+        <select
+          value={tarea.estado}
+          disabled={guardando}
+          onChange={(e) => onCambiarEstado(e.target.value as EstadoTarea)}
+          className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-1 text-xs text-brand-ink disabled:opacity-60 dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        >
+          {OPCIONES_ESTADO.map((e) => (
+            <option key={e} value={e}>
+              {ETIQUETA_ESTADO[e]}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

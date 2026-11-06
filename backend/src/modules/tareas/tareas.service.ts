@@ -27,8 +27,32 @@ async function generarInstanciasParaUsuario(
   await repo.generarInstanciasFaltantes(plantillas, usuarioId, fecha);
 }
 
+/**
+ * Si `fecha` es futura, no se genera nada todavía (ver generarInstanciasParaUsuario) —
+ * en vez de devolver vacío (parecería que "no tiene nada asignado" aunque sí
+ * tenga una plantilla que le aplica), se devuelve una VISTA PREVIA calculada
+ * directo desde las plantillas aplicables, sin escribir ninguna fila. Mismo
+ * tratamiento que obtenerVistaCruzada para el admin — ver ahí.
+ */
 export async function obtenerTareasDelDia(usuarioId: string, rolId: number, fecha: string): Promise<InstanciaTarea[]> {
   const hoy = await repo.obtenerFechaHoy();
+
+  if (fecha > hoy) {
+    const plantillas = await repo.listarPlantillasAplicables(fecha, usuarioId, rolId);
+    return plantillas.map((plantilla) => ({
+      id: `preview:${plantilla.id}:${usuarioId}`,
+      plantillaId: plantilla.id,
+      usuarioId,
+      fecha,
+      estado: "pendiente" as const,
+      titulo: plantilla.titulo,
+      descripcion: plantilla.descripcion,
+      actualizadoPorId: null,
+      actualizadoEn: null,
+      vistaPrevia: true,
+    }));
+  }
+
   await generarInstanciasParaUsuario(usuarioId, rolId, fecha, hoy);
   // Ya vienen ordenadas por `orden` (JOIN a la plantilla) — ver
   // tareas.repository.ts::listarInstanciasDeUsuario.

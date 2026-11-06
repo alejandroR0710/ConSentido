@@ -43,6 +43,9 @@ export interface InstanciaTarea {
   descripcion: string | null;
   actualizadoPorId: string | null;
   actualizadoEn: string | null;
+  /** true si la fecha es futura: vista previa calculada desde las plantillas,
+   *  todavía no existe como instancia real — no se puede cambiar su estado. */
+  vistaPrevia?: boolean;
 }
 
 /** Fila de `GET /vista`: la instancia más el nombre del usuario dueño (para

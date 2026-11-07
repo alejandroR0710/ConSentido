@@ -256,11 +256,12 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
       </div>
 
       <label className="mb-1 block text-xs font-medium">Motivo</label>
-      <input
+      <textarea
         required
+        rows={3}
         value={motivo}
         onChange={(e) => setMotivo(e.target.value)}
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+        className="mb-3 w-full resize-y rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       />
 
       {pago.metodoPago !== "mixto" && (

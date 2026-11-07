@@ -990,6 +990,17 @@ export async function actualizarCategoriaGasto(id: number, nombre: string, modul
   return result.rows[0];
 }
 
+/** Desactivar, no borrar físico: una categoría ya usada tiene egresos
+ *  históricos (movimientos_caja.categoria_gasto_id) que la referencian —
+ *  mismo criterio que desactivarProveedor. La lista ya filtra activo=true. */
+export async function desactivarCategoriaGasto(id: number) {
+  const result = await pool.query(
+    `UPDATE categorias_gasto SET activo = false WHERE id = $1 RETURNING id, nombre, activo`,
+    [id],
+  );
+  return result.rows[0];
+}
+
 export async function listProveedores() {
   const result = await pool.query(
     `SELECT id, nombre, contacto, telefono, email FROM proveedores WHERE activo = true ORDER BY nombre ASC`,

@@ -313,6 +313,9 @@ export const cajaApi = {
       method: "PATCH",
       body: { nombre, moduloOrigenSlug },
     }),
+  /** Desactiva (no borra físico) — la categoría "Vales" no se puede desactivar. */
+  desactivarCategoriaGasto: (id: number) =>
+    apiFetch<CategoriaGasto>(`/caja/categorias-gasto/${id}`, { method: "DELETE" }),
   obtenerHistorialAnual: (anio: number) => apiFetch<DiaHistorialCaja[]>(`/caja/historial?anio=${anio}`),
   resetear: () =>
     apiFetch<ResetearCajaResultado>("/caja/reset", {

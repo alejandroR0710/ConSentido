@@ -719,6 +719,15 @@ export async function actualizarCategoriaGasto(id: number, nombre: string, modul
   return repo.actualizarCategoriaGasto(id, nombre, moduloOrigenSlug);
 }
 
+export async function desactivarCategoriaGasto(id: number) {
+  const categorias = await repo.listCategoriasGasto();
+  const actual = categorias.find((c) => c.id === id);
+  if (actual?.nombre === CATEGORIA_PROTEGIDA_VALES) {
+    throw Errors.conflict('La categoría "Vales" es de uso interno del módulo de Vales y no se puede eliminar.');
+  }
+  return repo.desactivarCategoriaGasto(id);
+}
+
 export async function listarProveedores() {
   return repo.listProveedores();
 }

@@ -40,6 +40,19 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
     setFormularioAbierto(false);
   }
 
+  async function eliminar(id: number) {
+    if (!confirm("¿Eliminar esta categoría?")) return;
+    setError(null);
+    try {
+      await cajaApi.desactivarCategoriaGasto(id);
+      if (id === editando) cancelar();
+      await cargarCategorias();
+      onActualizar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la categoría");
+    }
+  }
+
   async function guardarCategoria() {
     if (!nuevaCategoria.trim()) return;
     setGuardando(true);
@@ -170,19 +183,31 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
                   </span>
                 )}
               </div>
-              <button
-                onClick={() => {
-                  setEditando(c.id);
-                  setNuevaCategoria(c.nombre);
-                  setNuevaArea(c.modulo_origen_slug ?? "");
-                  setFormularioAbierto(true);
-                }}
-                aria-label="Editar categoría"
-                title="Editar"
-                className="shrink-0 rounded-md border border-brand-green-700 px-2 py-1 text-xs text-brand-green-700 hover:bg-brand-green-100 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
-              >
-                ✎
-              </button>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  onClick={() => {
+                    setEditando(c.id);
+                    setNuevaCategoria(c.nombre);
+                    setNuevaArea(c.modulo_origen_slug ?? "");
+                    setFormularioAbierto(true);
+                  }}
+                  aria-label="Editar categoría"
+                  title="Editar"
+                  className="rounded-md border border-brand-green-700 px-2 py-1 text-xs text-brand-green-700 hover:bg-brand-green-100 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"
+                >
+                  ✎
+                </button>
+                {c.nombre !== "Vales" && (
+                  <button
+                    onClick={() => eliminar(c.id)}
+                    aria-label="Eliminar categoría"
+                    title="Eliminar"
+                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-950/30"
+                  >
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

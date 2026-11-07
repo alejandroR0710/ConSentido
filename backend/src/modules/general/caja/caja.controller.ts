@@ -87,6 +87,11 @@ export async function actualizarCategoriaGastoController(req: Request, res: Resp
   return ok(res, categoria);
 }
 
+export async function desactivarCategoriaGastoController(req: Request, res: Response) {
+  const categoria = await service.desactivarCategoriaGasto(Number(req.params.id));
+  return ok(res, categoria);
+}
+
 export async function editarMetodoPagoMovimientoController(req: Request, res: Response) {
   const data = editarMetodoPagoMovimientoSchema.parse(req.body);
   const movimientos = await service.editarMetodoPagoMovimiento(Number(req.params.id), data);

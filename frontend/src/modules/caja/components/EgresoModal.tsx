@@ -69,40 +69,47 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
 
   return (
     <Modal titulo="Registrar egreso" onCerrar={onCerrar} ancho="sm:w-[60vw]">
-      <label className="mb-1 block text-xs font-medium">Categoría de gasto</label>
-      <select
-        autoFocus
-        value={categoriaId}
-        onChange={(e) => setCategoriaId(Number(e.target.value))}
-        className="mb-2 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      >
-        <option value="" disabled>
-          Selecciona una categoría
-        </option>
-        {categorias.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nombre}
-          </option>
-        ))}
-      </select>
-
-      {proveedores.length > 0 && (
-        <>
-          <label className="mb-1 block text-xs font-medium">Proveedor (opcional)</label>
+      {/* Categoría y Proveedor comparten fila al 50/50 — si no hay
+          proveedores cargados, Categoría ocupa el ancho completo en vez de
+          quedar a la mitad (mismo criterio que Monto/Motivo más abajo). */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className={proveedores.length === 0 ? "sm:col-span-2" : ""}>
+          <label className="mb-1 block text-xs font-medium">Categoría de gasto</label>
           <select
-            value={proveedorId}
-            onChange={(e) => setProveedorId(e.target.value)}
-            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            autoFocus
+            value={categoriaId}
+            onChange={(e) => setCategoriaId(Number(e.target.value))}
+            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           >
-            <option value="">Sin proveedor</option>
-            {proveedores.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
+            <option value="" disabled>
+              Selecciona una categoría
+            </option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
               </option>
             ))}
           </select>
-        </>
-      )}
+        </div>
+
+        {proveedores.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-medium">Proveedor (opcional)</label>
+            <select
+              value={proveedorId}
+              onChange={(e) => setProveedorId(e.target.value)}
+              className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            >
+              <option value="">Sin proveedor</option>
+              {proveedores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
       <select

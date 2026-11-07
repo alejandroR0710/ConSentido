@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { cerrarTarea, listarTablero, salirDeTarea, unirseATarea, type TareaScrumConParticipantes } from "../api";
+import { NuevaTareaScrumModal } from "../components/NuevaTareaScrumModal";
 import { TareaScrumCard } from "../components/TareaScrumCard";
 
 function fechaISOHoy(): string {
@@ -41,6 +42,7 @@ export function TableroPage() {
   // id de la tarea con una acción (unirse/salir/cerrar) en vuelo — solo esa
   // tarjeta se deshabilita, el resto del tablero sigue siendo interactivo.
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
+  const [mostrarNuevaTarea, setMostrarNuevaTarea] = useState(false);
 
   async function cargar() {
     try {
@@ -106,12 +108,22 @@ export function TableroPage() {
             Tareas compartidas del día por área: únete, sal o cierra las que correspondan.
           </p>
         </div>
-        <input
-          type="date"
-          value={fecha}
-          onChange={(e) => setFecha(e.target.value)}
-          className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-        />
+        <div className="flex items-center gap-2">
+          {puedeGestionar && (
+            <button
+              onClick={() => setMostrarNuevaTarea(true)}
+              className="rounded-md bg-brand-green-700 px-3 py-1.5 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+            >
+              + Nueva tarea
+            </button>
+          )}
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-3 py-1.5 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -145,6 +157,14 @@ export function TableroPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {mostrarNuevaTarea && (
+        <NuevaTareaScrumModal
+          areasSugeridas={columnas.map((columna) => columna.area)}
+          onCerrar={() => setMostrarNuevaTarea(false)}
+          onCreada={cargar}
+        />
       )}
     </div>
   );

@@ -62,6 +62,17 @@ const editarPlantillaSchema = z.object({
   fechaUnica: z.string().regex(FECHA_REGEX, "Formato de fecha inválido (YYYY-MM-DD)").nullable().optional(),
 });
 
+const scrumQuerySchema = z.object({ fecha: fechaOpcionalSchema });
+
+// "No vacío" real (tras trim) lo revalida tareas.service.ts::crearTareaScrum
+// — acá solo se valida tipo/forma, igual que crearPlantillaSchema arriba.
+const crearTareaScrumSchema = z.object({
+  titulo: z.string().min(1),
+  area: z.string().min(1),
+  descripcion: z.string().nullable().optional(),
+  fecha: fechaOpcionalSchema,
+});
+
 /**
  * "Hoy" para `GET /mias` y `GET /vista` cuando `fecha` no vino: se resuelve
  * contra la sesión MySQL (fija en -05:00, ver pool.ts), nunca con
@@ -155,5 +166,74 @@ tareasRouter.get(
     const fechaResuelta = await resolverFecha(fecha);
     const vista = await service.obtenerVistaCruzada(fechaResuelta, filtros);
     return ok(res, vista);
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Tablero compartido por área (tipo Scrum).
+// ---------------------------------------------------------------------------
+
+tareasRouter.get(
+  "/scrum",
+  requirePermission("tareas.ver_propias"),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { fecha } = scrumQuerySchema.parse(req.query);
+    const fechaResuelta = await resolverFecha(fecha);
+    const tablero = await service.listarTableroDelDia(fechaResuelta, req.auth!.usuarioId);
+    return ok(res, tablero);
+  }),
+);
+
+tareasRouter.post(
+  "/scrum",
+  requirePermission("tareas.gestionar"),
+  asyncHandler(async (req: Request, res: Response) => {
+    const datos = crearTareaScrumSchema.parse(req.body);
+    const fechaResuelta = await resolverFecha(datos.fecha);
+    const tarea = await service.crearTareaScrum(
+      {
+        titulo: datos.titulo,
+        area: datos.area,
+        descripcion: datos.descripcion ?? null,
+        fecha: fechaResuelta,
+      },
+      req.auth!.usuarioId,
+    );
+    return created(res, tarea);
+  }),
+);
+
+tareasRouter.post(
+  "/scrum/:id/unirse",
+  requirePermission("tareas.ver_propias"),
+  asyncHandler(async (req: Request, res: Response) => {
+    await service.unirseATareaScrum(req.params.id, req.auth!.usuarioId);
+    return ok(res, { ok: true });
+  }),
+);
+
+tareasRouter.post(
+  "/scrum/:id/salir",
+  requirePermission("tareas.ver_propias"),
+  asyncHandler(async (req: Request, res: Response) => {
+    await service.salirDeTareaScrum(req.params.id, req.auth!.usuarioId);
+    return ok(res, { ok: true });
+  }),
+);
+
+tareasRouter.post(
+  "/scrum/:id/cerrar",
+  requirePermission("tareas.ver_propias"),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Calculado acá (no reimplementado): mismo patrón que
+    // PATCH /instancias/:id/estado arriba — el service solo recibe el
+    // booleano ya resuelto y decide con él si puede cerrar la de otro.
+    const llamadorPuedeGestionar = await tienePermiso(req.auth!.rolId, "tareas.gestionar");
+    const tarea = await service.cerrarTareaScrum({
+      tareaId: req.params.id,
+      llamadorId: req.auth!.usuarioId,
+      llamadorPuedeGestionar,
+    });
+    return ok(res, tarea);
   }),
 );

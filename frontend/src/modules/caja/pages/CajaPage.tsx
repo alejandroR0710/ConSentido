@@ -539,7 +539,7 @@ export function CajaPage() {
       )}
 
       {modalAbierto === "egreso" && (
-        <EgresoModal onCerrar={() => setModalAbierto(null)} onRegistrado={cargarResumenDeTurnoActual} />
+        <EgresoModal categorias={categorias} onCerrar={() => setModalAbierto(null)} onRegistrado={cargarResumenDeTurnoActual} />
       )}
 
       {modalAbierto === "reset" && (

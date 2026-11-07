@@ -1,6 +1,7 @@
 import { pool } from "../../shared/db/pool";
 import type {
   EstadoTarea,
+  EstadoTareaScrum,
   InstanciaTarea,
   InstanciaVistaCruzada,
   ParticipanteScrum,
@@ -296,11 +297,17 @@ function mapTareaScrum(row: any): TareaScrum {
     creadoPorId: row.creado_por_id,
     cerradoPorId: row.cerrado_por_id,
     cerradoEn: row.cerrado_en,
+    cerradoPorNombre: row.cerrado_por_nombre ?? null,
   };
 }
 
 const COLUMNAS_TAREA_SCRUM = "id, titulo, area, descripcion, fecha, estado, creado_por_id, cerrado_por_id, cerrado_en";
 
+/** `RETURNING` (crear/cambiar estado) no puede traer el JOIN al nombre de
+ *  quien cerró — esas dos funciones devuelven `cerradoPorNombre: null` desde
+ *  `mapTareaScrum` (fila recién creada, o el propio UPDATE que no lo
+ *  necesita para su resultado) y quien sí lo necesita vuelve a pedir la fila
+ *  completa con `obtenerTareaScrumPorId`. */
 export async function crearTareaScrum(datos: {
   titulo: string;
   area: string;
@@ -319,35 +326,61 @@ export async function crearTareaScrum(datos: {
 
 /** Todas las tareas de `fecha`, sin participantes (eso es una consulta
  *  aparte — ver listarParticipantes/listarParticipantesDeVariasTareas —
- *  para no traer el JOIN si el caller no lo necesita). */
+ *  para no traer ese JOIN si el caller no lo necesita). Sí trae el nombre de
+ *  quien cerró cada una (si aplica), vía LEFT JOIN. */
 export async function listarTareasScrumDelDia(fecha: string): Promise<TareaScrum[]> {
   const result = await pool.query(
-    `SELECT ${COLUMNAS_TAREA_SCRUM} FROM tareas_scrum WHERE fecha = $1 ORDER BY created_at ASC`,
+    `SELECT ts.id, ts.titulo, ts.area, ts.descripcion, ts.fecha, ts.estado, ts.creado_por_id,
+            ts.cerrado_por_id, ts.cerrado_en, u.nombre AS cerrado_por_nombre
+       FROM tareas_scrum ts
+       LEFT JOIN usuarios u ON u.id = ts.cerrado_por_id
+      WHERE ts.fecha = $1
+      ORDER BY ts.created_at ASC`,
     [fecha],
   );
   return result.rows.map(mapTareaScrum);
 }
 
 export async function obtenerTareaScrumPorId(id: string): Promise<TareaScrum | null> {
-  const result = await pool.query(`SELECT ${COLUMNAS_TAREA_SCRUM} FROM tareas_scrum WHERE id = $1`, [id]);
+  const result = await pool.query(
+    `SELECT ts.id, ts.titulo, ts.area, ts.descripcion, ts.fecha, ts.estado, ts.creado_por_id,
+            ts.cerrado_por_id, ts.cerrado_en, u.nombre AS cerrado_por_nombre
+       FROM tareas_scrum ts
+       LEFT JOIN usuarios u ON u.id = ts.cerrado_por_id
+      WHERE ts.id = $1`,
+    [id],
+  );
   return result.rowCount ? mapTareaScrum(result.rows[0]) : null;
 }
 
 /**
- * El `AND estado = 'abierta'` en el WHERE es lo que hace que cerrar una tarea
- * ya cerrada no pise `cerrado_en`/`cerrado_por_id`: la segunda vez `rowCount`
- * es 0 y se devuelve null, igual que `actualizarEstadoInstancia` en este
- * archivo — el caller decide si es porque la tarea no existe o porque ya
- * estaba cerrada.
+ * Cambia el estado de la tarea ('abierta'/'en_progreso' libremente, o
+ * 'cerrada' — terminal). El `AND estado != 'cerrada'` en el WHERE es lo que
+ * hace que tocar una tarea ya cerrada (incluso "cerrarla" de nuevo) no haga
+ * nada: la segunda vez `rowCount` es 0 y se devuelve null, igual que
+ * `actualizarEstadoInstancia` en este archivo — el caller decide si es
+ * porque la tarea no existe o porque ya estaba cerrada. Pasar a 'cerrada' es
+ * lo único que además escribe `cerrado_por_id`/`cerrado_en`; pasar a
+ * 'abierta'/'en_progreso' solo toca `estado`.
  */
-export async function cerrarTareaScrum(id: string, cerradoPorId: string): Promise<TareaScrum | null> {
-  const result = await pool.query(
-    `UPDATE tareas_scrum
-        SET estado = 'cerrada', cerrado_por_id = $2, cerrado_en = now()
-      WHERE id = $1 AND estado = 'abierta'
-      RETURNING id`,
-    [id, cerradoPorId],
-  );
+export async function cambiarEstadoTareaScrum(
+  id: string,
+  estado: EstadoTareaScrum,
+  actualizadoPorId: string,
+): Promise<TareaScrum | null> {
+  const result =
+    estado === "cerrada"
+      ? await pool.query(
+          `UPDATE tareas_scrum
+              SET estado = 'cerrada', cerrado_por_id = $2, cerrado_en = now()
+            WHERE id = $1 AND estado != 'cerrada'
+            RETURNING id`,
+          [id, actualizadoPorId],
+        )
+      : await pool.query(
+          `UPDATE tareas_scrum SET estado = $2 WHERE id = $1 AND estado != 'cerrada' RETURNING id`,
+          [id, estado],
+        );
   if (!result.rowCount) return null;
   return obtenerTareaScrumPorId(id);
 }

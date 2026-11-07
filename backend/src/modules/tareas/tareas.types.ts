@@ -53,11 +53,14 @@ export interface InstanciaVistaCruzada extends InstanciaTarea {
 
 // ---------------------------------------------------------------------------
 // Tablero compartido por área (tipo Scrum): tarea suelta con un solo estado
-// compartido entre quienes se unan. Ver migración
-// `database/mysql/migraciones/2026-11-07_tareas_scrum.sql` para las tablas.
+// compartido entre quienes se unan. Ver migraciones
+// `database/mysql/migraciones/2026-11-07_tareas_scrum.sql` y
+// `2026-11-07b_tareas_scrum_en_progreso.sql` para las tablas.
 // ---------------------------------------------------------------------------
 
-export type EstadoTareaScrum = "abierta" | "cerrada";
+/** 'cerrada' es terminal: nunca se vuelve a abierta/en_progreso desde ahí
+ *  (ver tareas.service.ts::cambiarEstadoTareaScrum). */
+export type EstadoTareaScrum = "abierta" | "en_progreso" | "cerrada";
 
 export interface TareaScrum {
   id: string;
@@ -69,6 +72,8 @@ export interface TareaScrum {
   creadoPorId: string;
   cerradoPorId: string | null;
   cerradoEn: string | null;
+  /** Nombre de quien la cerró, vía JOIN — null si nunca se cerró. */
+  cerradoPorNombre: string | null;
 }
 
 export interface ParticipanteScrum {

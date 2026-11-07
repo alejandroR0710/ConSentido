@@ -144,7 +144,8 @@ export function obtenerVistaCruzada(fecha: string | undefined, filtros: FiltrosV
 // `tareas.types.ts` (Task 2) y de las rutas `/tareas/scrum*` (Task 4).
 // ---------------------------------------------------------------------------
 
-export type EstadoTareaScrum = "abierta" | "cerrada";
+/** 'cerrada' es terminal: nunca se vuelve a abierta/en_progreso desde ahí. */
+export type EstadoTareaScrum = "abierta" | "en_progreso" | "cerrada";
 
 /** Espejo de `TareaScrum` del backend. */
 export interface TareaScrum {
@@ -157,6 +158,8 @@ export interface TareaScrum {
   creadoPorId: string;
   cerradoPorId: string | null;
   cerradoEn: string | null;
+  /** Nombre de quien la cerró — null si nunca se cerró. */
+  cerradoPorNombre: string | null;
 }
 
 /** Espejo de `ParticipanteScrum` del backend. */
@@ -202,7 +205,7 @@ export function salirDeTarea(id: string) {
   return apiFetch<{ ok: boolean }>(`/tareas/scrum/${id}/salir`, { method: "POST" });
 }
 
-/** Cierra una tarea del tablero. Cualquier participante puede cerrarla; quien tenga `tareas.gestionar` puede cerrar cualquiera. */
-export function cerrarTarea(id: string) {
-  return apiFetch<TareaScrum>(`/tareas/scrum/${id}/cerrar`, { method: "POST" });
+/** Cambia el estado de una tarea del tablero (abierta/en_progreso libremente, cerrada es terminal). Cualquier participante puede cambiarlo; quien tenga `tareas.gestionar` puede cambiar el de cualquiera. */
+export function cambiarEstadoTareaScrum(id: string, estado: EstadoTareaScrum) {
+  return apiFetch<TareaScrum>(`/tareas/scrum/${id}/estado`, { method: "PATCH", body: { estado } });
 }

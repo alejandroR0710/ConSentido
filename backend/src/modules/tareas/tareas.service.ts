@@ -3,6 +3,7 @@ import * as usuariosRepo from "../general/usuarios/usuarios.repository";
 import * as repo from "./tareas.repository";
 import type {
   EstadoTarea,
+  EstadoTareaScrum,
   InstanciaTarea,
   InstanciaVistaCruzada,
   ParticipanteScrum,
@@ -301,7 +302,8 @@ export async function listarTableroDelDia(
 }
 
 /** Unirse a una tarea ya cerrada es inofensivo (simplemente no podrá
- *  cerrarla de nuevo, ver cerrarTareaScrum) — no se valida el estado acá. */
+ *  cambiarle el estado, ver cambiarEstadoTareaScrum) — no se valida el
+ *  estado acá. */
 export async function unirseATareaScrum(tareaId: string, usuarioId: string): Promise<void> {
   const tarea = await repo.obtenerTareaScrumPorId(tareaId);
   if (!tarea) throw Errors.notFound("Tarea no encontrada");
@@ -315,34 +317,42 @@ export async function salirDeTareaScrum(tareaId: string, usuarioId: string): Pro
 }
 
 /**
- * `repo.cerrarTareaScrum` devuelve null tanto si la tarea no existe como si
- * ya estaba cerrada (su `WHERE estado = 'abierta'` hace que el UPDATE sobre
- * una ya cerrada afecte 0 filas) — por eso la tarea se resuelve ACÁ primero,
- * para distinguir 404 (no existe) de 409 (ya cerrada) antes de llegar al
- * UPDATE.
+ * Cambia el estado de la tarea (abierta/en_progreso libremente entre sí;
+ * cerrada es terminal — nunca se vuelve atrás desde ahí). Mismo chequeo de
+ * permiso para cualquier cambio, no solo para cerrar: sin `tareas.gestionar`,
+ * hay que estar unido para poder tocar el estado en absoluto.
+ *
+ * `repo.cambiarEstadoTareaScrum` devuelve null tanto si la tarea no existe
+ * como si ya estaba cerrada (su `WHERE estado != 'cerrada'` hace que el
+ * UPDATE sobre una ya cerrada afecte 0 filas) — por eso la tarea se resuelve
+ * ACÁ primero, para distinguir 404 (no existe) de 409 (ya cerrada) antes de
+ * llegar al UPDATE.
  */
-export async function cerrarTareaScrum(params: {
+export async function cambiarEstadoTareaScrum(params: {
   tareaId: string;
+  estado: EstadoTareaScrum;
   llamadorId: string;
   llamadorPuedeGestionar: boolean;
 }): Promise<TareaScrum> {
   const tarea = await repo.obtenerTareaScrumPorId(params.tareaId);
   if (!tarea) throw Errors.notFound("Tarea no encontrada");
 
-  // Sin tareas.gestionar, solo quien ya está unido a la tarea puede cerrarla
-  // — con tareas.gestionar (Root/Super Root), se puede cerrar cualquiera.
+  // Sin tareas.gestionar, solo quien ya está unido a la tarea puede cambiar
+  // su estado — con tareas.gestionar (Root/Super Root), se puede cambiar
+  // cualquiera.
   if (!params.llamadorPuedeGestionar) {
     const unido = await repo.estaUnido(params.tareaId, params.llamadorId);
-    if (!unido) throw Errors.forbidden("No tiene permiso para cerrar esta tarea");
+    if (!unido) throw Errors.forbidden("No tiene permiso para cambiar el estado de esta tarea");
   }
 
   if (tarea.estado === "cerrada") throw Errors.conflict("La tarea ya está cerrada");
 
-  const cerrada = await repo.cerrarTareaScrum(params.tareaId, params.llamadorId);
-  // Ya se confirmó arriba que existía y estaba abierta, así que un `null`
-  // acá solo puede significar que otra llamada la cerró en el instante
-  // exacto entre ese chequeo y este UPDATE (carrera real, no hipotética en
-  // una tarea compartida) — 409, no 404: la tarea existe, perdió la carrera.
-  if (!cerrada) throw Errors.conflict("La tarea ya está cerrada");
-  return cerrada;
+  const actualizada = await repo.cambiarEstadoTareaScrum(params.tareaId, params.estado, params.llamadorId);
+  // Ya se confirmó arriba que existía y estaba abierta/en_progreso, así que
+  // un `null` acá solo puede significar que otra llamada la cerró en el
+  // instante exacto entre ese chequeo y este UPDATE (carrera real, no
+  // hipotética en una tarea compartida) — 409, no 404: la tarea existe,
+  // perdió la carrera.
+  if (!actualizada) throw Errors.conflict("La tarea ya está cerrada");
+  return actualizada;
 }

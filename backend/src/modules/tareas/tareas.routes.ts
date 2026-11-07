@@ -73,6 +73,12 @@ const crearTareaScrumSchema = z.object({
   fecha: fechaOpcionalSchema,
 });
 
+// Estados del tablero compartido — distinto del `cambiarEstadoSchema` de
+// arriba (rutina diaria, 4 valores): acá son solo 3 y 'cerrada' es terminal.
+const cambiarEstadoScrumSchema = z.object({
+  estado: z.enum(["abierta", "en_progreso", "cerrada"]),
+});
+
 /**
  * "Hoy" para `GET /mias` y `GET /vista` cuando `fecha` no vino: se resuelve
  * contra la sesión MySQL (fija en -05:00, ver pool.ts), nunca con
@@ -221,16 +227,19 @@ tareasRouter.post(
   }),
 );
 
-tareasRouter.post(
-  "/scrum/:id/cerrar",
+tareasRouter.patch(
+  "/scrum/:id/estado",
   requirePermission("tareas.ver_propias"),
   asyncHandler(async (req: Request, res: Response) => {
+    const { estado } = cambiarEstadoScrumSchema.parse(req.body);
     // Calculado acá (no reimplementado): mismo patrón que
     // PATCH /instancias/:id/estado arriba — el service solo recibe el
-    // booleano ya resuelto y decide con él si puede cerrar la de otro.
+    // booleano ya resuelto y decide con él si puede cambiarle el estado a
+    // la tarea de otro (no solo para cerrarla).
     const llamadorPuedeGestionar = await tienePermiso(req.auth!.rolId, "tareas.gestionar");
-    const tarea = await service.cerrarTareaScrum({
+    const tarea = await service.cambiarEstadoTareaScrum({
       tareaId: req.params.id,
+      estado,
       llamadorId: req.auth!.usuarioId,
       llamadorPuedeGestionar,
     });

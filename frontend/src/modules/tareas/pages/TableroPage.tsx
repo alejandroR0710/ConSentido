@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { useAuth } from "../../../shared/auth/useAuth";
-import { cerrarTarea, listarTablero, salirDeTarea, unirseATarea, type TareaScrumConParticipantes } from "../api";
+import {
+  cambiarEstadoTareaScrum,
+  listarTablero,
+  salirDeTarea,
+  unirseATarea,
+  type TareaScrumConParticipantes,
+} from "../api";
 import { NuevaTareaScrumModal } from "../components/NuevaTareaScrumModal";
 import { TareaScrumCard } from "../components/TareaScrumCard";
 
@@ -90,13 +96,27 @@ export function TableroPage() {
     }
   }
 
+  // Pasar entre abierta/en_progreso es libre y reversible — sin confirmación.
+  async function onCambiarEstado(id: string, estado: "abierta" | "en_progreso") {
+    setGuardandoId(id);
+    try {
+      await cambiarEstadoTareaScrum(id, estado);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado de la tarea");
+    } finally {
+      await cargar();
+      setGuardandoId(null);
+    }
+  }
+
   async function onCerrar(id: string) {
     // Cerrar es compartido e irreversible desde esta pantalla (no hay botón
     // para reabrir) — un toque de más no debería cerrarla por accidente.
     if (!confirm("¿Cerrar esta tarea? Quedará cerrada para todos los que participan, no se puede deshacer.")) return;
     setGuardandoId(id);
     try {
-      await cerrarTarea(id);
+      await cambiarEstadoTareaScrum(id, "cerrada");
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cerrar la tarea");
@@ -159,6 +179,7 @@ export function TableroPage() {
                     puedeGestionar={puedeGestionar}
                     onUnirse={() => onUnirse(tarea.id)}
                     onSalir={() => onSalir(tarea.id)}
+                    onCambiarEstado={(estado) => onCambiarEstado(tarea.id, estado)}
                     onCerrar={() => onCerrar(tarea.id)}
                   />
                 ))}

@@ -269,7 +269,6 @@ export const cajaApi = {
   obtenerFacturaVenta: (ventaId: string) => apiFetch<FacturaVentaManual>(`/caja/ventas/${ventaId}/factura`),
   registrarEgreso: (
     input: {
-      categoriaGastoId: number;
       motivo: string;
       proveedorId?: string;
       moduloOrigenSlug?: ModuloOrigenSlug;

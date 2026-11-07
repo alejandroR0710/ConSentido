@@ -598,7 +598,10 @@ export async function insertEgreso(
   executor: Executor,
   params: {
     turnoId: string;
-    categoriaGastoId: number;
+    // Opcional: "Registrar egreso" ya no exige categoría (ver
+    // registrarEgresoSchema) — "Egreso acumulado" (insertEgresoAcumulado,
+    // abajo) sigue exigiéndola, no se tocó.
+    categoriaGastoId?: number;
     monto: number;
     metodoPago: string;
     motivo: string;
@@ -617,7 +620,7 @@ export async function insertEgreso(
      RETURNING *`,
     [
       params.turnoId,
-      params.categoriaGastoId,
+      params.categoriaGastoId ?? null,
       params.monto,
       params.metodoPago,
       params.motivo,

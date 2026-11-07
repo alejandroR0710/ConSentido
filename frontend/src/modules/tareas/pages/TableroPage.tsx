@@ -65,10 +65,14 @@ export function TableroPage() {
     setGuardandoId(id);
     try {
       await unirseATarea(id);
-      await cargar();
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo unir a la tarea");
     } finally {
+      // Siempre, también si falló (ej. otro usuario ya cerró esta tarea
+      // mientras tanto) — si no, la tarjeta se queda mostrando un estado
+      // viejo hasta que algo más la recargue.
+      await cargar();
       setGuardandoId(null);
     }
   }
@@ -77,22 +81,27 @@ export function TableroPage() {
     setGuardandoId(id);
     try {
       await salirDeTarea(id);
-      await cargar();
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo salir de la tarea");
     } finally {
+      await cargar();
       setGuardandoId(null);
     }
   }
 
   async function onCerrar(id: string) {
+    // Cerrar es compartido e irreversible desde esta pantalla (no hay botón
+    // para reabrir) — un toque de más no debería cerrarla por accidente.
+    if (!confirm("¿Cerrar esta tarea? Quedará cerrada para todos los que participan, no se puede deshacer.")) return;
     setGuardandoId(id);
     try {
       await cerrarTarea(id);
-      await cargar();
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cerrar la tarea");
     } finally {
+      await cargar();
       setGuardandoId(null);
     }
   }

@@ -67,8 +67,8 @@ const scrumQuerySchema = z.object({ fecha: fechaOpcionalSchema });
 // "No vacío" real (tras trim) lo revalida tareas.service.ts::crearTareaScrum
 // — acá solo se valida tipo/forma, igual que crearPlantillaSchema arriba.
 const crearTareaScrumSchema = z.object({
-  titulo: z.string().min(1),
-  area: z.string().min(1),
+  titulo: z.string().min(1).max(150),
+  area: z.string().min(1).max(80),
   descripcion: z.string().nullable().optional(),
   fecha: fechaOpcionalSchema,
 });

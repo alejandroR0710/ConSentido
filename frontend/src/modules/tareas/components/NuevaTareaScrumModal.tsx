@@ -66,6 +66,7 @@ export function NuevaTareaScrumModal({ areasSugeridas, onCerrar, onCreada }: Nue
       <label className={etiquetaClase}>Título</label>
       <input
         autoFocus
+        maxLength={150}
         value={titulo}
         onChange={(e) => setTitulo(e.target.value)}
         placeholder='Ej. "Limpieza de vitrinas"'
@@ -74,6 +75,7 @@ export function NuevaTareaScrumModal({ areasSugeridas, onCerrar, onCreada }: Nue
 
       <label className={etiquetaClase}>Área</label>
       <input
+        maxLength={80}
         value={area}
         onChange={(e) => setArea(e.target.value)}
         placeholder='Ej. "Cocina"'

@@ -339,8 +339,10 @@ export async function cerrarTareaScrum(params: {
   if (tarea.estado === "cerrada") throw Errors.conflict("La tarea ya está cerrada");
 
   const cerrada = await repo.cerrarTareaScrum(params.tareaId, params.llamadorId);
-  // No debería pasar (ya se confirmó arriba que estaba abierta), pero se deja
-  // el guard por las dudas, mismo patrón que cambiarEstado en este archivo.
-  if (!cerrada) throw Errors.notFound("Tarea no encontrada");
+  // Ya se confirmó arriba que existía y estaba abierta, así que un `null`
+  // acá solo puede significar que otra llamada la cerró en el instante
+  // exacto entre ese chequeo y este UPDATE (carrera real, no hipotética en
+  // una tarea compartida) — 409, no 404: la tarea existe, perdió la carrera.
+  if (!cerrada) throw Errors.conflict("La tarea ya está cerrada");
   return cerrada;
 }

@@ -14,11 +14,12 @@ const AREAS_EGRESO = MODULOS_ORIGEN.filter((m) => m.value === "con_sentido" || m
 
 interface EgresoModalProps {
   categorias: CategoriaGasto[];
+  onCategoriaCreada: (categoria: CategoriaGasto) => void;
   onCerrar: () => void;
   onRegistrado: () => Promise<void>;
 }
 
-export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalProps) {
+export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistrado }: EgresoModalProps) {
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [moduloOrigenSlug, setModuloOrigenSlug] = useState<ModuloOrigenSlug | "">("");
   const [proveedorId, setProveedorId] = useState<string>("");
@@ -28,6 +29,14 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
   const [motivo, setMotivo] = useState("");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [nuevaCategoriaNombre, setNuevaCategoriaNombre] = useState("");
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false);
+
+  const [creandoProveedor, setCreandoProveedor] = useState(false);
+  const [nuevoProveedorNombre, setNuevoProveedorNombre] = useState("");
+  const [guardandoProveedor, setGuardandoProveedor] = useState(false);
 
   // Cargar proveedores al abrir el modal
   useEffect(() => {
@@ -40,6 +49,40 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
       setProveedores(provs);
     } catch {
       // Sin proveedores disponibles, el campo es opcional
+    }
+  }
+
+  async function crearCategoriaInline() {
+    if (!nuevaCategoriaNombre.trim()) return;
+    setGuardandoCategoria(true);
+    setError(null);
+    try {
+      const nueva = await cajaApi.crearCategoriaGasto(nuevaCategoriaNombre.trim());
+      onCategoriaCreada(nueva);
+      setCategoriaId(nueva.id);
+      setNuevaCategoriaNombre("");
+      setCreandoCategoria(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la categoría");
+    } finally {
+      setGuardandoCategoria(false);
+    }
+  }
+
+  async function crearProveedorInline() {
+    if (!nuevoProveedorNombre.trim()) return;
+    setGuardandoProveedor(true);
+    setError(null);
+    try {
+      const nuevo = await cajaApi.crearProveedor(nuevoProveedorNombre.trim());
+      setProveedores((prev) => [...prev, nuevo]);
+      setProveedorId(nuevo.id);
+      setNuevoProveedorNombre("");
+      setCreandoProveedor(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear el proveedor");
+    } finally {
+      setGuardandoProveedor(false);
     }
   }
 
@@ -84,31 +127,115 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
         ))}
       </select>
 
-      {/* Categoría y Proveedor comparten fila al 50/50 — si no hay
-          proveedores cargados, Categoría ocupa el ancho completo en vez de
-          quedar a la mitad (mismo criterio que Monto/Motivo más abajo). */}
+      {/* Categoría y Proveedor comparten fila al 50/50. Cada uno tiene un
+          "+ Nueva/Nuevo" para crearlo sin salir de este modal — ya no hace
+          falta ir a Administración. */}
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className={proveedores.length === 0 ? "sm:col-span-2" : ""}>
-          <label className="mb-1 block text-xs font-medium">Categoría de gasto</label>
-          <select
-            value={categoriaId}
-            onChange={(e) => setCategoriaId(Number(e.target.value))}
-            className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-          >
-            <option value="" disabled>
-              Selecciona una categoría
-            </option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-xs font-medium">Categoría de gasto</label>
+            {!creandoCategoria && (
+              <button
+                type="button"
+                onClick={() => setCreandoCategoria(true)}
+                className="text-xs font-medium text-brand-green-700 underline hover:text-brand-green-600 dark:text-brand-vanilla dark:hover:text-brand-vanilla/80"
+              >
+                + Nueva
+              </button>
+            )}
+          </div>
+          {creandoCategoria ? (
+            <div className="mb-1 flex gap-2">
+              <input
+                autoFocus
+                type="text"
+                placeholder="Nombre de la categoría"
+                value={nuevaCategoriaNombre}
+                onChange={(e) => setNuevaCategoriaNombre(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && crearCategoriaInline()}
+                className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+              <button
+                type="button"
+                onClick={crearCategoriaInline}
+                disabled={guardandoCategoria || !nuevaCategoriaNombre.trim()}
+                className="shrink-0 rounded-md bg-brand-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
+              >
+                {guardandoCategoria ? "..." : "Agregar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreandoCategoria(false);
+                  setNuevaCategoriaNombre("");
+                }}
+                className="shrink-0 text-xs text-brand-ink/60 underline hover:text-brand-ink dark:text-brand-vanilla/60 dark:hover:text-brand-vanilla"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <select
+              value={categoriaId}
+              onChange={(e) => setCategoriaId(Number(e.target.value))}
+              className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            >
+              <option value="" disabled>
+                Selecciona una categoría
               </option>
-            ))}
-          </select>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
-        {proveedores.length > 0 && (
-          <div>
-            <label className="mb-1 block text-xs font-medium">Proveedor (opcional)</label>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-xs font-medium">Proveedor (opcional)</label>
+            {!creandoProveedor && (
+              <button
+                type="button"
+                onClick={() => setCreandoProveedor(true)}
+                className="text-xs font-medium text-brand-green-700 underline hover:text-brand-green-600 dark:text-brand-vanilla dark:hover:text-brand-vanilla/80"
+              >
+                + Nuevo
+              </button>
+            )}
+          </div>
+          {creandoProveedor ? (
+            <div className="mb-1 flex gap-2">
+              <input
+                autoFocus
+                type="text"
+                placeholder="Nombre del proveedor"
+                value={nuevoProveedorNombre}
+                onChange={(e) => setNuevoProveedorNombre(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && crearProveedorInline()}
+                className="flex-1 rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+              />
+              <button
+                type="button"
+                onClick={crearProveedorInline}
+                disabled={guardandoProveedor || !nuevoProveedorNombre.trim()}
+                className="shrink-0 rounded-md bg-brand-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-green-700 disabled:opacity-60"
+              >
+                {guardandoProveedor ? "..." : "Agregar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreandoProveedor(false);
+                  setNuevoProveedorNombre("");
+                }}
+                className="shrink-0 text-xs text-brand-ink/60 underline hover:text-brand-ink dark:text-brand-vanilla/60 dark:hover:text-brand-vanilla"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
             <select
               value={proveedorId}
               onChange={(e) => setProveedorId(e.target.value)}
@@ -121,8 +248,8 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
                 </option>
               ))}
             </select>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Los únicos dos inputs reales del formulario (el resto son selects o

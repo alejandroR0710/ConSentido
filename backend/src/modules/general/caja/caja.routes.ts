@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../../shared/middlewares/auth.middleware";
-import { requirePermission } from "../../../shared/middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../../../shared/middlewares/rbac.middleware";
 import { asyncHandler } from "../../../shared/utils/async-handler";
 import {
   abrirTurnoController,
@@ -81,7 +81,7 @@ cajaRouter.get(
 );
 cajaRouter.post(
   "/categorias-gasto",
-  requirePermission("general.caja.administrar_categorias"),
+  requireAnyPermission("general.caja.administrar_categorias", "general.caja.registrar_egreso"),
   asyncHandler(crearCategoriaGastoController),
 );
 cajaRouter.patch(
@@ -102,7 +102,7 @@ cajaRouter.get(
 );
 cajaRouter.post(
   "/proveedores",
-  requirePermission("general.caja.administrar_categorias"),
+  requireAnyPermission("general.caja.administrar_categorias", "general.caja.registrar_egreso"),
   asyncHandler(crearProveedorController),
 );
 cajaRouter.patch(

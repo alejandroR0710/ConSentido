@@ -39,3 +39,26 @@ export function requirePermission(codigo: string) {
     next();
   });
 }
+
+/**
+ * Como requirePermission, pero pasa si el rol tiene AL MENOS UNO de los
+ * códigos dados — ej. crear categoría/proveedor al vuelo desde "Registrar
+ * egreso" (registrar_egreso) sin exigir el permiso de administración
+ * completo (administrar_categorias) que sí sigue protegiendo editar/eliminar.
+ */
+export function requireAnyPermission(...codigos: string[]) {
+  return asyncHandler(async (req, _res, next) => {
+    if (!req.auth) {
+      throw Errors.unauthorized();
+    }
+
+    for (const codigo of codigos) {
+      if (await tienePermiso(req.auth.rolId, codigo)) {
+        next();
+        return;
+      }
+    }
+
+    throw Errors.forbidden(`No tiene ninguno de los permisos requeridos: ${codigos.join(", ")}`);
+  });
+}

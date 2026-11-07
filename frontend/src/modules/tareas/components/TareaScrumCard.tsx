@@ -6,6 +6,11 @@ interface TareaScrumCardProps {
    *  vuelo — deshabilita sus propios botones sin bloquear el resto del
    *  tablero. */
   guardando?: boolean;
+  /** Root/Super Root: el backend ya les deja cerrar cualquier tarea aunque
+   *  no estén unidos (tareas.gestionar, ver tareas.service.ts::cerrarTareaScrum)
+   *  — sin esto, esa capacidad quedaba sin ninguna forma de usarse desde la
+   *  pantalla. */
+  puedeGestionar?: boolean;
   onUnirse: () => void;
   onSalir: () => void;
   onCerrar: () => void;
@@ -13,18 +18,26 @@ interface TareaScrumCardProps {
 
 /**
  * Tarjeta de una tarea del tablero compartido (Scrum): título, descripción,
- * participantes unidos y, según `estado`/`yaUnido`, las acciones
- * disponibles. No llama la API — delega en los callbacks (quien conoce el
- * `id` de la tarea y decide cuándo refrescar; ver `TableroPage`).
+ * participantes unidos y, según `estado`/`yaUnido`/`puedeGestionar`, las
+ * acciones disponibles. No llama la API — delega en los callbacks (quien
+ * conoce el `id` de la tarea y decide cuándo refrescar; ver `TableroPage`).
  *
- * Reglas de visibilidad de botones (ver brief de este Task):
- * - `abierta` + no unido  -> "Unirme".
- * - `abierta` + ya unido  -> "Salir" + "Cerrar".
- * - `cerrada`             -> ningún botón, solo la marca "Cerrada" (tono
- *   verde pastel atenuado, nunca rojo — el mismo criterio de
+ * Reglas de visibilidad de botones:
+ * - `abierta` + no unido, sin acceso total  -> "Unirme".
+ * - `abierta` + no unido, con acceso total  -> "Unirme" + "Cerrar".
+ * - `abierta` + ya unido                    -> "Salir" + "Cerrar".
+ * - `cerrada`                               -> ningún botón, solo la marca
+ *   "Cerrada" (tono verde pastel atenuado, nunca rojo — el mismo criterio de
  *   `ESTILO_TARJETA_ESTADO` en `TareaCard.tsx`).
  */
-export function TareaScrumCard({ tarea, guardando = false, onUnirse, onSalir, onCerrar }: TareaScrumCardProps) {
+export function TareaScrumCard({
+  tarea,
+  guardando = false,
+  puedeGestionar = false,
+  onUnirse,
+  onSalir,
+  onCerrar,
+}: TareaScrumCardProps) {
   const cerrada = tarea.estado === "cerrada";
 
   return (
@@ -82,13 +95,24 @@ export function TareaScrumCard({ tarea, guardando = false, onUnirse, onSalir, on
               </button>
             </>
           ) : (
-            <button
-              onClick={onUnirse}
-              disabled={guardando}
-              className="rounded-md bg-brand-green-700 px-3 py-1 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
-            >
-              Unirme
-            </button>
+            <>
+              <button
+                onClick={onUnirse}
+                disabled={guardando}
+                className="rounded-md bg-brand-green-700 px-3 py-1 text-xs font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+              >
+                Unirme
+              </button>
+              {puedeGestionar && (
+                <button
+                  onClick={onCerrar}
+                  disabled={guardando}
+                  className="rounded-md border border-brand-vanilla-dark px-3 py-1 text-xs text-brand-ink disabled:opacity-60 dark:border-brand-green-700 dark:text-brand-vanilla"
+                >
+                  Cerrar
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

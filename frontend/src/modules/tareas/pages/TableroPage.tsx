@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
+import { tieneAccesoTotal } from "../../../shared/auth/roles";
+import { useAuth } from "../../../shared/auth/useAuth";
 import { cerrarTarea, listarTablero, salirDeTarea, unirseATarea, type TareaScrumConParticipantes } from "../api";
 import { TareaScrumCard } from "../components/TareaScrumCard";
 
@@ -27,6 +29,11 @@ function agruparPorArea(tareas: TareaScrumConParticipantes[]): Columna[] {
  * `modules-meta.ts`/`App.tsx`) — este componente no depende de eso.
  */
 export function TableroPage() {
+  const { usuario } = useAuth();
+  // El backend ya deja a Root/Super Root cerrar cualquier tarea sin estar
+  // unidos (tareas.gestionar, ver tareas.service.ts::cerrarTareaScrum) —
+  // esto es lo que le da a esa capacidad una forma de usarse desde la pantalla.
+  const puedeGestionar = tieneAccesoTotal(usuario?.rol);
   const [fecha, setFecha] = useState(fechaISOHoy());
   const [tareas, setTareas] = useState<TareaScrumConParticipantes[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +135,7 @@ export function TableroPage() {
                     key={tarea.id}
                     tarea={tarea}
                     guardando={guardandoId === tarea.id}
+                    puedeGestionar={puedeGestionar}
                     onUnirse={() => onUnirse(tarea.id)}
                     onSalir={() => onSalir(tarea.id)}
                     onCerrar={() => onCerrar(tarea.id)}

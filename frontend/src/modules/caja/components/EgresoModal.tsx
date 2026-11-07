@@ -6,6 +6,12 @@ import { SelectorMetodoPago, type MetodoPagoValor } from "../../../shared/compon
 import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type Proveedor } from "../api";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
+// Solo para el selector de "Área" de ESTE modal (Registrar egreso) — Con
+// Sentido ya abarca insumos/talleres/pedidos a efectos de reportar un gasto
+// (todo lo que no es Migao), así que ofrecerlos sueltos acá sería
+// redundante. El resto de pantallas sigue usando MODULOS_ORIGEN completo.
+const AREAS_EGRESO = MODULOS_ORIGEN.filter((m) => m.value === "con_sentido" || m.value === "migao" || m.value === "general");
+
 interface EgresoModalProps {
   categorias: CategoriaGasto[];
   onCerrar: () => void;
@@ -105,7 +111,7 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
         className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       >
         <option value="">Sin área específica</option>
-        {MODULOS_ORIGEN.map((m) => (
+        {AREAS_EGRESO.map((m) => (
           <option key={m.value} value={m.value}>
             {m.icon} {m.label}
           </option>

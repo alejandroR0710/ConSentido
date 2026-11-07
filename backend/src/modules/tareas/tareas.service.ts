@@ -1,7 +1,14 @@
 import { Errors } from "../../shared/utils/app-error";
 import * as usuariosRepo from "../general/usuarios/usuarios.repository";
 import * as repo from "./tareas.repository";
-import type { EstadoTarea, InstanciaTarea, InstanciaVistaCruzada, PlantillaTarea } from "./tareas.types";
+import type {
+  EstadoTarea,
+  InstanciaTarea,
+  InstanciaVistaCruzada,
+  ParticipanteScrum,
+  PlantillaTarea,
+  TareaScrum,
+} from "./tareas.types";
 
 /**
  * Resuelve las plantillas aplicables para `usuarioId`/`rolId` en `fecha` y
@@ -249,4 +256,91 @@ export async function obtenerVistaCruzada(
   }
 
   return repo.listarInstanciasVista(fecha, filtros);
+}
+
+// ---------------------------------------------------------------------------
+// Tablero compartido por área (tipo Scrum).
+// ---------------------------------------------------------------------------
+
+/**
+ * `titulo`/`area` no vacíos tras `trim()` (el resto de la validación de
+ * forma ya la hace Zod en la ruta). Se guardan ya recortados: validar
+ * "no vacío tras trim" pero insertar el valor sin recortar dejaría espacios
+ * colgando en filas que pasaron la validación.
+ */
+export async function crearTareaScrum(
+  datos: { titulo: string; area: string; descripcion: string | null; fecha: string },
+  creadoPorId: string,
+): Promise<TareaScrum> {
+  const titulo = datos.titulo.trim();
+  const area = datos.area.trim();
+  if (!titulo) throw Errors.badRequest("El título no puede estar vacío");
+  if (!area) throw Errors.badRequest("El área no puede estar vacía");
+  return repo.crearTareaScrum({ ...datos, titulo, area, creadoPorId });
+}
+
+/**
+ * Tablero de `fecha`: cada tarea con sus participantes (una sola consulta
+ * extra vía `listarParticipantesDeVariasTareas`, no N) y si `usuarioId` ya
+ * está unido a ella.
+ */
+export async function listarTableroDelDia(
+  fecha: string,
+  usuarioId: string,
+): Promise<(TareaScrum & { participantes: ParticipanteScrum[]; yaUnido: boolean })[]> {
+  const tareas = await repo.listarTareasScrumDelDia(fecha);
+  const participantesPorTarea = await repo.listarParticipantesDeVariasTareas(tareas.map((tarea) => tarea.id));
+  return tareas.map((tarea) => {
+    const participantes = participantesPorTarea.get(tarea.id) ?? [];
+    return {
+      ...tarea,
+      participantes,
+      yaUnido: participantes.some((participante) => participante.usuarioId === usuarioId),
+    };
+  });
+}
+
+/** Unirse a una tarea ya cerrada es inofensivo (simplemente no podrá
+ *  cerrarla de nuevo, ver cerrarTareaScrum) — no se valida el estado acá. */
+export async function unirseATareaScrum(tareaId: string, usuarioId: string): Promise<void> {
+  const tarea = await repo.obtenerTareaScrumPorId(tareaId);
+  if (!tarea) throw Errors.notFound("Tarea no encontrada");
+  await repo.unirseATarea(tareaId, usuarioId);
+}
+
+export async function salirDeTareaScrum(tareaId: string, usuarioId: string): Promise<void> {
+  const tarea = await repo.obtenerTareaScrumPorId(tareaId);
+  if (!tarea) throw Errors.notFound("Tarea no encontrada");
+  await repo.salirDeTarea(tareaId, usuarioId);
+}
+
+/**
+ * `repo.cerrarTareaScrum` devuelve null tanto si la tarea no existe como si
+ * ya estaba cerrada (su `WHERE estado = 'abierta'` hace que el UPDATE sobre
+ * una ya cerrada afecte 0 filas) — por eso la tarea se resuelve ACÁ primero,
+ * para distinguir 404 (no existe) de 409 (ya cerrada) antes de llegar al
+ * UPDATE.
+ */
+export async function cerrarTareaScrum(params: {
+  tareaId: string;
+  llamadorId: string;
+  llamadorPuedeGestionar: boolean;
+}): Promise<TareaScrum> {
+  const tarea = await repo.obtenerTareaScrumPorId(params.tareaId);
+  if (!tarea) throw Errors.notFound("Tarea no encontrada");
+
+  // Sin tareas.gestionar, solo quien ya está unido a la tarea puede cerrarla
+  // — con tareas.gestionar (Root/Super Root), se puede cerrar cualquiera.
+  if (!params.llamadorPuedeGestionar) {
+    const unido = await repo.estaUnido(params.tareaId, params.llamadorId);
+    if (!unido) throw Errors.forbidden("No tiene permiso para cerrar esta tarea");
+  }
+
+  if (tarea.estado === "cerrada") throw Errors.conflict("La tarea ya está cerrada");
+
+  const cerrada = await repo.cerrarTareaScrum(params.tareaId, params.llamadorId);
+  // No debería pasar (ya se confirmó arriba que estaba abierta), pero se deja
+  // el guard por las dudas, mismo patrón que cambiarEstado en este archivo.
+  if (!cerrada) throw Errors.notFound("Tarea no encontrada");
+  return cerrada;
 }

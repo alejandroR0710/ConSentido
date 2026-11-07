@@ -138,3 +138,71 @@ export function editarPlantilla(id: string, cambios: EditarPlantillaCambios) {
 export function obtenerVistaCruzada(fecha: string | undefined, filtros: FiltrosVistaCruzada = {}) {
   return apiFetch<InstanciaTareaVista[]>(`/tareas/vista${buildQuery({ fecha, ...filtros })}`);
 }
+
+// ---------------------------------------------------------------------------
+// Tablero compartido por área (tipo Scrum). Espejo de los tipos de
+// `tareas.types.ts` (Task 2) y de las rutas `/tareas/scrum*` (Task 4).
+// ---------------------------------------------------------------------------
+
+export type EstadoTareaScrum = "abierta" | "cerrada";
+
+/** Espejo de `TareaScrum` del backend. */
+export interface TareaScrum {
+  id: string;
+  titulo: string;
+  area: string;
+  descripcion: string | null;
+  fecha: string;
+  estado: EstadoTareaScrum;
+  creadoPorId: string;
+  cerradoPorId: string | null;
+  cerradoEn: string | null;
+}
+
+/** Espejo de `ParticipanteScrum` del backend. */
+export interface ParticipanteScrum {
+  usuarioId: string;
+  nombre: string;
+}
+
+/** Fila de `GET /tareas/scrum`: la tarea con sus participantes y si el usuario autenticado ya está unido. */
+export interface TareaScrumConParticipantes extends TareaScrum {
+  participantes: ParticipanteScrum[];
+  yaUnido: boolean;
+}
+
+/** Body de `POST /tareas/scrum` (ver `crearTareaScrumSchema` en tareas.routes.ts). */
+export interface CrearTareaScrumDatos {
+  titulo: string;
+  area: string;
+  descripcion?: string | null;
+  fecha?: string;
+}
+
+/** Tablero del día: tareas de la fecha con participantes. Sin `fecha` el backend resuelve "hoy". Requiere `tareas.ver_propias`. */
+export function listarTablero(fecha?: string) {
+  return apiFetch<TareaScrumConParticipantes[]>(`/tareas/scrum${buildQuery({ fecha })}`);
+}
+
+/** Crea una tarea compartida del tablero. Requiere `tareas.gestionar`. */
+export function crearTareaScrum(datos: CrearTareaScrumDatos) {
+  return apiFetch<TareaScrum>("/tareas/scrum", {
+    method: "POST",
+    body: datos,
+  });
+}
+
+/** Une al usuario autenticado a una tarea del tablero. El backend responde `{ ok: true }`. */
+export function unirseATarea(id: string) {
+  return apiFetch<{ ok: boolean }>(`/tareas/scrum/${id}/unirse`, { method: "POST" });
+}
+
+/** Saca al usuario autenticado de una tarea del tablero. El backend responde `{ ok: true }`. */
+export function salirDeTarea(id: string) {
+  return apiFetch<{ ok: boolean }>(`/tareas/scrum/${id}/salir`, { method: "POST" });
+}
+
+/** Cierra una tarea del tablero. Cualquier participante puede cerrarla; quien tenga `tareas.gestionar` puede cerrar cualquiera. */
+export function cerrarTarea(id: string) {
+  return apiFetch<TareaScrum>(`/tareas/scrum/${id}/cerrar`, { method: "POST" });
+}

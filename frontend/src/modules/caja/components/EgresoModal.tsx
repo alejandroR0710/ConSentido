@@ -75,10 +75,18 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
     setError(null);
     try {
       const nuevo = await cajaApi.crearProveedor(nuevoProveedorNombre.trim());
-      // Recién creado, sin anclar a ninguna categoría todavía — aparece en
-      // cualquiera (ver filtro de proveedoresFiltrados más abajo). Anclarlo
-      // a una categoría se hace desde Administración, no desde este acceso rápido.
-      setProveedores((prev) => [...prev, { ...nuevo, categoria_ids: [] }]);
+      let categoriaIds: number[] = [];
+      // Si la categoría elegida ya tiene proveedores anclados, el selector
+      // queda restringido a esos — sin esto, el proveedor recién creado
+      // quedaría invisible/inseleccionable en esta misma categoría.
+      if (categoriaId !== "") {
+        const anclados = proveedores.filter((p) => p.categoria_ids.includes(categoriaId));
+        if (anclados.length > 0) {
+          await cajaApi.anclarProveedoresACategoria(categoriaId, [...anclados.map((p) => p.id), nuevo.id]);
+          categoriaIds = [categoriaId];
+        }
+      }
+      setProveedores((prev) => [...prev, { ...nuevo, categoria_ids: categoriaIds }]);
       setProveedorId(nuevo.id);
       setNuevoProveedorNombre("");
       setCreandoProveedor(false);
@@ -89,11 +97,17 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
     }
   }
 
-  // Un proveedor sin ninguna categoría anclada aparece siempre (para no
-  // "esconder" proveedores existentes hasta que alguien los ancle a mano).
-  const proveedoresFiltrados = proveedores.filter(
-    (p) => p.categoria_ids.length === 0 || (categoriaId !== "" && p.categoria_ids.includes(categoriaId)),
-  );
+  // Si la categoría elegida tiene AL MENOS UN proveedor anclado, el selector
+  // se restringe solo a esos. Si la categoría todavía no tiene ninguno
+  // anclado (nada curado para ella todavía), se siguen mostrando todos para
+  // no "esconder" proveedores existentes sin que nadie los haya anclado.
+  function proveedorValidoParaCategoria(p: Proveedor, catId: number | "") {
+    if (catId === "") return true;
+    const anclados = proveedores.filter((x) => x.categoria_ids.includes(catId));
+    return anclados.length === 0 || p.categoria_ids.includes(catId);
+  }
+
+  const proveedoresFiltrados = proveedores.filter((p) => proveedorValidoParaCategoria(p, categoriaId));
 
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
   const puedeRegistrar =
@@ -192,10 +206,10 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
               onChange={(e) => {
                 const nuevaCategoriaId = Number(e.target.value);
                 setCategoriaId(nuevaCategoriaId);
-                const proveedorSigueValido = proveedores.some(
-                  (p) => p.id === proveedorId && (p.categoria_ids.length === 0 || p.categoria_ids.includes(nuevaCategoriaId)),
-                );
-                if (!proveedorSigueValido) setProveedorId("");
+                const proveedorActual = proveedores.find((p) => p.id === proveedorId);
+                if (!proveedorActual || !proveedorValidoParaCategoria(proveedorActual, nuevaCategoriaId)) {
+                  setProveedorId("");
+                }
               }}
               className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
             >

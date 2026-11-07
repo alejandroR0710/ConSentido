@@ -68,7 +68,7 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
   }
 
   return (
-    <Modal titulo="Registrar egreso" onCerrar={onCerrar}>
+    <Modal titulo="Registrar egreso" onCerrar={onCerrar} ancho="sm:w-[60vw]">
       <label className="mb-1 block text-xs font-medium">Categoría de gasto</label>
       <select
         autoFocus

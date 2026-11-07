@@ -69,6 +69,21 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
 
   return (
     <Modal titulo="Registrar egreso" onCerrar={onCerrar} ancho="sm:w-[60vw]">
+      <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
+      <select
+        autoFocus
+        value={moduloOrigenSlug}
+        onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
+        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+      >
+        <option value="">Sin área específica</option>
+        {AREAS_EGRESO.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.icon} {m.label}
+          </option>
+        ))}
+      </select>
+
       {/* Categoría y Proveedor comparten fila al 50/50 — si no hay
           proveedores cargados, Categoría ocupa el ancho completo en vez de
           quedar a la mitad (mismo criterio que Monto/Motivo más abajo). */}
@@ -76,7 +91,6 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
         <div className={proveedores.length === 0 ? "sm:col-span-2" : ""}>
           <label className="mb-1 block text-xs font-medium">Categoría de gasto</label>
           <select
-            autoFocus
             value={categoriaId}
             onChange={(e) => setCategoriaId(Number(e.target.value))}
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
@@ -110,20 +124,6 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
           </div>
         )}
       </div>
-
-      <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
-      <select
-        value={moduloOrigenSlug}
-        onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
-        className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      >
-        <option value="">Sin área específica</option>
-        {AREAS_EGRESO.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.icon} {m.label}
-          </option>
-        ))}
-      </select>
 
       {/* Los únicos dos inputs reales del formulario (el resto son selects o
           el selector de método) van en una grilla de 2 columnas — Monto se

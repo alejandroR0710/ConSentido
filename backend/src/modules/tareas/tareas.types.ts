@@ -50,3 +50,28 @@ export interface InstanciaTarea {
 export interface InstanciaVistaCruzada extends InstanciaTarea {
   usuarioNombre: string;
 }
+
+// ---------------------------------------------------------------------------
+// Tablero compartido por área (tipo Scrum): tarea suelta con un solo estado
+// compartido entre quienes se unan. Ver migración
+// `database/mysql/migraciones/2026-11-07_tareas_scrum.sql` para las tablas.
+// ---------------------------------------------------------------------------
+
+export type EstadoTareaScrum = "abierta" | "cerrada";
+
+export interface TareaScrum {
+  id: string;
+  titulo: string;
+  area: string;
+  descripcion: string | null;
+  fecha: string;
+  estado: EstadoTareaScrum;
+  creadoPorId: string;
+  cerradoPorId: string | null;
+  cerradoEn: string | null;
+}
+
+export interface ParticipanteScrum {
+  usuarioId: string;
+  nombre: string;
+}

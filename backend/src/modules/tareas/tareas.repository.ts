@@ -1,5 +1,12 @@
 import { pool } from "../../shared/db/pool";
-import type { EstadoTarea, InstanciaTarea, InstanciaVistaCruzada, PlantillaTarea } from "./tareas.types";
+import type {
+  EstadoTarea,
+  InstanciaTarea,
+  InstanciaVistaCruzada,
+  ParticipanteScrum,
+  PlantillaTarea,
+  TareaScrum,
+} from "./tareas.types";
 
 // ---------------------------------------------------------------------------
 // dias_semana es un CSV libre en la columna (ej. '1,2,3'); acá vive la única
@@ -271,4 +278,145 @@ export async function listarInstanciasVista(
     values,
   );
   return result.rows.map((row: any) => ({ ...mapInstancia(row), usuarioNombre: row.usuario_nombre }));
+}
+
+// ---------------------------------------------------------------------------
+// Tablero compartido por área (tipo Scrum). Ver migración
+// `database/mysql/migraciones/2026-11-07_tareas_scrum.sql` para las tablas.
+// ---------------------------------------------------------------------------
+
+function mapTareaScrum(row: any): TareaScrum {
+  return {
+    id: row.id,
+    titulo: row.titulo,
+    area: row.area,
+    descripcion: row.descripcion,
+    fecha: row.fecha,
+    estado: row.estado,
+    creadoPorId: row.creado_por_id,
+    cerradoPorId: row.cerrado_por_id,
+    cerradoEn: row.cerrado_en,
+  };
+}
+
+const COLUMNAS_TAREA_SCRUM = "id, titulo, area, descripcion, fecha, estado, creado_por_id, cerrado_por_id, cerrado_en";
+
+export async function crearTareaScrum(datos: {
+  titulo: string;
+  area: string;
+  descripcion: string | null;
+  fecha: string;
+  creadoPorId: string;
+}): Promise<TareaScrum> {
+  const result = await pool.query(
+    `INSERT INTO tareas_scrum (titulo, area, descripcion, fecha, creado_por_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING ${COLUMNAS_TAREA_SCRUM}`,
+    [datos.titulo, datos.area, datos.descripcion, datos.fecha, datos.creadoPorId],
+  );
+  return mapTareaScrum(result.rows[0]);
+}
+
+/** Todas las tareas de `fecha`, sin participantes (eso es una consulta
+ *  aparte — ver listarParticipantes/listarParticipantesDeVariasTareas —
+ *  para no traer el JOIN si el caller no lo necesita). */
+export async function listarTareasScrumDelDia(fecha: string): Promise<TareaScrum[]> {
+  const result = await pool.query(
+    `SELECT ${COLUMNAS_TAREA_SCRUM} FROM tareas_scrum WHERE fecha = $1 ORDER BY created_at ASC`,
+    [fecha],
+  );
+  return result.rows.map(mapTareaScrum);
+}
+
+export async function obtenerTareaScrumPorId(id: string): Promise<TareaScrum | null> {
+  const result = await pool.query(`SELECT ${COLUMNAS_TAREA_SCRUM} FROM tareas_scrum WHERE id = $1`, [id]);
+  return result.rowCount ? mapTareaScrum(result.rows[0]) : null;
+}
+
+/**
+ * El `AND estado = 'abierta'` en el WHERE es lo que hace que cerrar una tarea
+ * ya cerrada no pise `cerrado_en`/`cerrado_por_id`: la segunda vez `rowCount`
+ * es 0 y se devuelve null, igual que `actualizarEstadoInstancia` en este
+ * archivo — el caller decide si es porque la tarea no existe o porque ya
+ * estaba cerrada.
+ */
+export async function cerrarTareaScrum(id: string, cerradoPorId: string): Promise<TareaScrum | null> {
+  const result = await pool.query(
+    `UPDATE tareas_scrum
+        SET estado = 'cerrada', cerrado_por_id = $2, cerrado_en = now()
+      WHERE id = $1 AND estado = 'abierta'
+      RETURNING id`,
+    [id, cerradoPorId],
+  );
+  if (!result.rowCount) return null;
+  return obtenerTareaScrumPorId(id);
+}
+
+function mapParticipante(row: any): ParticipanteScrum {
+  return { usuarioId: row.usuario_id, nombre: row.nombre };
+}
+
+export async function listarParticipantes(tareaId: string): Promise<ParticipanteScrum[]> {
+  const result = await pool.query(
+    `SELECT p.usuario_id, u.nombre
+       FROM tareas_scrum_participantes p
+       JOIN usuarios u ON u.id = p.usuario_id
+      WHERE p.tarea_id = $1
+      ORDER BY p.unido_en ASC`,
+    [tareaId],
+  );
+  return result.rows.map(mapParticipante);
+}
+
+/**
+ * Misma consulta que `listarParticipantes` pero para varias tareas en un
+ * solo viaje a la DB (`= ANY($1)`, mismo patrón que `velas.repository.ts`),
+ * para no hacer N consultas al listar el tablero completo de un día.
+ */
+export async function listarParticipantesDeVariasTareas(tareaIds: string[]): Promise<Map<string, ParticipanteScrum[]>> {
+  const mapa = new Map<string, ParticipanteScrum[]>();
+  if (tareaIds.length === 0) return mapa;
+  const result = await pool.query(
+    `SELECT p.tarea_id, p.usuario_id, u.nombre
+       FROM tareas_scrum_participantes p
+       JOIN usuarios u ON u.id = p.usuario_id
+      WHERE p.tarea_id = ANY($1)
+      ORDER BY p.unido_en ASC`,
+    [tareaIds],
+  );
+  for (const row of result.rows) {
+    const lista = mapa.get(row.tarea_id) ?? [];
+    lista.push(mapParticipante(row));
+    mapa.set(row.tarea_id, lista);
+  }
+  return mapa;
+}
+
+export async function estaUnido(tareaId: string, usuarioId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM tareas_scrum_participantes WHERE tarea_id = $1 AND usuario_id = $2`,
+    [tareaId, usuarioId],
+  );
+  return result.rowCount > 0;
+}
+
+/** `ON DUPLICATE KEY UPDATE usuario_id = usuario_id` es un no-op: hace que
+ *  unirse dos veces no falle contra la PRIMARY KEY (tarea_id, usuario_id) —
+ *  mismo patrón que `generarInstanciasFaltantes` en este mismo archivo. */
+export async function unirseATarea(tareaId: string, usuarioId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO tareas_scrum_participantes (tarea_id, usuario_id)
+     VALUES ($1, $2)
+     ON DUPLICATE KEY UPDATE usuario_id = usuario_id`,
+    [tareaId, usuarioId],
+  );
+}
+
+/** Idempotente: no falla si el usuario ya no estaba unido (DELETE sin WHERE
+ *  que matchee ninguna fila simplemente afecta 0 filas). */
+export async function salirDeTarea(tareaId: string, usuarioId: string): Promise<void> {
+  await pool.query(`DELETE FROM tareas_scrum_participantes WHERE tarea_id = $1 AND usuario_id = $2`, [
+    tareaId,
+    usuarioId,
+  ]);
 }

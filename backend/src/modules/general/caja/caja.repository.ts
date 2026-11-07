@@ -1003,9 +1003,54 @@ export async function desactivarCategoriaGasto(id: number) {
 
 export async function listProveedores() {
   const result = await pool.query(
-    `SELECT id, nombre, contacto, telefono, email FROM proveedores WHERE activo = true ORDER BY nombre ASC`,
+    `SELECT p.id, p.nombre, p.contacto, p.telefono, p.email,
+            COALESCE(cat.categoria_ids, JSON_ARRAY()) AS categoria_ids
+       FROM proveedores p
+       LEFT JOIN (
+         SELECT proveedor_id,
+                -- GROUP_CONCAT: único agregado de MySQL que respeta ORDER BY
+                -- (no importa acá, pero mantiene el mismo patrón del resto del módulo).
+                CAST(CONCAT('[', GROUP_CONCAT(categoria_gasto_id ORDER BY categoria_gasto_id SEPARATOR ','), ']') AS JSON) AS categoria_ids
+           FROM categorias_gasto_proveedores
+          GROUP BY proveedor_id
+       ) cat ON cat.proveedor_id = p.id
+      WHERE p.activo = true
+      ORDER BY p.nombre ASC`,
   );
   return result.rows;
+}
+
+/** Proveedores anclados a una categoría de gasto — para precargar el
+ *  checklist al editarla en Administración. */
+export async function listProveedorIdsDeCategoria(categoriaId: number) {
+  const result = await pool.query(
+    `SELECT proveedor_id FROM categorias_gasto_proveedores WHERE categoria_gasto_id = $1`,
+    [categoriaId],
+  );
+  return result.rows.map((r: { proveedor_id: string }) => r.proveedor_id);
+}
+
+/** Reemplazo completo del set de proveedores anclados a esta categoría —
+ *  mismo criterio que actualizarCategoriaGasto (no PATCH parcial). */
+export async function anclarProveedoresACategoria(categoriaId: number, proveedorIds: string[]) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM categorias_gasto_proveedores WHERE categoria_gasto_id = $1`, [categoriaId]);
+    if (proveedorIds.length > 0) {
+      const placeholders = proveedorIds.map((_, i) => `($1, $${i + 2})`).join(", ");
+      await client.query(
+        `INSERT INTO categorias_gasto_proveedores (categoria_gasto_id, proveedor_id) VALUES ${placeholders}`,
+        [categoriaId, ...proveedorIds],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function crearProveedor(nombre: string, contacto?: string, telefono?: string, email?: string) {

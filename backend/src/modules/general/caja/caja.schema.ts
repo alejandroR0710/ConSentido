@@ -144,6 +144,11 @@ export const crearCategoriaGastoSchema = z.object({
 });
 export type CrearCategoriaGastoInput = z.infer<typeof crearCategoriaGastoSchema>;
 
+export const anclarProveedoresSchema = z.object({
+  proveedorIds: z.array(z.string().uuid()),
+});
+export type AnclarProveedoresInput = z.infer<typeof anclarProveedoresSchema>;
+
 // Reset exclusivo de Super Root: exige escribir la frase exacta como segunda
 // confirmación (además del permiso), para que no sea posible dispararlo por error.
 export const resetearCajaSchema = z.object({

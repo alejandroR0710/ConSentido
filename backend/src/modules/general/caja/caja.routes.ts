@@ -5,6 +5,7 @@ import { asyncHandler } from "../../../shared/utils/async-handler";
 import {
   abrirTurnoController,
   actualizarCategoriaGastoController,
+  anclarProveedoresACategoriaController,
   desactivarCategoriaGastoController,
   actualizarProveedorController,
   agregarMovimientoHistoricoController,
@@ -20,6 +21,7 @@ import {
   listarCategoriasGastoController,
   listarEdicionesDelDiaController,
   listarProveedoresController,
+  listarProveedoresDeCategoriaController,
   obtenerFacturaVentaManualController,
   obtenerHistorialCajaController,
   obtenerMovimientosDelDiaController,
@@ -93,6 +95,16 @@ cajaRouter.delete(
   "/categorias-gasto/:id",
   requirePermission("general.caja.administrar_categorias"),
   asyncHandler(desactivarCategoriaGastoController),
+);
+cajaRouter.get(
+  "/categorias-gasto/:id/proveedores",
+  requirePermission("general.caja.ver"),
+  asyncHandler(listarProveedoresDeCategoriaController),
+);
+cajaRouter.put(
+  "/categorias-gasto/:id/proveedores",
+  requirePermission("general.caja.administrar_categorias"),
+  asyncHandler(anclarProveedoresACategoriaController),
 );
 
 cajaRouter.get(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../shared/api/client";
-import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug } from "../api";
+import { cajaApi, type CategoriaGasto, type ModuloOrigenSlug, type Proveedor } from "../api";
 import { MODULOS_ORIGEN } from "../moduloOrigen";
 
 interface CategoriasPanelProps {
@@ -9,16 +9,19 @@ interface CategoriasPanelProps {
 
 export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
   const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [nuevaArea, setNuevaArea] = useState<ModuloOrigenSlug | "">("");
+  const [proveedorIdsAnclados, setProveedorIdsAnclados] = useState<string[]>([]);
   const [editando, setEditando] = useState<number | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     cargarCategorias();
+    cajaApi.listarProveedores().then(setProveedores).catch(() => {});
   }, []);
 
   async function cargarCategorias() {
@@ -37,7 +40,24 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
     setEditando(null);
     setNuevaCategoria("");
     setNuevaArea("");
+    setProveedorIdsAnclados([]);
     setFormularioAbierto(false);
+  }
+
+  function alternarProveedorAnclado(id: string) {
+    setProveedorIdsAnclados((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  }
+
+  async function editar(c: CategoriaGasto) {
+    setEditando(c.id);
+    setNuevaCategoria(c.nombre);
+    setNuevaArea(c.modulo_origen_slug ?? "");
+    setFormularioAbierto(true);
+    try {
+      setProveedorIdsAnclados(await cajaApi.listarProveedoresDeCategoria(c.id));
+    } catch {
+      setProveedorIdsAnclados([]);
+    }
   }
 
   async function eliminar(id: number) {
@@ -58,11 +78,10 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
     setGuardando(true);
     setError(null);
     try {
-      if (editando) {
-        await cajaApi.actualizarCategoriaGasto(editando, nuevaCategoria.trim(), nuevaArea || undefined);
-      } else {
-        await cajaApi.crearCategoriaGasto(nuevaCategoria.trim(), nuevaArea || undefined);
-      }
+      const categoria = editando
+        ? await cajaApi.actualizarCategoriaGasto(editando, nuevaCategoria.trim(), nuevaArea || undefined)
+        : await cajaApi.crearCategoriaGasto(nuevaCategoria.trim(), nuevaArea || undefined);
+      await cajaApi.anclarProveedoresACategoria(categoria.id, proveedorIdsAnclados);
       cancelar();
       await cargarCategorias();
       onActualizar();
@@ -156,6 +175,30 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
           <p className="mt-1 text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">
             Todo egreso de esta categoría cuenta para esa área en el Dashboard, salvo que el egreso mismo elija otra.
           </p>
+
+          <label className="mb-1 mt-3 block text-[11px] font-medium text-brand-ink/70 dark:text-brand-vanilla/70">
+            Proveedores de esta categoría (opcional)
+          </label>
+          {proveedores.length === 0 ? (
+            <p className="text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">Sin proveedores registrados aún.</p>
+          ) : (
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-brand-vanilla-dark bg-brand-vanilla p-2 dark:border-brand-green-700 dark:bg-brand-green-900">
+              {proveedores.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 text-sm text-brand-ink dark:text-brand-vanilla">
+                  <input
+                    type="checkbox"
+                    checked={proveedorIdsAnclados.includes(p.id)}
+                    onChange={() => alternarProveedorAnclado(p.id)}
+                  />
+                  {p.nombre}
+                </label>
+              ))}
+            </div>
+          )}
+          <p className="mt-1 text-[11px] text-brand-ink/50 dark:text-brand-vanilla/50">
+            En "Registrar egreso", al elegir esta categoría solo se muestran estos proveedores (más los que no están
+            anclados a ninguna categoría).
+          </p>
         </div>
       )}
 
@@ -185,12 +228,7 @@ export function CategoriasPanel({ onActualizar }: CategoriasPanelProps) {
               </div>
               <div className="flex shrink-0 gap-1">
                 <button
-                  onClick={() => {
-                    setEditando(c.id);
-                    setNuevaCategoria(c.nombre);
-                    setNuevaArea(c.modulo_origen_slug ?? "");
-                    setFormularioAbierto(true);
-                  }}
+                  onClick={() => editar(c)}
                   aria-label="Editar categoría"
                   title="Editar"
                   className="rounded-md border border-brand-green-700 px-2 py-1 text-xs text-brand-green-700 hover:bg-brand-green-100 dark:border-brand-vanilla dark:text-brand-vanilla dark:hover:bg-brand-green-700/40"

@@ -732,6 +732,14 @@ export async function listarProveedores() {
   return repo.listProveedores();
 }
 
+export async function listarProveedorIdsDeCategoria(categoriaId: number) {
+  return repo.listProveedorIdsDeCategoria(categoriaId);
+}
+
+export async function anclarProveedoresACategoria(categoriaId: number, proveedorIds: string[]) {
+  return repo.anclarProveedoresACategoria(categoriaId, proveedorIds);
+}
+
 export async function crearProveedor(nombre: string, contacto?: string, telefono?: string, email?: string) {
   return repo.crearProveedor(nombre, contacto, telefono, email);
 }

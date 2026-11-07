@@ -3,6 +3,7 @@ import { created, ok } from "../../../shared/utils/response";
 import {
   abrirTurnoSchema,
   agregarMovimientoHistoricoSchema,
+  anclarProveedoresSchema,
   anularVentaSchema,
   borrarHistorialDiaSchema,
   borrarTurnoSchema,
@@ -85,6 +86,17 @@ export async function actualizarCategoriaGastoController(req: Request, res: Resp
   const { nombre, moduloOrigenSlug } = crearCategoriaGastoSchema.parse(req.body);
   const categoria = await service.actualizarCategoriaGasto(Number(req.params.id), nombre, moduloOrigenSlug);
   return ok(res, categoria);
+}
+
+export async function listarProveedoresDeCategoriaController(req: Request, res: Response) {
+  const proveedorIds = await service.listarProveedorIdsDeCategoria(Number(req.params.id));
+  return ok(res, proveedorIds);
+}
+
+export async function anclarProveedoresACategoriaController(req: Request, res: Response) {
+  const { proveedorIds } = anclarProveedoresSchema.parse(req.body);
+  await service.anclarProveedoresACategoria(Number(req.params.id), proveedorIds);
+  return ok(res, { proveedorIds });
 }
 
 export async function desactivarCategoriaGastoController(req: Request, res: Response) {

@@ -65,6 +65,10 @@ export interface Proveedor {
   contacto?: string | null;
   telefono?: string | null;
   email?: string | null;
+  // Categorías de gasto a las que este proveedor está anclado (ver
+  // caja.repository.ts::listProveedores). Vacío = sin anclar: aparece en
+  // Registrar egreso sin importar la categoría elegida.
+  categoria_ids: number[];
 }
 
 export interface MovimientoCaja {
@@ -316,6 +320,13 @@ export const cajaApi = {
   /** Desactiva (no borra físico) — la categoría "Vales" no se puede desactivar. */
   desactivarCategoriaGasto: (id: number) =>
     apiFetch<CategoriaGasto>(`/caja/categorias-gasto/${id}`, { method: "DELETE" }),
+  listarProveedoresDeCategoria: (id: number) => apiFetch<string[]>(`/caja/categorias-gasto/${id}/proveedores`),
+  /** Reemplazo completo del set de proveedores anclados a esta categoría. */
+  anclarProveedoresACategoria: (id: number, proveedorIds: string[]) =>
+    apiFetch<{ proveedorIds: string[] }>(`/caja/categorias-gasto/${id}/proveedores`, {
+      method: "PUT",
+      body: { proveedorIds },
+    }),
   obtenerHistorialAnual: (anio: number) => apiFetch<DiaHistorialCaja[]>(`/caja/historial?anio=${anio}`),
   resetear: () =>
     apiFetch<ResetearCajaResultado>("/caja/reset", {

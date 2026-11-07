@@ -75,7 +75,10 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
     setError(null);
     try {
       const nuevo = await cajaApi.crearProveedor(nuevoProveedorNombre.trim());
-      setProveedores((prev) => [...prev, nuevo]);
+      // Recién creado, sin anclar a ninguna categoría todavía — aparece en
+      // cualquiera (ver filtro de proveedoresFiltrados más abajo). Anclarlo
+      // a una categoría se hace desde Administración, no desde este acceso rápido.
+      setProveedores((prev) => [...prev, { ...nuevo, categoria_ids: [] }]);
       setProveedorId(nuevo.id);
       setNuevoProveedorNombre("");
       setCreandoProveedor(false);
@@ -85,6 +88,12 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
       setGuardandoProveedor(false);
     }
   }
+
+  // Un proveedor sin ninguna categoría anclada aparece siempre (para no
+  // "esconder" proveedores existentes hasta que alguien los ancle a mano).
+  const proveedoresFiltrados = proveedores.filter(
+    (p) => p.categoria_ids.length === 0 || (categoriaId !== "" && p.categoria_ids.includes(categoriaId)),
+  );
 
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
   const puedeRegistrar =
@@ -180,7 +189,14 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
           ) : (
             <select
               value={categoriaId}
-              onChange={(e) => setCategoriaId(Number(e.target.value))}
+              onChange={(e) => {
+                const nuevaCategoriaId = Number(e.target.value);
+                setCategoriaId(nuevaCategoriaId);
+                const proveedorSigueValido = proveedores.some(
+                  (p) => p.id === proveedorId && (p.categoria_ids.length === 0 || p.categoria_ids.includes(nuevaCategoriaId)),
+                );
+                if (!proveedorSigueValido) setProveedorId("");
+              }}
               className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
             >
               <option value="" disabled>
@@ -245,7 +261,7 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
               className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
             >
               <option value="">Sin proveedor</option>
-              {proveedores.map((p) => (
+              {proveedoresFiltrados.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre}
                 </option>

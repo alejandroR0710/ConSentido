@@ -102,18 +102,16 @@ const camposEgreso = {
   categoriaGastoId: z.number().int().positive(),
   motivo: z.string().max(200),
   proveedorId: z.string().uuid().optional(),
-  // A diferencia del ingreso (obligatorio), el área de un egreso es opcional:
-  // muchos gastos (arriendo, nómina, servicios) no son de un área puntual —
-  // ver analytics.repository.ts::getMovimientosPorModulo, que ya sabía
-  // agrupar egresos por módulo pero nunca se le daba la oportunidad de
-  // guardarlo desde el formulario normal de "Registrar egreso".
-  moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
 };
+// Área obligatoria en "Registrar egreso" (a diferencia de "Egreso
+// acumulado", que no tiene ese campo en su formulario y sigue sin
+// exigirlo) — ver analytics.repository.ts::getMovimientosPorModulo.
 export const registrarEgresoSchema = z.union([
-  z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z.object({ ...camposEgreso, moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES), metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
   z
     .object({
       ...camposEgreso,
+      moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES),
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),
@@ -123,11 +121,12 @@ export const registrarEgresoSchema = z.union([
 export type RegistrarEgresoInput = z.infer<typeof registrarEgresoSchema>;
 
 export const registrarEgresoAcumuladoSchema = z.union([
-  z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z.object({ ...camposEgreso, moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(), metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
   z
     .object({
       ...camposEgreso,
       categoriaGastoId: z.number().int().positive(),
+      moduloOrigenSlug: z.enum(MODULO_ORIGEN_VALUES).optional(),
       metodoPago: z.literal("mixto"),
       montoEfectivo: z.number().nonnegative(),
       montoBanco: z.number().nonnegative(),

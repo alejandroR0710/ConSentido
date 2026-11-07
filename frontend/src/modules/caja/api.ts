@@ -272,7 +272,7 @@ export const cajaApi = {
       categoriaGastoId: number;
       motivo: string;
       proveedorId?: string;
-      moduloOrigenSlug?: ModuloOrigenSlug;
+      moduloOrigenSlug: ModuloOrigenSlug;
     } & PagoInput,
   ) => apiFetch<MovimientoCaja[]>("/caja/egresos", { method: "POST", body: input }),
   // Egreso contra el ACUMULADO TOTAL histórico — no un turno ni un día, y no

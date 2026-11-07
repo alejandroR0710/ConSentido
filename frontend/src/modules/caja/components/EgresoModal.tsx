@@ -10,7 +10,7 @@ import { MODULOS_ORIGEN } from "../moduloOrigen";
 // Sentido ya abarca insumos/talleres/pedidos a efectos de reportar un gasto
 // (todo lo que no es Migao), así que ofrecerlos sueltos acá sería
 // redundante. El resto de pantallas sigue usando MODULOS_ORIGEN completo.
-const AREAS_EGRESO = MODULOS_ORIGEN.filter((m) => m.value === "con_sentido" || m.value === "migao" || m.value === "general");
+const AREAS_EGRESO = MODULOS_ORIGEN.filter((m) => m.value === "con_sentido" || m.value === "migao");
 
 interface EgresoModalProps {
   categorias: CategoriaGasto[];
@@ -87,10 +87,11 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
   }
 
   const mixtoInvalido = pago.metodoPago === "mixto" && pago.montoEfectivo + pago.montoBanco <= 0;
-  const puedeRegistrar = Boolean(categoriaId) && motivo.trim().length > 0 && (pago.metodoPago === "mixto" ? !mixtoInvalido : monto > 0);
+  const puedeRegistrar =
+    Boolean(categoriaId) && Boolean(moduloOrigenSlug) && motivo.trim().length > 0 && (pago.metodoPago === "mixto" ? !mixtoInvalido : monto > 0);
 
   async function registrar() {
-    if (!categoriaId || !puedeRegistrar) return;
+    if (!categoriaId || !moduloOrigenSlug || !puedeRegistrar) return;
     setRegistrando(true);
     setError(null);
     try {
@@ -98,7 +99,7 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
         categoriaGastoId: Number(categoriaId),
         motivo: motivo.trim(),
         proveedorId: proveedorId || undefined,
-        moduloOrigenSlug: moduloOrigenSlug || undefined,
+        moduloOrigenSlug,
         ...(pago.metodoPago === "mixto" ? pago : { metodoPago: pago.metodoPago, monto }),
       });
       await onRegistrado();
@@ -112,14 +113,16 @@ export function EgresoModal({ categorias, onCategoriaCreada, onCerrar, onRegistr
 
   return (
     <Modal titulo="Registrar egreso" onCerrar={onCerrar} ancho="sm:w-[60vw]">
-      <label className="mb-1 block text-xs font-medium">Área (opcional)</label>
+      <label className="mb-1 block text-xs font-medium">Área</label>
       <select
         autoFocus
         value={moduloOrigenSlug}
         onChange={(e) => setModuloOrigenSlug(e.target.value as ModuloOrigenSlug | "")}
         className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
       >
-        <option value="">Sin área específica</option>
+        <option value="" disabled>
+          Selecciona un área
+        </option>
         {AREAS_EGRESO.map((m) => (
           <option key={m.value} value={m.value}>
             {m.icon} {m.label}

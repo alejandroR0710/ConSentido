@@ -118,28 +118,36 @@ export function EgresoModal({ categorias, onCerrar, onRegistrado }: EgresoModalP
         ))}
       </select>
 
-      {pago.metodoPago !== "mixto" && (
-        <div className="mb-1">
-          <label className="mb-1 block text-xs font-medium">Monto</label>
-          <MoneyInput
-            value={monto}
-            onChange={setMonto}
+      {/* Los únicos dos inputs reales del formulario (el resto son selects o
+          el selector de método) van en una grilla de 2 columnas — Monto se
+          oculta con pago mixto, así que Motivo queda solo y ocupa las 2
+          columnas en ese caso en vez de quedar a la mitad. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {pago.metodoPago !== "mixto" && (
+          <div>
+            <label className="mb-1 block text-xs font-medium">Monto</label>
+            <MoneyInput
+              value={monto}
+              onChange={setMonto}
+              className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+            />
+          </div>
+        )}
+        <div className={pago.metodoPago === "mixto" ? "sm:col-span-2" : ""}>
+          <label className="mb-1 block text-xs font-medium">Motivo</label>
+          <input
+            required
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
             className="w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
           />
         </div>
-      )}
+      </div>
+
       <label className="mb-1 block text-xs font-medium">Método</label>
       <div className="mb-3">
         <SelectorMetodoPago value={pago} onChange={setPago} pedirReferenciaBanco={false} />
       </div>
-
-      <label className="mb-1 block text-xs font-medium">Motivo</label>
-      <input
-        required
-        value={motivo}
-        onChange={(e) => setMotivo(e.target.value)}
-        className="mb-4 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
-      />
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

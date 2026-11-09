@@ -45,6 +45,43 @@ export function agruparPorEtiqueta(movimientos: MovimientoCaja[], tipo: "ingreso
   return Array.from(porEtiqueta.entries()).sort((a, b) => b[1] - a[1]);
 }
 
+export interface ResumenAreaActual {
+  slug: ModuloOrigenSlug;
+  label: string;
+  icon: string;
+  ingresosEfectivo: number;
+  ingresosBanco: number;
+  egresos: number;
+}
+
+// Las 3 áreas operativas actuales — ver encabezado de "Movimientos del
+// turno" en CajaPage.tsx. Pedidos/Insumos/General no se muestran ahí (poco
+// movimiento propio o son más bien transversales).
+const AREAS_RESUMEN_TURNO: ModuloOrigenSlug[] = ["migao", "con_sentido", "talleres"];
+
+/** Desglose de ingresos (efectivo/banco) y egresos por cada una de las 3
+ *  áreas operativas, a partir de los movimientos ya cargados (sin ir al
+ *  backend) — un egreso cuenta para un área solo si trae su propio
+ *  modulo_origen_slug (igual que un ingreso, que siempre lo trae). */
+export function resumenPorAreaActual(movimientos: MovimientoCaja[]): ResumenAreaActual[] {
+  return AREAS_RESUMEN_TURNO.map((slug) => {
+    const deArea = movimientos.filter((m) => m.modulo_origen_slug === slug);
+    const meta = MODULOS_ORIGEN.find((m) => m.value === slug)!;
+    return {
+      slug,
+      label: meta.label,
+      icon: meta.icon,
+      ingresosEfectivo: deArea
+        .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "efectivo")
+        .reduce((sum, m) => sum + Number(m.monto), 0),
+      ingresosBanco: deArea
+        .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "banco")
+        .reduce((sum, m) => sum + Number(m.monto), 0),
+      egresos: deArea.filter((m) => m.tipo === "egreso").reduce((sum, m) => sum + Number(m.monto), 0),
+    };
+  });
+}
+
 /** Igual que `agruparPorEtiqueta`, pero además desglosa cuánto de cada
  *  etiqueta entró en efectivo vs. banco — usado en el resumen del día del
  *  calendario de Historial de Caja, donde no basta con saber cuánto reunió

@@ -22,7 +22,7 @@ import {
   useIngresosMinimizados,
   type IngresoMinimizado,
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
-import { agruparPorEtiqueta, labelMetodoPago } from "../moduloOrigen";
+import { agruparPorEtiqueta, labelMetodoPago, resumenPorAreaActual } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
 
 const POLL_MS = 10000;
@@ -361,11 +361,40 @@ export function CajaPage() {
                       .filter((m) => m.tipo === "egreso")
                       .reduce((sum, m) => sum + Number(m.monto), 0);
 
+                    const resumenAreas = resumenPorAreaActual(movimientos);
+
                     return (
                       <div key={fecha} className="rounded-lg border border-brand-vanilla-dark p-4 dark:border-brand-green-700">
-                        <div className="mb-4 flex items-center justify-between border-b border-brand-vanilla-dark pb-3 dark:border-brand-green-700">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-brand-vanilla-dark pb-3 dark:border-brand-green-700">
                           <h3 className="font-semibold text-brand-green-700 dark:text-brand-vanilla">{fecha}</h3>
                           {puedeVerSumatorias && (
+                          <>
+                          <table className="border-collapse text-xs">
+                            <thead>
+                              <tr className="text-brand-ink/50 dark:text-brand-vanilla/50">
+                                <th className="pr-2 text-left font-normal"></th>
+                                <th className="px-2 text-right font-normal">Efectivo</th>
+                                <th className="px-2 text-right font-normal">Banco</th>
+                                <th className="px-2 text-right font-normal">Egresos</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {resumenAreas.map((a) => (
+                                <tr key={a.slug}>
+                                  <td className="pr-2 font-medium text-brand-green-700 dark:text-brand-vanilla">
+                                    {a.icon} {a.label}
+                                  </td>
+                                  <td className="px-2 text-right text-brand-ink dark:text-brand-vanilla">
+                                    {formatearMoneda(a.ingresosEfectivo)}
+                                  </td>
+                                  <td className="px-2 text-right text-brand-ink dark:text-brand-vanilla">
+                                    {formatearMoneda(a.ingresosBanco)}
+                                  </td>
+                                  <td className="px-2 text-right text-red-600">-{formatearMoneda(a.egresos)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                           <div className="flex gap-4">
                             <div className="text-right">
                               <div className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">Ingresos</div>
@@ -384,6 +413,7 @@ export function CajaPage() {
                               </div>
                             </div>
                           </div>
+                          </>
                           )}
                         </div>
 

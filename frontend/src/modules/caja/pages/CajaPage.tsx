@@ -654,7 +654,7 @@ export function CajaPage() {
               etiqueta,
               monto,
             })),
-            acumulado: acumuladoDelTurno(resumen),
+            acumulado: acumuladoDelTurno(resumen, propinasHoy.montoEfectivo),
           })}
           onCerrar={() => setImprimirResumenTurno(false)}
         />

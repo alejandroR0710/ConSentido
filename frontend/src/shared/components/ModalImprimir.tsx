@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { ReciboImprimible, type ReciboImprimibleProps } from "./ReciboImprimible";
@@ -23,25 +23,14 @@ type ModalImprimirProps = Omit<ReciboImprimibleProps, "anchoMm"> & { onCerrar: (
 
 /**
  * Modal reutilizable para imprimir una factura o una cotización: muestra la
- * vista previa exacta del recibo, y solo abre el diálogo de impresión del
+ * vista previa exacta del recibo y SOLO abre el diálogo de impresión del
  * navegador cuando el cajero toca "Imprimir" (nunca automático al abrir —
- * este modal es también la pantalla donde se revisa el recibo antes de
- * mandarlo). El ancho 58mm/80mm se recuerda en localStorage para no tener
- * que elegirlo cada vez.
+ * este modal es la pantalla donde se revisa el recibo antes de mandarlo). El
+ * ancho 58mm/80mm se recuerda en localStorage para no tener que elegirlo
+ * cada vez.
  */
 export function ModalImprimir({ onCerrar, ...recibo }: ModalImprimirProps) {
   const [anchoMm, setAnchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
-
-  // Antes había que tocar "Imprimir" acá Y DESPUÉS otra vez en el diálogo
-  // nativo del navegador — dos clics para lo mismo. Disparando window.print()
-  // solo al abrir el modal, lo único que queda es ese segundo clic (el del
-  // propio navegador, inevitable: ninguna página puede saltárselo). El botón
-  // de abajo se deja como respaldo por si cancelan ese diálogo y quieren
-  // volver a intentarlo sin cerrar y reabrir el modal.
-  useEffect(() => {
-    window.print();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function cambiarAncho(valor: 58 | 80) {
     setAnchoMm(valor);

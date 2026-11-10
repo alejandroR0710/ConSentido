@@ -107,11 +107,21 @@ export function resumenAReciboProps(params: {
 }
 
 /** Los mismos 3 totales que muestran las tarjetas de CajaPage (sin propinas,
- *  que nunca cuentan para el cuadre de Caja). */
-export function acumuladoDelTurno(resumen: ResumenTurno): ReciboEtiquetaMonto[] {
-  return [
+ *  que nunca cuentan para el cuadre de Caja). Si se pasa `propinasEfectivo`
+ *  (plata del mesero/personal, aparte del cuadre), se agrega al final una
+ *  4ta línea con el efectivo sumando esa propina — mismo "Con propina del
+ *  día" que ya se ve en pantalla, ahora también en el resumen imprimible. */
+export function acumuladoDelTurno(resumen: ResumenTurno, propinasEfectivo?: number): ReciboEtiquetaMonto[] {
+  const lineas: ReciboEtiquetaMonto[] = [
     { etiqueta: "Ganancia en efectivo", monto: resumen.ingresosEfectivo - resumen.egresosEfectivo },
     { etiqueta: "Banco", monto: resumen.saldos.banco },
     { etiqueta: "Total general", monto: resumen.saldos.general },
   ];
+  if (propinasEfectivo) {
+    lineas.push({
+      etiqueta: "Efectivo con propinas",
+      monto: resumen.ingresosEfectivo - resumen.egresosEfectivo + propinasEfectivo,
+    });
+  }
+  return lineas;
 }

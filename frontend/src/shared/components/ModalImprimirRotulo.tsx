@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { RotuloEnvio, type RotuloEnvioProps } from "./RotuloEnvio";
@@ -31,13 +31,6 @@ type ModalImprimirRotuloProps = Omit<RotuloEnvioProps, "anchoMm" | "largoMm" | "
  */
 export function ModalImprimirRotulo({ onCerrar, ...rotulo }: ModalImprimirRotuloProps) {
   const [anchoMm] = useState<58 | 80>(obtenerAnchoGuardado);
-
-  // Mismo criterio que ModalImprimir.tsx: dispara el diálogo nativo solo al
-  // abrir, así solo queda un clic (el del navegador) en vez de dos.
-  useEffect(() => {
-    window.print();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <Modal titulo="Rótulo de envío" onCerrar={onCerrar} maxWidth="sm:max-w-sm">

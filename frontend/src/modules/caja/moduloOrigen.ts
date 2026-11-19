@@ -105,3 +105,19 @@ export function agruparPorEtiquetaConMetodo(movimientos: MovimientoCaja[], tipo:
     .map(([etiqueta, datos]) => ({ etiqueta, ...datos }))
     .sort((a, b) => b.total - a.total);
 }
+
+/** Igual que `agruparPorEtiqueta`, pero agrupando SIEMPRE por área
+ *  (modulo_origen_slug), sin importar el tipo — a diferencia de
+ *  `agruparPorEtiqueta`, que para un egreso usa su categoría de gasto. Un
+ *  egreso que no trae área propia (p. ej. "Egreso acumulado", que no tiene
+ *  ese campo) cae en "Sin área". Usado donde interesa ver egresos por área
+ *  en vez de por categoría (ver CajaHistorialPage.tsx). */
+export function agruparPorArea(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
+  const porArea = new Map<string, number>();
+  for (const m of movimientos) {
+    if (m.tipo !== tipo) continue;
+    const etiqueta = m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Sin área";
+    porArea.set(etiqueta, (porArea.get(etiqueta) ?? 0) + Number(m.monto));
+  }
+  return Array.from(porArea.entries()).sort((a, b) => b[1] - a[1]);
+}

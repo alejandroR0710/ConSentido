@@ -27,7 +27,7 @@ import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoAcumuladoModal } from "../components/EgresoAcumuladoModal";
 import { resumenAReciboProps } from "../factura";
-import { agruparPorEtiqueta, agruparPorEtiquetaConMetodo, labelMetodoPago, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
+import { agruparPorArea, agruparPorEtiqueta, agruparPorEtiquetaConMetodo, labelMetodoPago, LABEL_POR_MODULO_SLUG } from "../moduloOrigen";
 
 const MESES = [
   "Enero",
@@ -599,13 +599,13 @@ export function CajaHistorialPage() {
                         </div>
                       </div>
                     )}
-                    {agruparPorEtiqueta(movimientosDelDia, "egreso").length > 0 && (
+                    {agruparPorArea(movimientosDelDia, "egreso").length > 0 && (
                       <div className="flex-1">
                         <span className="text-xs font-medium uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
-                          Egresos por categoría
+                          Egresos por área
                         </span>
                         <div className="mt-1 flex flex-col gap-0.5">
-                          {agruparPorEtiqueta(movimientosDelDia, "egreso").map(([etiqueta, monto]) => (
+                          {agruparPorArea(movimientosDelDia, "egreso").map(([etiqueta, monto]) => (
                             <div key={etiqueta} className="flex justify-between text-xs">
                               <span className="text-brand-ink/70 dark:text-brand-vanilla/70">{etiqueta}</span>
                               <span className="text-brand-ink dark:text-brand-vanilla">{formatMoney(monto)}</span>

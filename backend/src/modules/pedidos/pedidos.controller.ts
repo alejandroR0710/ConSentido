@@ -5,6 +5,7 @@ import {
   actualizarParametrosPedidosSchema,
   cambiarEstadoPedidoSchema,
   crearPedidoSchema,
+  crearRotuloSchema,
   editarPedidoSchema,
   registrarAbonoPedidoSchema,
 } from "./pedidos.schema";
@@ -13,6 +14,15 @@ export async function listarPedidosController(req: Request, res: Response) {
   const estado = req.query.estado as string | undefined;
   const vencidos = req.query.vencidos === "true";
   return ok(res, await service.listarPedidos({ estado, vencidos }));
+}
+
+export async function crearRotuloController(req: Request, res: Response) {
+  const data = crearRotuloSchema.parse(req.body);
+  return created(res, await service.crearRotulo(data, req.auth!.usuarioId));
+}
+
+export async function listarRotulosController(_req: Request, res: Response) {
+  return ok(res, await service.listarRotulos());
 }
 
 export async function obtenerPedidoController(req: Request, res: Response) {

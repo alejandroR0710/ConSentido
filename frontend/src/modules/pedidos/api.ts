@@ -88,6 +88,40 @@ export interface ParametrosPedidos {
   intervalo_alarma_minutos: number;
 }
 
+// Rótulo suelto, sin pedido asociado — "fuente" queda lista para cuando se
+// conecte con los pedidos del e-commerce (hoy siempre 'manual').
+export interface Rotulo {
+  id: string;
+  destinatario_nombre: string;
+  destinatario_documento: string | null;
+  destinatario_telefono: string | null;
+  direccion_envio: string | null;
+  ciudad_envio: string | null;
+  descripcion: string;
+  metodo_envio: MetodoEnvioPedido | null;
+  transportadora: string | null;
+  numero_guia: string | null;
+  fuente: "manual" | "ecommerce";
+  referencia_externa: string | null;
+  creado_por_nombre: string | null;
+  created_at: string;
+}
+
+export interface CrearRotuloInput {
+  destinatarioNombre: string;
+  descripcion: string;
+  destinatarioDocumento?: string;
+  destinatarioTelefono?: string;
+  direccionEnvio?: string;
+  ciudadEnvio?: string;
+  metodoEnvio?: MetodoEnvioPedido;
+  transportadora?: string;
+  numeroGuia?: string;
+  conductorNombre?: string;
+  conductorPlaca?: string;
+  conductorDescripcion?: string;
+}
+
 // transportadora/numeroGuia NO van acá: recién se conocen al despachar, no
 // al crear el pedido — se piden al marcar "enviado" (ver cambiarEstado) y se
 // pueden corregir después con editar().
@@ -156,4 +190,6 @@ export const pedidosApi = {
   actualizarParametros: (intervaloAlarmaMinutos: number) =>
     apiFetch<ParametrosPedidos>("/pedidos/parametros", { method: "PUT", body: { intervaloAlarmaMinutos } }),
   obtenerFactura: (id: string) => apiFetch<FacturaOrden>(`/pedidos/${id}/factura`),
+  listarRotulos: () => apiFetch<Rotulo[]>("/pedidos/rotulos"),
+  crearRotulo: (input: CrearRotuloInput) => apiFetch<Rotulo>("/pedidos/rotulos", { method: "POST", body: input }),
 };

@@ -103,3 +103,17 @@ export const actualizarParametrosPedidosSchema = z.object({
   intervaloAlarmaMinutos: z.number().int().positive(),
 });
 export type ActualizarParametrosPedidosInput = z.infer<typeof actualizarParametrosPedidosSchema>;
+
+// Rótulo suelto, sin pedido asociado (botón "🏷️ Rótulos" en Pedidos) —
+// a diferencia de crearPedidoSchema, acá destinatarioNombre SÍ es
+// obligatorio (es lo único que identifica a quién va dirigido el rótulo).
+export const crearRotuloSchema = z.object({
+  destinatarioNombre: z.string().trim().min(1, "El destinatario es obligatorio").max(150),
+  descripcion: z.string().trim().min(1, "La descripción es obligatoria").max(500),
+  destinatarioDocumento: z.string().trim().max(30).optional(),
+  destinatarioTelefono: z.string().trim().max(30).optional(),
+  direccionEnvio: z.string().trim().max(250).optional(),
+  ciudadEnvio: z.string().trim().max(100).optional(),
+  ...camposTransporte,
+});
+export type CrearRotuloInput = z.infer<typeof crearRotuloSchema>;

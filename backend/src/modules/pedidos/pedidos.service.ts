@@ -12,6 +12,7 @@ import * as repo from "./pedidos.repository";
 import {
   CambiarEstadoPedidoInput,
   CrearPedidoInput,
+  CrearRotuloInput,
   EditarPedidoInput,
   RegistrarAbonoPedidoInput,
 } from "./pedidos.schema";
@@ -689,4 +690,14 @@ export async function obtenerFacturaPedido(id: string) {
     totalAbonado,
     saldoPendiente: Math.max(0, monto - totalAbonado),
   };
+}
+
+/** Rótulo suelto (sin pedido): permite imprimir una etiqueta de envío sin
+ *  pasar por todo el flujo de crear un pedido completo. */
+export async function crearRotulo(input: CrearRotuloInput, creadoPorId: string) {
+  return repo.crearRotulo(input, creadoPorId);
+}
+
+export async function listarRotulos() {
+  return repo.listRotulos();
 }

@@ -72,12 +72,20 @@ export function PedidosPage() {
             Lo que piden tus clientes, su envío y en qué va cada uno.
           </p>
         </div>
-        <button
-          onClick={() => setModalAbierto(true)}
-          className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
-        >
-          + Nuevo pedido
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/pedidos/rotulos"
+            className="rounded-md border border-brand-vanilla-dark px-4 py-2 text-sm font-semibold text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            🏷️ Rótulos
+          </Link>
+          <button
+            onClick={() => setModalAbierto(true)}
+            className="rounded-md bg-brand-green-700 px-4 py-2 text-sm font-semibold text-brand-vanilla hover:bg-brand-green-600"
+          >
+            + Nuevo pedido
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 border-b-2 border-brand-vanilla-dark pb-2 dark:border-brand-green-700">

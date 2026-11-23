@@ -6,8 +6,10 @@ import {
   actualizarParametrosPedidosController,
   cambiarEstadoPedidoController,
   crearPedidoController,
+  crearRotuloController,
   editarPedidoController,
   listarPedidosController,
+  listarRotulosController,
   obtenerFacturaPedidoController,
   obtenerParametrosPedidosController,
   obtenerPedidoController,
@@ -19,13 +21,18 @@ export const pedidosRouter = Router();
 pedidosRouter.use(authMiddleware);
 pedidosRouter.use(requirePermission("pedidos.ver"));
 
-// Registrada antes de /:id para que "parametros" no se interprete como un id.
+// Registradas antes de /:id para que "parametros"/"rotulos" no se
+// interpreten como un id.
 pedidosRouter.get("/parametros", asyncHandler(obtenerParametrosPedidosController));
 pedidosRouter.put(
   "/parametros",
   requirePermission("pedidos.administrar_parametros"),
   asyncHandler(actualizarParametrosPedidosController),
 );
+
+// Rótulos sueltos, sin pedido asociado — mismo permiso que crear un pedido.
+pedidosRouter.get("/rotulos", asyncHandler(listarRotulosController));
+pedidosRouter.post("/rotulos", requirePermission("pedidos.crear"), asyncHandler(crearRotuloController));
 
 pedidosRouter.get("/", asyncHandler(listarPedidosController));
 pedidosRouter.post("/", requirePermission("pedidos.crear"), asyncHandler(crearPedidoController));

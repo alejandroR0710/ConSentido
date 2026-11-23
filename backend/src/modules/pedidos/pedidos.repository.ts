@@ -1,5 +1,5 @@
 import { Pool, PoolClient, pool } from "../../shared/db/pool";
-import { EditarPedidoInput } from "./pedidos.schema";
+import { CrearRotuloInput, EditarPedidoInput } from "./pedidos.schema";
 
 type Executor = Pool | PoolClient;
 
@@ -383,4 +383,42 @@ export async function getOrCrearFacturaPedido(
   if (insert.rowCount) return insert.rows[0];
   const existente = await executor.query(`SELECT * FROM facturas WHERE pedido_id = $1`, [params.pedidoId]);
   return existente.rows[0];
+}
+
+/** Rótulo suelto, sin pedido asociado (botón "🏷️ Rótulos" en Pedidos) —
+ *  `fuente`/`referenciaExterna` quedan en null hoy (todo rótulo nace
+ *  'manual'), listos para cuando el e-commerce mande dirección de envío. */
+export async function crearRotulo(input: CrearRotuloInput, creadoPorId: string) {
+  const result = await pool.query(
+    `INSERT INTO rotulos_envio (
+       destinatario_nombre, destinatario_documento, destinatario_telefono,
+       direccion_envio, ciudad_envio, descripcion, metodo_envio, transportadora,
+       numero_guia, creado_por_id
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING *`,
+    [
+      input.destinatarioNombre,
+      input.destinatarioDocumento ?? null,
+      input.destinatarioTelefono ?? null,
+      input.direccionEnvio ?? null,
+      input.ciudadEnvio ?? null,
+      input.descripcion,
+      input.metodoEnvio ?? null,
+      input.transportadora ?? null,
+      input.numeroGuia ?? null,
+      creadoPorId,
+    ],
+  );
+  return result.rows[0];
+}
+
+export async function listRotulos() {
+  const result = await pool.query(
+    `SELECT r.*, u.nombre AS creado_por_nombre
+       FROM rotulos_envio r
+       LEFT JOIN usuarios u ON u.id = r.creado_por_id
+      ORDER BY r.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
 }

@@ -412,12 +412,17 @@ export function CajaHistorialPage() {
             {verEgresosAcumulado && (
               <ul className="mt-2 flex flex-col gap-1 text-xs text-brand-ink dark:text-brand-vanilla">
                 {acumulado.egresos.map((e) => (
-                  <li key={e.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <li key={`${e.origen}-${e.id}`} className="flex flex-wrap items-center justify-between gap-2">
                     <span>
                       {new Date(e.created_at).toLocaleDateString("es")} · {e.categoria_nombre}
                       {e.proveedor_nombre && ` · ${e.proveedor_nombre}`} · {e.motivo}
                       {e.usuario_nombre && (
                         <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> ({e.usuario_nombre})</span>
+                      )}
+                      {e.origen === "bolsillo" && (
+                        <span className="ml-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+                          🟣 Bolsillo
+                        </span>
                       )}
                     </span>
                     <span className="shrink-0 font-semibold capitalize">

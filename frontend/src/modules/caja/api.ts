@@ -146,6 +146,10 @@ export interface EgresoAcumulado {
   proveedor_nombre: string | null;
   usuario_nombre: string | null;
   created_at: string;
+  // "acumulado" = registrado por "Egreso del acumulado" (caja_egresos_acumulado);
+  // "bolsillo" = un egreso de Bolsillo (ver EgresoModal/BolsilloModal) — ambos
+  // restan del mismo Acumulado Total, solo se distinguen para mostrarlos claro.
+  origen: "acumulado" | "bolsillo";
 }
 
 export interface AcumuladoTotal {

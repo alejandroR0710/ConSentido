@@ -584,16 +584,29 @@ export async function anularEgresoAcumuladoPorReferencia(
   await repo.borrarEgresosAcumuladoPorReferencia(client, referenciaEntidad, referenciaId);
 }
 
-/** "Acumulado total": todo lo que ha entrado y salido de movimientos_caja
- *  desde siempre (sin filtrar por turno ni fecha, desde la primera venta que
- *  exista), menos los egresos registrados directo contra el acumulado —
- *  nunca se guarda un contador aparte, siempre se recalcula en vivo. */
+/**
+ * "Acumulado total": todo lo que ha entrado y salido de movimientos_caja
+ * desde siempre (sin filtrar por turno ni fecha, desde la primera venta que
+ * exista), menos los egresos registrados directo contra el acumulado —
+ * nunca se guarda un contador aparte, siempre se recalcula en vivo.
+ *
+ * `egresos` (el detalle que se puede desplegar) mezcla DOS orígenes que
+ * restan de este mismo total: caja_egresos_acumulado (Egreso del
+ * acumulado) y los movimientos_caja marcados es_bolsillo (Bolsillo) — la
+ * suma de arriba YA los incluye a ambos (base.egresos_* ya trae Bolsillo,
+ * por venir de movimientos_caja completo), así que acá solo se juntan para
+ * mostrar el detalle, sin volver a sumarlos.
+ */
 export async function obtenerAcumuladoTotal() {
-  const [base, egresos] = await Promise.all([repo.getAcumuladoMovimientosCaja(), repo.listEgresosAcumulado()]);
-  const egresosAcumuladoEfectivo = egresos
+  const [base, egresosAcumulado, egresosBolsillo] = await Promise.all([
+    repo.getAcumuladoMovimientosCaja(),
+    repo.listEgresosAcumulado(),
+    repo.listEgresosBolsillo(),
+  ]);
+  const egresosAcumuladoEfectivo = egresosAcumulado
     .filter((e) => e.metodo_pago === "efectivo")
     .reduce((acc, e) => acc + Number(e.monto), 0);
-  const egresosAcumuladoBanco = egresos
+  const egresosAcumuladoBanco = egresosAcumulado
     .filter((e) => e.metodo_pago === "banco")
     .reduce((acc, e) => acc + Number(e.monto), 0);
 
@@ -601,6 +614,11 @@ export async function obtenerAcumuladoTotal() {
   const ingresosBanco = Number(base.ingresos_banco);
   const egresosEfectivo = Number(base.egresos_efectivo) + egresosAcumuladoEfectivo;
   const egresosBanco = Number(base.egresos_banco) + egresosAcumuladoBanco;
+
+  const egresos = [
+    ...egresosAcumulado.map((e) => ({ ...e, origen: "acumulado" as const })),
+    ...egresosBolsillo.map((e) => ({ ...e, origen: "bolsillo" as const })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return {
     ingresosEfectivo,

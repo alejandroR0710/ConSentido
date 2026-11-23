@@ -719,6 +719,26 @@ export async function listEgresosAcumulado() {
   return result.rows;
 }
 
+/** Egresos de "Bolsillo" (ver insertEgreso::esBolsillo) — mismo shape que
+ *  listEgresosAcumulado para poder mostrarlos juntos en el detalle del
+ *  Acumulado Total (obtenerAcumuladoTotal): ambos restan de ahí, solo que
+ *  Bolsillo vive en movimientos_caja (queda atado a un turno) en vez de en
+ *  caja_egresos_acumulado. */
+export async function listEgresosBolsillo() {
+  const result = await pool.query(
+    `SELECT mc.id, mc.monto, mc.metodo_pago, mc.motivo, mc.created_at,
+            cg.nombre AS categoria_nombre, p.nombre AS proveedor_nombre, u.nombre AS usuario_nombre
+       FROM movimientos_caja mc
+       JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
+       LEFT JOIN proveedores p ON p.id = mc.proveedor_id
+       LEFT JOIN usuarios u ON u.id = mc.usuario_id
+      WHERE mc.es_bolsillo = true
+      ORDER BY mc.created_at DESC
+      LIMIT 500`,
+  );
+  return result.rows;
+}
+
 /** Alta retroactiva de un ingreso/egreso en un día ya cerrado — a diferencia
  *  de insertIngreso/insertEgreso, fija `created_at` explícito (mediodía Bogotá
  *  de ese día) en vez de `now()`, para que caiga en el día correcto en todas

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/useAuth";
 import { tieneAccesoTotal } from "../../../shared/auth/roles";
 import { ApiError } from "../../../shared/api/client";
@@ -188,7 +188,6 @@ export function CajaHistorialPage() {
   // guardado, siempre recalculado en vivo (ver caja.service.ts::obtenerAcumuladoTotal).
   const [acumulado, setAcumulado] = useState<AcumuladoTotal | null>(null);
   const [egresoAcumuladoAbierto, setEgresoAcumuladoAbierto] = useState(false);
-  const [verEgresosAcumulado, setVerEgresosAcumulado] = useState(false);
 
   // Resumen totalizado (ingresos/egresos + desglose por área) de un rango de
   // fechas elegido a mano — reusa el mismo endpoint de analíticas generales
@@ -403,35 +402,12 @@ export function CajaHistorialPage() {
 
         {acumulado && acumulado.egresos.length > 0 && (
           <div className="mt-3 border-t border-brand-green-600/30 pt-2 dark:border-brand-vanilla/30">
-            <button
-              onClick={() => setVerEgresosAcumulado((v) => !v)}
+            <Link
+              to="/caja/historial/egresos-acumulado"
               className="text-xs font-medium text-brand-green-700 underline dark:text-brand-vanilla"
             >
-              {verEgresosAcumulado ? "Ocultar" : "Ver"} egresos del acumulado ({acumulado.egresos.length})
-            </button>
-            {verEgresosAcumulado && (
-              <ul className="mt-2 flex flex-col gap-1 text-xs text-brand-ink dark:text-brand-vanilla">
-                {acumulado.egresos.map((e) => (
-                  <li key={`${e.origen}-${e.id}`} className="flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      {new Date(e.created_at).toLocaleDateString("es")} · {e.categoria_nombre}
-                      {e.proveedor_nombre && ` · ${e.proveedor_nombre}`} · {e.motivo}
-                      {e.usuario_nombre && (
-                        <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> ({e.usuario_nombre})</span>
-                      )}
-                      {e.origen === "bolsillo" && (
-                        <span className="ml-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
-                          🟣 Bolsillo
-                        </span>
-                      )}
-                    </span>
-                    <span className="shrink-0 font-semibold capitalize">
-                      {e.metodo_pago} {formatMoney(e.monto)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+              Ver historial de egresos ({acumulado.egresos.length})
+            </Link>
           </div>
         )}
       </div>

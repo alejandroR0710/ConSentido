@@ -17,6 +17,10 @@ const ETIQUETA_ORIGEN: Record<ProductoCotizable["origen"], string> = {
 
 const MARGEN = 8;
 const ALTO_MINIMO = 160;
+// Antes la lista medía lo mismo que el input (angosto, el nombre quedaba
+// truncado) — ahora se ensancha hasta este mínimo (o más, si el input ya
+// es más ancho) sin pasarse del borde derecho de la pantalla.
+const ANCHO_MINIMO = 420;
 
 type Posicion = { left: number; width: number; top?: number; bottom?: number; maxHeight: number };
 
@@ -49,10 +53,11 @@ export function SugerenciasProductoCotizable({ productos, texto, onSeleccionar }
       const r = ancla.getBoundingClientRect();
       const abajo = window.innerHeight - r.bottom - MARGEN * 2;
       const arriba = r.top - MARGEN * 2;
+      const ancho = Math.max(r.width, Math.min(ANCHO_MINIMO, window.innerWidth - r.left - MARGEN));
       if (abajo >= ALTO_MINIMO || abajo >= arriba) {
-        setPosicion({ left: r.left, width: r.width, top: r.bottom + 4, maxHeight: Math.max(abajo, 120) });
+        setPosicion({ left: r.left, width: ancho, top: r.bottom + 4, maxHeight: Math.max(abajo, 120) });
       } else {
-        setPosicion({ left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4, maxHeight: arriba });
+        setPosicion({ left: r.left, width: ancho, bottom: window.innerHeight - r.top + 4, maxHeight: arriba });
       }
     }
     ubicar();
@@ -93,7 +98,7 @@ export function SugerenciasProductoCotizable({ productos, texto, onSeleccionar }
                 className="flex w-full items-center justify-between gap-2 border-b border-brand-vanilla-dark/50 px-2 py-1.5 text-left last:border-b-0 hover:bg-brand-green-50 dark:border-brand-green-700/50 dark:hover:bg-brand-green-700/40"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-brand-ink dark:text-brand-vanilla">
+                  <span className="block text-sm font-medium text-brand-ink dark:text-brand-vanilla">
                     {p.nombre}
                   </span>
                   <span className="block text-xs text-brand-ink/50 dark:text-brand-vanilla/50">

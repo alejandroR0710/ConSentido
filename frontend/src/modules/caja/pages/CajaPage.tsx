@@ -17,6 +17,7 @@ import { BolsilloModal } from "../components/BolsilloModal";
 import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoModal } from "../components/EgresoModal";
+import { EntregaTurnoModal } from "../components/EntregaTurnoModal";
 import { acumuladoDelTurno, resumenAReciboProps } from "../factura";
 import { IngresoModal } from "../components/IngresoModal";
 import {
@@ -91,6 +92,7 @@ export function CajaPage() {
   const [movimientoAAnular, setMovimientoAAnular] = useState<MovimientoCaja | null>(null);
   const [movimientoAEditarCompleto, setMovimientoAEditarCompleto] = useState<MovimientoCaja | null>(null);
   const [imprimirResumenTurno, setImprimirResumenTurno] = useState(false);
+  const [entregaTurnoAbierta, setEntregaTurnoAbierta] = useState(false);
 
   const turnoIdRef = useRef<string | null>(null);
   turnoIdRef.current = resumen?.turno.id ?? null;
@@ -350,16 +352,24 @@ export function CajaPage() {
           </div>
 
           <div>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-medium text-brand-green-700 dark:text-brand-vanilla">Movimientos del turno</h2>
-              {puedeVerSumatorias && resumen.movimientos.length > 0 && (
+              <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => setImprimirResumenTurno(true)}
+                  onClick={() => setEntregaTurnoAbierta(true)}
                   className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
                 >
-                  🖨️ Imprimir resumen del turno
+                  📋 Entrega de turno y caja
                 </button>
-              )}
+                {puedeVerSumatorias && resumen.movimientos.length > 0 && (
+                  <button
+                    onClick={() => setImprimirResumenTurno(true)}
+                    className="rounded-md border border-brand-vanilla-dark px-2 py-1 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+                  >
+                    🖨️ Imprimir resumen del turno
+                  </button>
+                )}
+              </div>
             </div>
             {resumen.movimientos.length === 0 ? (
               <p className="text-sm text-brand-ink/60">Sin movimientos todavía.</p>
@@ -702,6 +712,10 @@ export function CajaPage() {
           })}
           onCerrar={() => setImprimirResumenTurno(false)}
         />
+      )}
+
+      {entregaTurnoAbierta && resumen && (
+        <EntregaTurnoModal resumen={resumen} onCerrar={() => setEntregaTurnoAbierta(false)} />
       )}
     </div>
   );

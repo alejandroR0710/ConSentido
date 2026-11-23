@@ -125,3 +125,28 @@ export function acumuladoDelTurno(resumen: ResumenTurno, propinasEfectivo?: numb
   }
   return lineas;
 }
+
+/**
+ * Acta de entrega de turno y caja entre dos personas, SIN cerrar el
+ * turno — el efectivo contado por cada una va en blanco en el papel (lo
+ * escriben a mano al momento de entregar/recibir), nunca pre-llenado por
+ * el sistema: es justamente lo que confirma el conteo físico contra lo
+ * que la pantalla de Caja ya muestra. Disponible para cualquiera que
+ * pueda ver "Caja General" (Cajero incluido, a diferencia de "Imprimir
+ * resumen del turno").
+ */
+export function entregaTurnoAReciboProps(params: {
+  turnoAbiertoEn: string;
+  entregadoPorNombre: string;
+  recibidoPorNombre: string;
+  observaciones?: string;
+}): Omit<ReciboImprimibleProps, "anchoMm"> {
+  return {
+    tipo: "entrega_turno",
+    fecha: new Date().toISOString(),
+    camposEncabezado: [{ etiqueta: "Turno abierto", valor: params.turnoAbiertoEn }],
+    entregadoPorNombre: params.entregadoPorNombre,
+    recibidoPorNombre: params.recibidoPorNombre,
+    observaciones: params.observaciones,
+  };
+}

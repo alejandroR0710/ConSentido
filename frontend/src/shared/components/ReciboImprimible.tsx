@@ -43,7 +43,19 @@ export interface ReciboImprimibleProps {
   // "prefactura": una factura con saldo pendiente — mismos ítems/totales que
   // "factura", pero con el aviso de que todavía no es un comprobante de
   // venta válido (ver facturaAReciboProps en migao/factura.ts).
-  tipo: "factura" | "prefactura" | "cotizacion" | "movimiento" | "resumen" | "comprobante_propina" | "vale";
+  // "entrega_turno": acta de entrega de caja entre dos personas sin cerrar
+  // el turno — nombre + firma + un espacio en blanco para que cada una
+  // escriba a mano lo que contó, SIN ningún monto calculado por el sistema
+  // (ver entregadoPorNombre/recibidoPorNombre y caja/factura.ts).
+  tipo:
+    | "factura"
+    | "prefactura"
+    | "cotizacion"
+    | "movimiento"
+    | "resumen"
+    | "comprobante_propina"
+    | "vale"
+    | "entrega_turno";
   // Solo aplica a tipo "movimiento": qué franja/color mostrar.
   // Solo aplica a tipo "movimiento" ("ingreso"/"egreso") o tipo "vale" ("deuda").
   variante?: "ingreso" | "egreso" | "deuda";
@@ -67,6 +79,12 @@ export interface ReciboImprimibleProps {
   // Cierre del resumen: los mismos totales que muestra la pantalla de Caja
   // (efectivo, banco, total general). El último va resaltado.
   resumenAcumulado?: ReciboEtiquetaMonto[];
+  // Solo tipo "entrega_turno" — ninguno lleva monto: el espacio para el
+  // efectivo contado queda en blanco a propósito, lo escribe cada persona
+  // a mano al momento de entregar/recibir.
+  entregadoPorNombre?: string;
+  recibidoPorNombre?: string;
+  observaciones?: string;
   anchoMm: 58 | 80;
 }
 
@@ -109,6 +127,9 @@ export function ReciboImprimible({
   resumenIngresos,
   resumenEgresos,
   resumenAcumulado,
+  entregadoPorNombre,
+  recibidoPorNombre,
+  observaciones,
   anchoMm,
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
@@ -118,6 +139,7 @@ export function ReciboImprimible({
   const esMovimiento = tipo === "movimiento";
   const esResumen = tipo === "resumen";
   const esComprobantePropina = tipo === "comprobante_propina";
+  const esEntregaTurno = tipo === "entrega_turno";
   const esVale = tipo === "vale";
   const esDeuda = esVale && variante === "deuda";
   const esEgreso = esMovimiento && variante === "egreso";
@@ -132,17 +154,19 @@ export function ReciboImprimible({
     ? "COTIZACIÓN — NO es una factura de venta"
     : esResumen
       ? "RESUMEN DE CAJA"
-      : esComprobantePropina
-        ? "COMPROBANTE DE ENTREGA DE PROPINA"
-        : esVale
-          ? esDeuda
-            ? "DEUDA"
-            : "VALE"
-          : esMovimiento
-            ? esEgreso
-              ? "COMPROBANTE DE EGRESO"
-              : "COMPROBANTE DE INGRESO"
-            : "FACTURA DE VENTA";
+      : esEntregaTurno
+        ? "ENTREGA DE TURNO Y CAJA"
+        : esComprobantePropina
+          ? "COMPROBANTE DE ENTREGA DE PROPINA"
+          : esVale
+            ? esDeuda
+              ? "DEUDA"
+              : "VALE"
+            : esMovimiento
+              ? esEgreso
+                ? "COMPROBANTE DE EGRESO"
+                : "COMPROBANTE DE INGRESO"
+              : "FACTURA DE VENTA";
   // Cotización: relleno sólido (no solo borde+texto de color) — un color
   // claro sobre blanco se convierte en un punteado casi invisible en la
   // impresora térmica (mismo problema que el peso de fuente, ver comentario
@@ -159,15 +183,17 @@ export function ReciboImprimible({
     ? "Cotización"
     : esComprobantePropina
       ? "Comprobante de propina"
-      : esVale
-        ? esDeuda
-          ? "Deuda"
-          : "Vale"
-        : esMovimiento
-          ? "Comprobante"
-          : esResumen
-            ? null
-            : "Factura";
+      : esEntregaTurno
+        ? null
+        : esVale
+          ? esDeuda
+            ? "Deuda"
+            : "Vale"
+          : esMovimiento
+            ? "Comprobante"
+            : esResumen
+              ? null
+              : "Factura";
 
   const totalIngresos = (resumenIngresos ?? []).reduce((acc, r) => acc + r.monto, 0);
   const totalEgresos = (resumenEgresos ?? []).reduce((acc, r) => acc + r.monto, 0);
@@ -314,6 +340,27 @@ export function ReciboImprimible({
             </div>
           )}
         </div>
+      ) : esEntregaTurno ? (
+        <div className="my-2 flex flex-col gap-5 text-[16px]">
+          <div>
+            <div className="font-bold">Entregado por</div>
+            <div>{entregadoPorNombre || "—"}</div>
+            <div className="mt-6 border-t border-black pt-1 text-center text-[13px]">Firma</div>
+            <div className="mt-2">Efectivo contado: $ ____________________</div>
+          </div>
+          <div className="border-t-2 border-black pt-3">
+            <div className="font-bold">Recibido por</div>
+            <div>{recibidoPorNombre || "—"}</div>
+            <div className="mt-6 border-t border-black pt-1 text-center text-[13px]">Firma</div>
+            <div className="mt-2">Efectivo contado: $ ____________________</div>
+          </div>
+          {observaciones && (
+            <div className="border-t border-dashed border-black pt-2">
+              <div className="font-bold">Observaciones</div>
+              <div>{observaciones}</div>
+            </div>
+          )}
+        </div>
       ) : (
         <table className="w-full text-[16px]">
           <thead>
@@ -347,7 +394,7 @@ export function ReciboImprimible({
         </table>
       )}
 
-      <div className="border-t border-dashed border-black" />
+      {!esEntregaTurno && <div className="border-t border-dashed border-black" />}
 
       <div className="mt-1 flex flex-col gap-0.5 text-[16px]">
         {esResumen ? (
@@ -355,7 +402,7 @@ export function ReciboImprimible({
             <span>BALANCE</span>
             <span>{formatMoney(totalIngresos - totalEgresos)}</span>
           </div>
-        ) : (
+        ) : esEntregaTurno ? null : (
           <>
             {!esLineaUnica && (
               <div className="flex justify-between">
@@ -418,7 +465,7 @@ export function ReciboImprimible({
           ? "Pendiente de pago — no es un comprobante de venta."
           : esCotizacion
             ? "Precios sujetos a cambio. Válida por 15 días."
-            : esMovimiento || esResumen || esComprobantePropina || esVale
+            : esMovimiento || esResumen || esComprobantePropina || esVale || esEntregaTurno
               ? "Documento interno — no es una factura de venta."
               : "¡Gracias por tu compra!"}
       </div>

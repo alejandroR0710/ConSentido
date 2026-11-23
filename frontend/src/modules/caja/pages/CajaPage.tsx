@@ -24,6 +24,11 @@ import {
 } from "../../../shared/ingresosMinimizados/IngresosMinimizadosContext";
 import { agruparPorEtiqueta, labelMetodoPago, resumenPorAreaActual } from "../moduloOrigen";
 import { ResetearCajaModal } from "../components/ResetearCajaModal";
+import {
+  SumatoriasBloqueadas,
+  TemporizadorSumatorias,
+  useSumatoriasBloqueadas,
+} from "../components/SumatoriasBloqueadas";
 
 const POLL_MS = 10000;
 
@@ -50,6 +55,8 @@ export function CajaPage() {
   // — el cuadre completo solo aparece al cerrar caja (CerrarTurnoModal), que
   // ahí sí ofrece imprimirlo. Cualquier otro rol sigue viendo todo en vivo.
   const puedeVerSumatorias = usuario?.rol !== "Cajero";
+  // Root/Super Root: las sumatorias quedan contraídas y se ven 40 s con clave.
+  const sumatorias = useSumatoriasBloqueadas(tieneAccesoTotal(usuario?.rol));
 
   const [resumen, setResumen] = useState<ResumenTurno | null>(null);
   const [sinTurno, setSinTurno] = useState(false);
@@ -216,7 +223,9 @@ export function CajaPage() {
         </form>
       ) : (
         <>
-          {puedeVerSumatorias && (
+          {puedeVerSumatorias && sumatorias.bloqueado && <SumatoriasBloqueadas control={sumatorias} />}
+          {puedeVerSumatorias && <TemporizadorSumatorias control={sumatorias} />}
+          {puedeVerSumatorias && !sumatorias.bloqueado && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-brand-vanilla-dark p-4 text-center dark:border-brand-green-700">
               <div className="text-xs uppercase tracking-wide text-brand-ink/60 dark:text-brand-vanilla/60">
@@ -274,7 +283,7 @@ export function CajaPage() {
 
           {/* Aparte del cuadre de arriba (esta plata nunca cuenta para Caja
               General) — cuánto entró HOY en propina, efectivo y banco. */}
-          {puedeVerSumatorias && (
+          {puedeVerSumatorias && !sumatorias.bloqueado && (
           <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/20">
             <div className="text-center text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
               💵 Propinas de hoy
@@ -368,7 +377,10 @@ export function CajaPage() {
                         <div className="mb-4 flex flex-col gap-3 border-b border-brand-vanilla-dark pb-3 dark:border-brand-green-700 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                           <h3 className="font-semibold text-brand-green-700 dark:text-brand-vanilla">{fecha}</h3>
 
-                          {puedeVerSumatorias && (
+                          {puedeVerSumatorias && sumatorias.bloqueado && (
+                            <SumatoriasBloqueadas control={sumatorias} compacto />
+                          )}
+                          {puedeVerSumatorias && !sumatorias.bloqueado && (
                           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start">
                             {/* Por área */}
                             <div className="rounded-md border border-brand-vanilla-dark/60 px-3 py-2 dark:border-brand-green-700/60">

@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { CLAVE_ACCESO_RESTRINGIDO } from "../../../shared/auth/claveAcceso";
 
-// Clave fija por ahora (pedido del negocio): las sumatorias de Caja quedan
-// contraídas para Root/Super Root y se ven 40 s tras escribirla.
-const CLAVE_SUMATORIAS = "1705";
+// Las sumatorias de Caja quedan contraídas para Root/Super Root y se ven
+// 40 s tras escribir la clave compartida.
 const SEGUNDOS_VISIBLE = 40;
 
 /** Desbloqueo temporal compartido por todas las sumatorias de la pantalla. */
@@ -26,7 +26,7 @@ export function useSumatoriasBloqueadas(activo: boolean) {
     segundosRestantes: hasta === null ? 0 : Math.max(0, Math.ceil((hasta - ahora) / 1000)),
     mostrarTemporizador: activo && desbloqueado,
     intentar(clave: string) {
-      if (clave !== CLAVE_SUMATORIAS) return false;
+      if (clave !== CLAVE_ACCESO_RESTRINGIDO) return false;
       const n = Date.now();
       setAhora(n);
       setHasta(n + SEGUNDOS_VISIBLE * 1000);

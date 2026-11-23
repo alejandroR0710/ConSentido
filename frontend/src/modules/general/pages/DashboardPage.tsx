@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../../../shared/auth/useAuth";
+import { AccesoConClave } from "../../../shared/components/AccesoConClave";
 import { GeneralAnalyticsSection } from "../components/GeneralAnalyticsSection";
 import { MigaoAnalyticsSection } from "../components/MigaoAnalyticsSection";
 import { ConSentidoAnalyticsSection } from "../components/ConSentidoAnalyticsSection";
@@ -29,73 +30,75 @@ export function DashboardPage() {
   const [seccionActual, setSeccionActual] = useState<Seccion>("general");
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="mb-2 text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">
-          Hola, {usuario?.nombre}
-        </h1>
-        <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
-          Módulos disponibles para tu rol: {usuario?.modulos.join(", ") || "ninguno asignado"}.
-        </p>
-      </div>
-
-      {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
-
-      {/* Steps/Secciones */}
-      {/* -mx-4/px-4 = el p-4 del <main> (AppShell): la barra llega justo al borde
-          de la pantalla; con más margen se salía y la página se corría de lado. */}
-      <div className="flex overflow-x-auto gap-2 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
-        {SECCIONES.map((seccion) => (
-          <button
-            key={seccion.id}
-            onClick={() => setSeccionActual(seccion.id)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 whitespace-nowrap font-medium transition-colors ${
-              seccionActual === seccion.id
-                ? "bg-brand-green-600 text-white"
-                : "bg-brand-green-50 text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
-            }`}
-          >
-            <span>{seccion.icon}</span>
-            <span>{seccion.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Contenido de la sección actual */}
-      <div className="mt-2">
-        {seccionActual === "general" && <GeneralAnalyticsSection />}
-        {seccionActual === "migao" && <MigaoAnalyticsSection />}
-        {seccionActual === "consentido" && <ConSentidoAnalyticsSection />}
-        {seccionActual === "insumos" && <InsumosAnalyticsSection />}
-        {seccionActual === "talleres" && <TalleresAnalyticsSection />}
-        {seccionActual === "pedidos" && <PedidosAnalyticsSection />}
-        {seccionActual === "reportes" && <ReportesPage />}
-      </div>
-
-      {esSuperRoot && (
-        <div className="max-w-lg rounded-lg border-2 border-dashed border-red-300 p-4 dark:border-red-800">
-          <h2 className="mb-1 font-medium text-red-600">Zona de Super Root</h2>
-          <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
-            Borra por completo el historial de órdenes, ventas, pagos, turnos y movimientos de caja de cualquier
-            módulo — deja el negocio como recién instalado. Conserva menú, usuarios y roles. Para reinicios más
-            puntuales, sigue existiendo "Reiniciar Caja" (en Caja General) y "Reiniciar historial de órdenes" (en
-            Migao POS).
+    <AccesoConClave mensaje="El Dashboard está protegido">
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="mb-2 text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">
+            Hola, {usuario?.nombre}
+          </h1>
+          <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
+            Módulos disponibles para tu rol: {usuario?.modulos.join(", ") || "ninguno asignado"}.
           </p>
-          <button
-            onClick={() => setModalAbierto(true)}
-            className="w-full max-w-xs rounded-md border-2 border-red-600 px-4 py-2 font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-          >
-            Reiniciar todo
-          </button>
         </div>
-      )}
 
-      {modalAbierto && (
-        <ReiniciarTodoModal
-          onCerrar={() => setModalAbierto(false)}
-          onReiniciado={(msg) => setMensaje(msg)}
-        />
-      )}
-    </div>
+        {mensaje && <p className="text-sm text-brand-green-700 dark:text-brand-vanilla">{mensaje}</p>}
+
+        {/* Steps/Secciones */}
+        {/* -mx-4/px-4 = el p-4 del <main> (AppShell): la barra llega justo al borde
+            de la pantalla; con más margen se salía y la página se corría de lado. */}
+        <div className="flex overflow-x-auto gap-2 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+          {SECCIONES.map((seccion) => (
+            <button
+              key={seccion.id}
+              onClick={() => setSeccionActual(seccion.id)}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 whitespace-nowrap font-medium transition-colors ${
+                seccionActual === seccion.id
+                  ? "bg-brand-green-600 text-white"
+                  : "bg-brand-green-50 text-brand-green-700 hover:bg-brand-green-100 dark:bg-brand-green-700/30 dark:text-brand-vanilla dark:hover:bg-brand-green-700/50"
+              }`}
+            >
+              <span>{seccion.icon}</span>
+              <span>{seccion.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Contenido de la sección actual */}
+        <div className="mt-2">
+          {seccionActual === "general" && <GeneralAnalyticsSection />}
+          {seccionActual === "migao" && <MigaoAnalyticsSection />}
+          {seccionActual === "consentido" && <ConSentidoAnalyticsSection />}
+          {seccionActual === "insumos" && <InsumosAnalyticsSection />}
+          {seccionActual === "talleres" && <TalleresAnalyticsSection />}
+          {seccionActual === "pedidos" && <PedidosAnalyticsSection />}
+          {seccionActual === "reportes" && <ReportesPage />}
+        </div>
+
+        {esSuperRoot && (
+          <div className="max-w-lg rounded-lg border-2 border-dashed border-red-300 p-4 dark:border-red-800">
+            <h2 className="mb-1 font-medium text-red-600">Zona de Super Root</h2>
+            <p className="mb-3 text-xs text-brand-ink/60 dark:text-brand-vanilla/60">
+              Borra por completo el historial de órdenes, ventas, pagos, turnos y movimientos de caja de cualquier
+              módulo — deja el negocio como recién instalado. Conserva menú, usuarios y roles. Para reinicios más
+              puntuales, sigue existiendo "Reiniciar Caja" (en Caja General) y "Reiniciar historial de órdenes" (en
+              Migao POS).
+            </p>
+            <button
+              onClick={() => setModalAbierto(true)}
+              className="w-full max-w-xs rounded-md border-2 border-red-600 px-4 py-2 font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+            >
+              Reiniciar todo
+            </button>
+          </div>
+        )}
+
+        {modalAbierto && (
+          <ReiniciarTodoModal
+            onCerrar={() => setModalAbierto(false)}
+            onReiniciado={(msg) => setMensaje(msg)}
+          />
+        )}
+      </div>
+    </AccesoConClave>
   );
 }

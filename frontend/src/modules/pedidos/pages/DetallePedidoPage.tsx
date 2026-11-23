@@ -38,6 +38,10 @@ export function DetallePedidoPage() {
   const [conductorDescripcionInput, setConductorDescripcionInput] = useState("");
   const [pidiendoEnvio, setPidiendoEnvio] = useState(false);
   const [imprimiendoRotulo, setImprimiendoRotulo] = useState(false);
+  const [editandoDescripcion, setEditandoDescripcion] = useState(false);
+  const [descripcionInput, setDescripcionInput] = useState("");
+  const [guardandoDescripcion, setGuardandoDescripcion] = useState(false);
+  const [errorDescripcion, setErrorDescripcion] = useState<string | null>(null);
 
   const [modalAbonoAbierto, setModalAbonoAbierto] = useState(false);
   const [montoAbono, setMontoAbono] = useState(0);
@@ -64,6 +68,27 @@ export function DetallePedidoPage() {
   }, [id]);
 
   useRegistrarRefresco(cargar);
+
+  function abrirEdicionDescripcion() {
+    setDescripcionInput(pedido?.descripcion ?? "");
+    setErrorDescripcion(null);
+    setEditandoDescripcion(true);
+  }
+
+  async function guardarDescripcion() {
+    if (!id || !descripcionInput.trim()) return;
+    setGuardandoDescripcion(true);
+    setErrorDescripcion(null);
+    try {
+      await pedidosApi.editar(id, { descripcion: descripcionInput.trim() });
+      await cargar();
+      setEditandoDescripcion(false);
+    } catch (err) {
+      setErrorDescripcion(err instanceof ApiError ? err.message : "No se pudo guardar la descripción");
+    } finally {
+      setGuardandoDescripcion(false);
+    }
+  }
 
   async function avanzarEstado(
     destino: Exclude<EstadoPedido, "pendiente">,
@@ -168,7 +193,17 @@ export function DetallePedidoPage() {
     <div className="flex flex-col gap-6">
       <div>
         <BotonVolver to="/pedidos" />
-        <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">{pedido.descripcion}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-brand-green-700 dark:text-brand-vanilla">{pedido.descripcion}</h1>
+          <button
+            onClick={abrirEdicionDescripcion}
+            aria-label="Editar descripción"
+            title="Editar descripción"
+            className="rounded-md border border-brand-vanilla-dark px-1.5 py-0.5 text-xs text-brand-ink/70 hover:bg-brand-green-50 dark:border-brand-green-700 dark:text-brand-vanilla/70 dark:hover:bg-brand-green-700/40"
+          >
+            ✎
+          </button>
+        </div>
         <p className="text-sm text-brand-ink/70 dark:text-brand-vanilla/70">
           Estado actual: <span className="font-semibold capitalize">{pedido.estado}</span>
           {pedido.cliente_nombre ? ` · Cliente: ${pedido.cliente_nombre}` : ""}
@@ -451,6 +486,26 @@ export function DetallePedidoPage() {
             className="w-full rounded-md bg-brand-green-700 px-4 py-2.5 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
           >
             {guardandoAbono ? "Guardando..." : "Registrar abono"}
+          </button>
+        </Modal>
+      )}
+
+      {editandoDescripcion && (
+        <Modal titulo="Editar descripción" onCerrar={() => setEditandoDescripcion(false)}>
+          <label className="mb-1 block text-xs font-medium">Descripción</label>
+          <input
+            autoFocus
+            value={descripcionInput}
+            onChange={(e) => setDescripcionInput(e.target.value)}
+            className="mb-3 w-full rounded-md border border-brand-vanilla-dark bg-brand-vanilla px-2 py-2 text-sm text-brand-ink dark:border-brand-green-700 dark:bg-brand-green-900 dark:text-brand-vanilla"
+          />
+          {errorDescripcion && <p className="mb-3 text-sm text-red-600">{errorDescripcion}</p>}
+          <button
+            onClick={guardarDescripcion}
+            disabled={guardandoDescripcion || !descripcionInput.trim()}
+            className="w-full rounded-md bg-brand-green-700 px-4 py-2.5 font-semibold text-brand-vanilla hover:bg-brand-green-600 disabled:opacity-60"
+          >
+            {guardandoDescripcion ? "Guardando..." : "Guardar"}
           </button>
         </Modal>
       )}

@@ -619,6 +619,29 @@ export function CajaHistorialPage() {
                         </div>
                       </div>
                     )}
+                    {(() => {
+                      // Conteo aparte de Bolsillo (plata personal/del dueño) — no entra
+                      // en "Egresos por área" de arriba (se excluye ahí a propósito) ni
+                      // afecta el cuadre del turno, pero sigue siendo útil ver cuánto
+                      // salió por este concepto ese día.
+                      const egresosBolsillo = movimientosDelDia.filter((m) => m.es_bolsillo);
+                      if (egresosBolsillo.length === 0) return null;
+                      const totalBolsillo = egresosBolsillo.reduce((sum, m) => sum + Number(m.monto), 0);
+                      return (
+                        <div className="flex-1">
+                          <span className="text-xs font-medium uppercase tracking-wide text-purple-700 dark:text-purple-400">
+                            🟣 Egresos de Bolsillo
+                          </span>
+                          <div className="mt-1 text-xs text-brand-ink dark:text-brand-vanilla">
+                            {egresosBolsillo.length} movimiento{egresosBolsillo.length === 1 ? "" : "s"} ·{" "}
+                            {formatMoney(totalBolsillo)}
+                          </div>
+                          <div className="text-[10px] text-brand-ink/50 dark:text-brand-vanilla/50">
+                            No afecta el cuadre del turno, solo el Acumulado Total.
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="mt-1 flex flex-col gap-1.5 border-t border-brand-vanilla-dark pt-3 dark:border-brand-green-700">
@@ -655,7 +678,7 @@ export function CajaHistorialPage() {
                           <div
                             key={m.id}
                             className={`flex items-center justify-between gap-2 rounded-md border-l-4 bg-brand-vanilla-dark/20 px-2 py-1.5 text-xs dark:bg-brand-green-700/10 ${
-                              m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
+                              m.es_bolsillo ? "border-purple-500" : m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
                             }`}
                           >
                             <div className="min-w-0">
@@ -666,6 +689,11 @@ export function CajaHistorialPage() {
                                       : "Otro")
                                   : (m.categoria_gasto_nombre ?? "Otro")}
                                 {m.motivo && <span className="text-brand-ink/50 dark:text-brand-vanilla/50"> · {m.motivo}</span>}
+                                {m.es_bolsillo && (
+                                  <span className="ml-1 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+                                    🟣 Bolsillo
+                                  </span>
+                                )}
                               </div>
                               <div className="text-brand-ink/50 dark:text-brand-vanilla/50">
                                 {formatearHora(m.created_at)} · {labelMetodoPago(m)}
@@ -686,7 +714,11 @@ export function CajaHistorialPage() {
                             <div className="flex shrink-0 items-center gap-2">
                               <span
                                 className={`font-semibold ${
-                                  m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                                  m.es_bolsillo
+                                    ? "text-purple-600 dark:text-purple-400"
+                                    : m.tipo === "ingreso"
+                                      ? "text-brand-green-700 dark:text-brand-vanilla"
+                                      : "text-red-600"
                                 }`}
                               >
                                 {m.tipo === "egreso" ? "-" : "+"}

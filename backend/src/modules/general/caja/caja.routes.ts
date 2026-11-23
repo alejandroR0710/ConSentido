@@ -29,6 +29,7 @@ import {
   obtenerTurnoAbiertoController,
   obtenerAcumuladoTotalController,
   obtenerTurnosPorFechaController,
+  registrarBolsilloController,
   registrarEgresoAcumuladoController,
   registrarEgresoController,
   registrarIngresoController,
@@ -74,6 +75,15 @@ cajaRouter.post(
   "/egresos-acumulado",
   requirePermission("general.caja.registrar_egreso_acumulado"),
   asyncHandler(registrarEgresoAcumuladoController),
+);
+
+// "Bolsillo": egreso del turno activo que no afecta su cuadre de efectivo/
+// banco, solo el Acumulado Total — mismo criterio de acceso que Egreso
+// acumulado, nunca para Cajero.
+cajaRouter.post(
+  "/bolsillo",
+  requirePermission("general.caja.registrar_bolsillo"),
+  asyncHandler(registrarBolsilloController),
 );
 
 cajaRouter.get(

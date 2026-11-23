@@ -13,6 +13,7 @@ import { BotonFactura } from "../../migao/components/BotonFactura";
 import { migaoApi } from "../../migao/api";
 import { AdministracionModal } from "../components/AdministracionModal";
 import { AnularVentaModal } from "../components/AnularVentaModal";
+import { BolsilloModal } from "../components/BolsilloModal";
 import { BotonImprimirMovimiento } from "../components/BotonImprimirMovimiento";
 import { EditarMovimientoHistoricoModal } from "../components/EditarMovimientoHistoricoModal";
 import { EgresoModal } from "../components/EgresoModal";
@@ -47,6 +48,9 @@ export function CajaPage() {
   // movimiento es una capacidad más general que "Root" también tiene.
   const esSuperRoot = usuario?.rol === "Super Root";
   const puedeEditarPagos = tieneAccesoTotal(usuario?.rol);
+  // "Bolsillo" (plata personal/del dueño): mismo acceso que Egreso acumulado,
+  // nunca para Cajero (ver permiso general.caja.registrar_bolsillo).
+  const puedeRegistrarBolsillo = tieneAccesoTotal(usuario?.rol);
   // La restricción es puntual para el rol Cajero (no "todo lo que no sea
   // acceso total" — hoy da lo mismo porque es el único otro rol con acceso a
   // esta pantalla, pero se deja explícito para no arrastrar un rol nuevo que
@@ -72,7 +76,9 @@ export function CajaPage() {
   const [montoInicialBanco, setMontoInicialBanco] = useState(0);
   const [abriendo, setAbriendo] = useState(false);
 
-  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "reset" | "administracion" | null>(null);
+  const [modalAbierto, setModalAbierto] = useState<"ingreso" | "egreso" | "bolsillo" | "reset" | "administracion" | null>(
+    null,
+  );
   const [snapshotIngresoRestaurado, setSnapshotIngresoRestaurado] = useState<IngresoMinimizado | null>(null);
   const { pendienteDeRestaurar, limpiarPendienteDeRestaurar } = useIngresosMinimizados();
   useEffect(() => {
@@ -320,7 +326,7 @@ export function CajaPage() {
           </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className={`grid grid-cols-1 gap-3 ${puedeRegistrarBolsillo ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <button
               onClick={() => setModalAbierto("ingreso")}
               className="rounded-md bg-brand-green-700 px-4 py-4 text-lg font-semibold text-brand-vanilla hover:bg-brand-green-600"
@@ -333,6 +339,14 @@ export function CajaPage() {
             >
               − Egreso
             </button>
+            {puedeRegistrarBolsillo && (
+              <button
+                onClick={() => setModalAbierto("bolsillo")}
+                className="rounded-md border-2 border-purple-600 px-4 py-4 text-lg font-semibold text-purple-700 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30"
+              >
+                🟣 Bolsillo
+              </button>
+            )}
           </div>
 
           <div>
@@ -473,7 +487,7 @@ export function CajaPage() {
                             <li
                               key={m.id}
                               className={`rounded-lg border-l-4 bg-brand-vanilla p-3 dark:bg-brand-green-900 ${
-                                m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
+                                m.es_bolsillo ? "border-purple-500" : m.tipo === "ingreso" ? "border-brand-green-600" : "border-red-400"
                               }`}
                             >
                               <div className="flex items-start justify-between gap-3">
@@ -483,6 +497,11 @@ export function CajaPage() {
                                       {m.modulo_origen_slug ?? m.categoria_gasto_nombre ?? "—"}
                                     </div>
                                     <span className="text-xs text-brand-ink/60 dark:text-brand-vanilla/60">{labelMetodoPago(m)}</span>
+                                    {m.es_bolsillo && (
+                                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+                                        🟣 Bolsillo
+                                      </span>
+                                    )}
                                   </div>
                                   {m.motivo && (
                                     <div className="mt-1 text-xs text-brand-ink/70 dark:text-brand-vanilla/70 italic">
@@ -507,7 +526,11 @@ export function CajaPage() {
                                 <div className="flex items-center gap-3">
                                   <div
                                     className={`font-semibold ${
-                                      m.tipo === "ingreso" ? "text-brand-green-700 dark:text-brand-vanilla" : "text-red-600"
+                                      m.es_bolsillo
+                                        ? "text-purple-600 dark:text-purple-400"
+                                        : m.tipo === "ingreso"
+                                          ? "text-brand-green-700 dark:text-brand-vanilla"
+                                          : "text-red-600"
                                     }`}
                                   >
                                     {m.tipo === "egreso" ? "-" : "+"}
@@ -596,6 +619,15 @@ export function CajaPage() {
 
       {modalAbierto === "egreso" && (
         <EgresoModal
+          categorias={categorias}
+          onCategoriaCreada={(c) => setCategorias((prev) => [...prev, c])}
+          onCerrar={() => setModalAbierto(null)}
+          onRegistrado={cargarResumenDeTurnoActual}
+        />
+      )}
+
+      {modalAbierto === "bolsillo" && (
+        <BolsilloModal
           categorias={categorias}
           onCategoriaCreada={(c) => setCategorias((prev) => [...prev, c])}
           onCerrar={() => setModalAbierto(null)}

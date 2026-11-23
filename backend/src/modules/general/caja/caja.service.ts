@@ -15,6 +15,7 @@ import {
   CerrarTurnoInput,
   EditarMetodoPagoMovimientoInput,
   EditarMovimientoHistoricoInput,
+  RegistrarBolsilloInput,
   RegistrarEgresoAcumuladoInput,
   RegistrarEgresoInput,
   RegistrarIngresoInput,
@@ -502,6 +503,36 @@ export async function registrarEgreso(
         moduloOrigenSlug: input.moduloOrigenSlug,
         referenciaEntidad: referencia?.entidad,
         referenciaId: referencia?.id,
+      }),
+    );
+  }
+  return movimientos;
+}
+
+/**
+ * "Bolsillo": plata personal/del dueño, no de la operación — queda guardada
+ * en movimientos_caja del turno activo (se ve en Movimientos del turno),
+ * pero marcada es_bolsillo para que sumMovimientosPorTurno la excluya del
+ * cuadre de efectivo/banco de ese turno. Solo resta del Acumulado Total
+ * (obtenerAcumuladoTotal ya suma movimientos_caja completo, sin filtrar por
+ * es_bolsillo, así que baja sola sin tocar esa consulta). Exclusivo de
+ * Root/Super Root (ver caja.routes.ts).
+ */
+export async function registrarBolsillo(input: RegistrarBolsilloInput, usuarioId: string) {
+  const turno = await turnoAbiertoOrThrow(pool);
+  const partes = descomponerPago(input);
+  const movimientos = [];
+  for (const parte of partes) {
+    movimientos.push(
+      await repo.insertEgreso(pool, {
+        turnoId: turno.id,
+        categoriaGastoId: input.categoriaGastoId,
+        monto: parte.monto,
+        metodoPago: parte.metodoPago,
+        motivo: input.motivo,
+        usuarioId,
+        proveedorId: input.proveedorId,
+        esBolsillo: true,
       }),
     );
   }

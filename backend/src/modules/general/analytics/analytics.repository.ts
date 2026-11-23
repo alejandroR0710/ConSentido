@@ -20,13 +20,18 @@ import { pool } from "../../../shared/db/pool";
  * siempre $0 aunque sí haya egresos reales — por eso este total se calcula
  * aparte, directo contra movimientos_caja completo.
  */
+/** `es_bolsillo = false`: un egreso de Bolsillo es retiro personal/del
+ *  dueño, no gasto operativo de la tienda — no debe inflar "Egresos
+ *  totales" del Dashboard (solo resta del Acumulado Total, ver
+ *  caja.service.ts::registrarBolsillo). */
 export async function getTotalesMovimientos(desde: string, hasta: string) {
   const result = await pool.query(
     `SELECT
        COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
        COALESCE(SUM(CASE WHEN tipo = 'egreso' THEN monto END), 0) AS egresos
      FROM movimientos_caja
-     WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2`,
+     WHERE DATE_FORMAT(created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+       AND es_bolsillo = false`,
     [desde, hasta],
   );
   return result.rows[0];
@@ -45,6 +50,7 @@ export async function getMovimientosPorModulo(desde: string, hasta: string) {
          FROM movimientos_caja mc
          LEFT JOIN categorias_gasto cg ON cg.id = mc.categoria_gasto_id
         WHERE DATE_FORMAT(mc.created_at, '%Y-%m-%d') BETWEEN $1 AND $2
+          AND mc.es_bolsillo = false
      )
      SELECT
        m.id as modulo_id,

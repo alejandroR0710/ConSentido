@@ -102,6 +102,11 @@ export interface MovimientoCaja {
   // De la venta que originó este ingreso, si la hay — se genera solo al
   // cobrar, no al imprimir (ver migao.service.ts::cerrarOrden).
   numero_factura?: string | null;
+  // "Bolsillo" (plata personal/del dueño): egreso del turno activo que NO
+  // cuenta para su cuadre de efectivo/banco, solo resta del Acumulado
+  // Total. Se muestra en morado en Movimientos del turno, y se excluye de
+  // los desgloses por área/categoría (ver moduloOrigen.ts).
+  es_bolsillo: boolean;
 }
 
 export interface IngresoPorArea {
@@ -289,6 +294,16 @@ export const cajaApi = {
     monto: number;
   }) => apiFetch<EgresoAcumulado>("/caja/egresos-acumulado", { method: "POST", body: input }),
   obtenerAcumuladoTotal: () => apiFetch<AcumuladoTotal>("/caja/acumulado"),
+  // "Bolsillo": egreso del turno activo que no afecta su cuadre de
+  // efectivo/banco, solo el Acumulado Total — sin moduloOrigenSlug a
+  // propósito (no aplica área). Exclusivo de Root/Super Root.
+  registrarBolsillo: (
+    input: {
+      categoriaGastoId: number;
+      motivo: string;
+      proveedorId?: string;
+    } & PagoInput,
+  ) => apiFetch<MovimientoCaja[]>("/caja/bolsillo", { method: "POST", body: input }),
   listarProveedores: () => apiFetch<Proveedor[]>("/caja/proveedores"),
   crearProveedor: (nombre: string, contacto?: string, telefono?: string, email?: string) =>
     apiFetch<Proveedor>("/caja/proveedores", {

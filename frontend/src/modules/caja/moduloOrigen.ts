@@ -35,7 +35,7 @@ export const LABEL_POR_MODULO_SLUG: Record<string, string> = Object.fromEntries(
 export function agruparPorEtiqueta(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
   const porEtiqueta = new Map<string, number>();
   for (const m of movimientos) {
-    if (m.tipo !== tipo) continue;
+    if (m.tipo !== tipo || m.es_bolsillo) continue;
     const etiqueta =
       tipo === "ingreso"
         ? (m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Otro")
@@ -65,7 +65,7 @@ const AREAS_RESUMEN_TURNO: ModuloOrigenSlug[] = ["migao", "con_sentido", "taller
  *  modulo_origen_slug (igual que un ingreso, que siempre lo trae). */
 export function resumenPorAreaActual(movimientos: MovimientoCaja[]): ResumenAreaActual[] {
   return AREAS_RESUMEN_TURNO.map((slug) => {
-    const deArea = movimientos.filter((m) => m.modulo_origen_slug === slug);
+    const deArea = movimientos.filter((m) => m.modulo_origen_slug === slug && !m.es_bolsillo);
     const meta = MODULOS_ORIGEN.find((m) => m.value === slug)!;
     return {
       slug,
@@ -89,7 +89,7 @@ export function resumenPorAreaActual(movimientos: MovimientoCaja[]): ResumenArea
 export function agruparPorEtiquetaConMetodo(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
   const porEtiqueta = new Map<string, { total: number; efectivo: number; banco: number }>();
   for (const m of movimientos) {
-    if (m.tipo !== tipo) continue;
+    if (m.tipo !== tipo || m.es_bolsillo) continue;
     const etiqueta =
       tipo === "ingreso"
         ? (m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Otro")
@@ -115,7 +115,7 @@ export function agruparPorEtiquetaConMetodo(movimientos: MovimientoCaja[], tipo:
 export function agruparPorArea(movimientos: MovimientoCaja[], tipo: "ingreso" | "egreso") {
   const porArea = new Map<string, number>();
   for (const m of movimientos) {
-    if (m.tipo !== tipo) continue;
+    if (m.tipo !== tipo || m.es_bolsillo) continue;
     const etiqueta = m.modulo_origen_slug ? (LABEL_POR_MODULO_SLUG[m.modulo_origen_slug] ?? m.modulo_origen_slug) : "Sin área";
     porArea.set(etiqueta, (porArea.get(etiqueta) ?? 0) + Number(m.monto));
   }

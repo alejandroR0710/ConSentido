@@ -135,6 +135,25 @@ export const registrarEgresoAcumuladoSchema = z.union([
 ]);
 export type RegistrarEgresoAcumuladoInput = z.infer<typeof registrarEgresoAcumuladoSchema>;
 
+// "Bolsillo": sin moduloOrigenSlug a propósito — es plata personal/del
+// dueño, no de una operación de un área puntual. Igual que un egreso
+// normal exige turno abierto y queda en movimientos_caja (se ve en
+// Movimientos del turno), pero el service lo marca es_bolsillo para que no
+// cuente en el cuadre del turno ni en Dashboard/Reportes — solo resta del
+// Acumulado Total (ver caja.service.ts::registrarBolsillo).
+export const registrarBolsilloSchema = z.union([
+  z.object({ ...camposEgreso, metodoPago: z.enum(METODOS_PAGO), monto: z.number().positive() }),
+  z
+    .object({
+      ...camposEgreso,
+      metodoPago: z.literal("mixto"),
+      montoEfectivo: z.number().nonnegative(),
+      montoBanco: z.number().nonnegative(),
+    })
+    .refine((d) => d.montoEfectivo + d.montoBanco > 0, { message: MENSAJE_MIXTO_VACIO, path: ["montoEfectivo"] }),
+]);
+export type RegistrarBolsilloInput = z.infer<typeof registrarBolsilloSchema>;
+
 export const crearCategoriaGastoSchema = z.object({
   nombre: z.string().trim().min(2).max(80),
   // Área por defecto de esta categoría (opcional) — todo egreso que caiga

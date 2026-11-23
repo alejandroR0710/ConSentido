@@ -87,6 +87,10 @@ export interface SumaPorMetodo {
   egresosBanco: number;
 }
 
+/** Nunca incluye egresos de Bolsillo: esos no deben afectar el cuadre de
+ *  efectivo/banco de NINGÚN turno (ver insertEgreso::esBolsillo) — solo
+ *  restan del Acumulado Total, que se calcula aparte, directo contra
+ *  movimientos_caja completo sin este filtro. */
 export async function sumMovimientosPorTurno(turnoId: string): Promise<SumaPorMetodo> {
   const result = await pool.query(
     `SELECT
@@ -95,7 +99,7 @@ export async function sumMovimientosPorTurno(turnoId: string): Promise<SumaPorMe
        COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND metodo_pago = 'banco' THEN monto END), 0)    AS ingresos_banco,
        COALESCE(SUM(CASE WHEN tipo = 'egreso'  AND metodo_pago = 'banco' THEN monto END), 0)    AS egresos_banco
      FROM movimientos_caja
-     WHERE turno_id = $1`,
+     WHERE turno_id = $1 AND es_bolsillo = false`,
     [turnoId],
   );
   const row = result.rows[0];
@@ -607,13 +611,18 @@ export async function insertEgreso(
     moduloOrigenSlug?: string;
     referenciaEntidad?: string;
     referenciaId?: string;
+    // "Bolsillo" (ver caja.service.ts::registrarBolsillo): queda en
+    // movimientos_caja del turno activo igual que cualquier egreso (se ve
+    // en Movimientos del turno), pero sumMovimientosPorTurno lo excluye del
+    // cuadre de efectivo/banco — solo resta del Acumulado Total.
+    esBolsillo?: boolean;
   },
 ) {
   const result = await executor.query(
     `INSERT INTO movimientos_caja
        (turno_id, tipo, categoria_gasto_id, monto, metodo_pago, motivo, usuario_id, proveedor_id, modulo_origen_id,
-        referencia_entidad, referencia_id)
-     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7, (SELECT id FROM modulos WHERE slug = $8), $9, $10)
+        referencia_entidad, referencia_id, es_bolsillo)
+     VALUES ($1, 'egreso', $2, $3, $4, $5, $6, $7, (SELECT id FROM modulos WHERE slug = $8), $9, $10, $11)
      RETURNING *`,
     [
       params.turnoId,
@@ -626,6 +635,7 @@ export async function insertEgreso(
       params.moduloOrigenSlug ?? null,
       params.referenciaEntidad ?? null,
       params.referenciaId ?? null,
+      params.esBolsillo ?? false,
     ],
   );
   return result.rows[0];

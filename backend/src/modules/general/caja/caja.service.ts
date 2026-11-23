@@ -781,6 +781,10 @@ export async function listarProveedores() {
   return repo.listProveedores();
 }
 
+export async function listarCajeros() {
+  return repo.listCajeros();
+}
+
 export async function listarProveedorIdsDeCategoria(categoriaId: number) {
   return repo.listProveedorIdsDeCategoria(categoriaId);
 }

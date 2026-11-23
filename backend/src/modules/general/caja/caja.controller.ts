@@ -183,6 +183,11 @@ export async function listarProveedoresController(_req: Request, res: Response) 
   return ok(res, proveedores);
 }
 
+export async function listarCajerosController(_req: Request, res: Response) {
+  const cajeros = await service.listarCajeros();
+  return ok(res, cajeros);
+}
+
 export async function crearProveedorController(req: Request, res: Response) {
   const { nombre, contacto, telefono, email } = req.body;
   const proveedor = await service.crearProveedor(nombre, contacto, telefono, email);

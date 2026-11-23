@@ -309,6 +309,10 @@ export const cajaApi = {
     } & PagoInput,
   ) => apiFetch<MovimientoCaja[]>("/caja/bolsillo", { method: "POST", body: input }),
   listarProveedores: () => apiFetch<Proveedor[]>("/caja/proveedores"),
+  // Solo id+nombre de quienes tienen rol "Cajero" — para "Entrega de turno
+  // y caja" (varias personas comparten esa cuenta). No requiere el permiso
+  // de administrar usuarios, a diferencia de usuariosApi.listar().
+  listarCajeros: () => apiFetch<{ id: string; nombre: string }[]>("/caja/cajeros"),
   crearProveedor: (nombre: string, contacto?: string, telefono?: string, email?: string) =>
     apiFetch<Proveedor>("/caja/proveedores", {
       method: "POST",

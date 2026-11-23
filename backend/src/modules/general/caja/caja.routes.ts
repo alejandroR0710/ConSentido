@@ -18,6 +18,7 @@ import {
   desactivarProveedorController,
   editarMetodoPagoMovimientoController,
   editarMovimientoHistoricoController,
+  listarCajerosController,
   listarCategoriasGastoController,
   listarEdicionesDelDiaController,
   listarProveedoresController,
@@ -122,6 +123,11 @@ cajaRouter.get(
   requirePermission("general.caja.ver"),
   asyncHandler(listarProveedoresController),
 );
+// Solo id+nombre de quienes tienen rol "Cajero" — para "Entrega de turno y
+// caja" (varias personas comparten esa cuenta). Gatea con general.caja.ver
+// (que Cajero sí tiene) en vez de general.usuarios.ver, para no exponer el
+// resto del equipo ni exigir un permiso que esa cuenta no tiene.
+cajaRouter.get("/cajeros", requirePermission("general.caja.ver"), asyncHandler(listarCajerosController));
 cajaRouter.post(
   "/proveedores",
   requireAnyPermission("general.caja.administrar_categorias", "general.caja.registrar_egreso"),

@@ -1138,3 +1138,19 @@ export async function desactivarProveedor(id: string) {
   );
   return result.rows[0];
 }
+
+/** Solo id+nombre de los usuarios activos con rol "Cajero" — para que
+ *  "Entrega de turno y caja" (EntregaTurnoModal.tsx) pueda elegir entre las
+ *  personas reales que comparten esa cuenta, sin exigir el permiso
+ *  general.usuarios.ver (que Cajero no tiene) ni exponer el resto del
+ *  equipo. */
+export async function listCajeros() {
+  const result = await pool.query(
+    `SELECT u.id, u.nombre
+       FROM usuarios u
+       JOIN roles r ON r.id = u.rol_id
+      WHERE r.nombre = 'Cajero' AND u.activo = true AND u.deleted_at IS NULL
+      ORDER BY u.nombre ASC`,
+  );
+  return result.rows;
+}

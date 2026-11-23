@@ -300,7 +300,7 @@ export async function crearPedido(input: CrearPedidoInput, usuarioId: string) {
       });
     }
 
-    const descripcion = input.descripcion?.trim() || input.items.map((i) => i.nombre).join(", ");
+    const descripcion = input.descripcion;
     const proximaAlarmaEn = await calcularProximaAlarma();
 
     const pedido = await repo.crearPedido(client, {

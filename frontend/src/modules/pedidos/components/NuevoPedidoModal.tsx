@@ -84,6 +84,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
   // NuevaVentaModal.tsx (Task 9).
   const faltaAreaLineas = lineasValidas.some((l) => !l.moduloOrigenSlug);
   const puedeGuardar =
+    descripcion.trim().length > 0 &&
     lineasValidas.length > 0 &&
     !faltaAreaLineas &&
     (!conAbono || (montoAbono > 0 && montoAbono <= total && !faltaReferenciaAbono));
@@ -102,7 +103,7 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
     try {
       await pedidosApi.crear({
         responsableId: responsableId || undefined,
-        descripcion: descripcion.trim() || undefined,
+        descripcion: descripcion.trim(),
         destinatarioNombre: destinatarioNombre.trim() || undefined,
         destinatarioDocumento: destinatarioDocumento.trim() || undefined,
         destinatarioTelefono: destinatarioTelefono.trim() || undefined,
@@ -152,8 +153,13 @@ export function NuevoPedidoModal({ onCerrar, onCreado }: NuevoPedidoModalProps) 
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-medium">Descripción (opcional — se arma sola si la dejas vacía)</label>
-            <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className={INPUT_CLASE} />
+            <label className="mb-1 block text-xs font-medium">Descripción</label>
+            <input
+              required
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              className={INPUT_CLASE}
+            />
           </div>
         </div>
 

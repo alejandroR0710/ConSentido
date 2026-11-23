@@ -47,9 +47,10 @@ const camposTransporte = {
 
 export const crearPedidoSchema = z.object({
   clienteId: z.string().uuid().optional(),
-  // Si no la escriben, el service la arma sola a partir de los nombres de
-  // los ítems (mismo criterio que con_sentido.service.ts para el "motivo").
-  descripcion: z.string().trim().max(500).optional(),
+  // Obligatoria: antes, si no la escribían, el service la armaba sola a
+  // partir de los nombres de los ítems — terminaba mostrando el listado de
+  // productos en el rótulo de envío en vez de una descripción real.
+  descripcion: z.string().trim().min(1, "La descripción es obligatoria").max(500),
   // Ya no se pide "fecha de entrega": en la factura/rótulo se muestra la
   // fecha en que el pedido se marcó "alistado" (ver alistado_en), con la
   // etiqueta "Despacho" en vez de "Entrega".

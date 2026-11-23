@@ -93,7 +93,10 @@ export interface ParametrosPedidos {
 // pueden corregir después con editar().
 export interface CrearPedidoInput {
   clienteId?: string;
-  descripcion?: string;
+  // Obligatoria al crear (ver pedidos.schema.ts): ya no se arma sola a
+  // partir de los nombres de los ítems — eso terminaba mostrando el
+  // listado de productos en el rótulo en vez de una descripción real.
+  descripcion: string;
   destinatarioNombre?: string;
   destinatarioDocumento?: string;
   destinatarioTelefono?: string;

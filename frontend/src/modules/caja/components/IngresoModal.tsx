@@ -508,7 +508,12 @@ export function IngresoModal({
             }))
           : [
               {
-                nombre: motivo.trim() || "Ingreso registrado",
+                // El ítem sintético usa el motivo como nombre, pero nombre
+                // tiene tope de 150 (itemIngresoSchema, igual que cualquier
+                // otro "nombre" de la app) y el motivo NO lo tiene a propósito
+                // — se trunca solo acá, nunca se pierde lo que se guarda como
+                // motivo (eso va completo y sin límite).
+                nombre: (motivo.trim() || "Ingreso registrado").slice(0, 150),
                 cantidad: 1,
                 precioUnitario: monto,
                 moduloOrigenSlug: areaMontoUnico as "insumos" | "talleres" | "con_sentido",

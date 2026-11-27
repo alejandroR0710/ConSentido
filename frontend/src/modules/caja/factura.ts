@@ -46,7 +46,11 @@ export function facturaCajaAReciboProps(factura: FacturaVentaManual): Omit<Recib
       valor: factura.moduloOrigenSlug ? (LABEL_POR_MODULO_SLUG[factura.moduloOrigenSlug] ?? factura.moduloOrigenSlug) : "—",
     },
   ];
-  // En "Monto único" el motivo ya es el nombre de la única línea: no se repite.
+  // "Monto único": un solo ítem sintético cuyo nombre ES el motivo (ver
+  // IngresoModal.tsx) — no es un producto de verdad, así que en vez de
+  // forzarlo en la tabla de ítems (una fila angosta, mal para un texto
+  // largo) se muestra como descripción a todo el ancho y el valor aparte,
+  // en el total de siempre (ver ReciboImprimible.tsx::descripcionLarga).
   const motivoEsLaLinea = factura.items.length === 1 && factura.items[0].nombre === factura.motivo;
   if (factura.motivo && !motivoEsLaLinea) camposEncabezado.push({ etiqueta: "Motivo", valor: factura.motivo });
   if (factura.usuarioNombre) camposEncabezado.push({ etiqueta: "Registrado por", valor: factura.usuarioNombre });
@@ -56,13 +60,16 @@ export function facturaCajaAReciboProps(factura: FacturaVentaManual): Omit<Recib
     folio: factura.numeroFactura,
     fecha: factura.fecha,
     camposEncabezado,
-    items: factura.items.map((item) => ({
-      nombre: item.nombre,
-      sku: item.sku,
-      cantidad: item.cantidad,
-      precioUnitario: item.precioUnitario,
-      subtotal: item.subtotal,
-    })),
+    descripcionLarga: motivoEsLaLinea ? factura.motivo : undefined,
+    items: motivoEsLaLinea
+      ? undefined
+      : factura.items.map((item) => ({
+          nombre: item.nombre,
+          sku: item.sku,
+          cantidad: item.cantidad,
+          precioUnitario: item.precioUnitario,
+          subtotal: item.subtotal,
+        })),
     subtotal: factura.subtotal,
     descuentoPorcentaje: factura.descuentoPorcentaje,
     descuentoMonto: factura.descuentoMonto,

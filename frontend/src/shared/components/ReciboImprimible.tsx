@@ -64,6 +64,13 @@ export interface ReciboImprimibleProps {
   camposEncabezado?: { etiqueta: string; valor: string }[];
   // factura / cotización / movimiento (movimiento usa una sola línea)
   items?: ReciboLinea[];
+  // Solo tipo "factura": cuando NO es un producto de verdad (ej. "Monto
+  // único" de Registrar ingreso), reemplaza la tabla de ítems por un
+  // párrafo de descripción a todo el ancho — más legible que forzar un
+  // texto largo dentro de una columna angosta de la tabla (ver
+  // caja/factura.ts::facturaCajaAReciboProps). El total/subtotal se sigue
+  // mostrando igual, aparte, en el pie.
+  descripcionLarga?: string | null;
   subtotal?: number;
   descuentoPorcentaje?: number;
   descuentoMonto?: number;
@@ -130,6 +137,7 @@ export function ReciboImprimible({
   entregadoPorNombre,
   recibidoPorNombre,
   observaciones,
+  descripcionLarga,
   anchoMm,
 }: ReciboImprimibleProps) {
   const [logoError, setLogoError] = useState(false);
@@ -360,6 +368,11 @@ export function ReciboImprimible({
               <div>{observaciones}</div>
             </div>
           )}
+        </div>
+      ) : descripcionLarga ? (
+        <div className="my-2 text-[16px]">
+          <div className="mb-1 font-bold">Descripción</div>
+          <p className="whitespace-pre-wrap leading-snug">{descripcionLarga}</p>
         </div>
       ) : (
         <table className="w-full text-[16px]">
